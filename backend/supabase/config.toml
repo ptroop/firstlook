@@ -1,2 +1,5 @@
+[project]
+id = "xbckwzodpwfpvvkujbgp"
+
 [functions.first-look-api]
 verify_jwt = false
