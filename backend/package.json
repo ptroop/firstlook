@@ -2,7 +2,7 @@
   "name": "first-look-supabase-backend",
   "private": true,
   "scripts": {
-    "test": "tsx --test supabase/functions/first-look-api/filters.test.ts"
+    "test": "tsx --test supabase/functions/first-look-api/filters.test.ts supabase/functions/first-look-api/connectors/moodys.test.ts"
   },
   "devDependencies": {
     "supabase": "latest",
