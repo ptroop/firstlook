@@ -44,7 +44,9 @@ test('parses the current 0-2 year Moody’s role and its direct apply URL', () =
 });
 
 test('crawls pages, classifies details, and reports exclusions', async () => {
-  const secondPage = '<ul id="search-results-jobs"></ul>';
+  const secondPage = '<ul id="search-results-jobs"></ul><a href="/en/location/india-jobs/49841/1269750/2/3">Next</a>';
+  const thirdPage = '<ul id="search-results-jobs"></ul>';
+  const requestedUrls: string[] = [];
   const technologyDetail = detailHtml
     .replaceAll('13927', '14000')
     .replace('98452084112', '96475569408')
@@ -53,8 +55,10 @@ test('crawls pages, classifies details, and reports exclusions', async () => {
     .replace(/<div class="ats-description">[\s\S]*?<\/div>/, '<div class="ats-description"><p>Build Java systems. Minimum 3 years experience.</p></div>');
 
   const fetcher = async (url: string) => {
+    requestedUrls.push(url);
     if (url.endsWith('/2/1')) return new Response(searchHtml, { status: 200 });
     if (url.endsWith('/2/2')) return new Response(secondPage, { status: 200 });
+    if (url.endsWith('/2/3')) return new Response(thirdPage, { status: 200 });
     if (url.includes('senior-financial-data-analyst')) return new Response(detailHtml, { status: 200 });
     if (url.includes('senior-data-engineer')) return new Response(technologyDetail, { status: 200 });
     return new Response('not found', { status: 404 });
@@ -67,6 +71,7 @@ test('crawls pages, classifies details, and reports exclusions', async () => {
   assert.equal(result.diagnostic.matchingCount, 1);
   assert.deepEqual(result.diagnostic.excluded, { not_finance: 1 });
   assert.equal(result.jobs[0]?.employerJobId, '13927');
+  assert.ok(requestedUrls.some((url) => url.endsWith('/2/3')));
 });
 
 test('does not report success when result markup yields fewer jobs than advertised', async () => {

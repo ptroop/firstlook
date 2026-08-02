@@ -11,6 +11,7 @@ const COMPANY = "Moody's";
 const INDIA_SEARCH_URL = 'https://careers.moodys.com/en/location/india-jobs/49841/1269750/2/1';
 const REQUEST_TIMEOUT_MS = 12_000;
 const DETAIL_CONCURRENCY = 4;
+const MAX_SEARCH_PAGES = 20;
 
 export function discoverMoodysPages(html: string, baseUrl: string): string[] {
   const urls = [baseUrl];
@@ -20,10 +21,14 @@ export function discoverMoodysPages(html: string, baseUrl: string): string[] {
 }
 
 export function discoverMoodysJobUrls(html: string, baseUrl: string): string[] {
-  const results = html.match(/<ul[^>]+id=["']search-results-jobs["'][^>]*>[\s\S]*?<\/ul>/i)?.[0] || '';
   const urls: string[] = [];
-  for (const match of results.matchAll(/href=["']([^"']*\/en\/job\/[^"'#?]+)["']/gi)) {
-    urls.push(new URL(decodeHtml(match[1]), baseUrl).href);
+  for (const match of html.matchAll(/<a\b[^>]*>/gi)) {
+    const anchor = match[0];
+    const classes = attribute(anchor, 'class').split(/\s+/);
+    const href = attribute(anchor, 'href');
+    if (classes.includes('search-results-list__job-link') && /\/en\/job\//i.test(href)) {
+      urls.push(new URL(href, baseUrl).href);
+    }
   }
   return unique(urls);
 }
@@ -70,12 +75,20 @@ export async function runMoodysConnector(fetcher: JobFetch = fetch): Promise<Con
 
   try {
     const firstHtml = await fetchText(fetcher, INDIA_SEARCH_URL);
-    const pages = discoverMoodysPages(firstHtml, INDIA_SEARCH_URL);
     const pageHtml = [firstHtml];
+    const visitedPages = new Set([INDIA_SEARCH_URL]);
+    const pendingPages = discoverMoodysPages(firstHtml, INDIA_SEARCH_URL).filter((url) => !visitedPages.has(url));
 
-    for (const pageUrl of pages.slice(1)) {
+    while (pendingPages.length > 0 && visitedPages.size < MAX_SEARCH_PAGES) {
+      const pageUrl = pendingPages.shift() as string;
+      if (visitedPages.has(pageUrl)) continue;
+      visitedPages.add(pageUrl);
       try {
-        pageHtml.push(await fetchText(fetcher, pageUrl));
+        const html = await fetchText(fetcher, pageUrl);
+        pageHtml.push(html);
+        for (const discoveredPage of discoverMoodysPages(html, pageUrl)) {
+          if (!visitedPages.has(discoveredPage) && !pendingPages.includes(discoveredPage)) pendingPages.push(discoveredPage);
+        }
       } catch (_error) {
         requestErrors += 1;
       }
