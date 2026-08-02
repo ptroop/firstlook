@@ -31,6 +31,6 @@ Upload the contents of this folder to a repository and enable GitHub Pages from 
 
 ## Backend scaffold
 
-The `backend/` folder contains the separate Supabase Edge Function and Postgres migration. It is not deployed yet. Follow `backend/README.md` to create the database, set the GitHub Pages origin, and deploy the five-minute scanner.
+The `backend/` folder contains the separate Supabase Edge Function and Postgres migration. It is not deployed yet. Follow `backend/README.md` to create the database, set the GitHub Pages origin, and deploy the 30-minute scanner.
 
 The frontend must not contain the Gemini key, VAPID private key, or any other secret. Those belong in Supabase Edge Function secrets.

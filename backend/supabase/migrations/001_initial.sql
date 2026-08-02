@@ -45,8 +45,8 @@ create extension if not exists pg_net;
 -- select vault.create_secret('YOUR_SCAN_TOKEN', 'first_look_scan_token');
 --
 -- select cron.schedule(
---   'first-look-scan-every-five-minutes',
---   '*/5 * * * *',
+--   'first-look-scan-every-thirty-minutes',
+--   '*/30 * * * *',
 --   $$
 --   select net.http_post(
 --     url := (select decrypted_secret from vault.decrypted_secrets where name = 'first_look_scan_url'),

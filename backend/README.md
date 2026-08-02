@@ -1,6 +1,6 @@
 # First Look backend — Supabase
 
-The backend runs separately from GitHub Pages. Supabase hosts one Edge Function, one Postgres database, and a five-minute `pg_cron` job. The frontend is deployed once and reads this API.
+The backend runs separately from GitHub Pages. Supabase hosts one Edge Function, one Postgres database, and a 30-minute `pg_cron` job. The frontend is deployed once and reads this API.
 
 ## Files
 
@@ -49,7 +49,7 @@ The function also uses the platform-provided `SUPABASE_URL` and `SUPABASE_SERVIC
 https://YOUR-PROJECT.supabase.co/functions/v1/first-look-api
 ```
 
-7. Create a Vault secret for the function URL and schedule the scan using the SQL in the migration file. The cron job calls `/scan` every five minutes; it does not redeploy GitHub Pages.
+7. Create a Vault secret for the function URL and schedule the scan using the SQL in the migration file. The cron job calls `/scan` every 30 minutes; it does not redeploy GitHub Pages.
 
 ## Current boundary
 
