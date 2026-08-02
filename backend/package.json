@@ -1,0 +1,7 @@
+{
+  "name": "first-look-supabase-backend",
+  "private": true,
+  "devDependencies": {
+    "supabase": "latest"
+  }
+}
