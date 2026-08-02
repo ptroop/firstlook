@@ -1,4 +1,5 @@
 import { createConnectorRegistry } from './connectors/registry.ts';
+import { readJsonBody } from './http.ts';
 import { presentJob, type JobRow } from './presenters.ts';
 import { runScan, type ScanStore } from './scan.ts';
 import type { ConnectorDiagnostic, NormalizedJob } from './types.ts';
@@ -19,7 +20,13 @@ Deno.serve(async (request) => {
       if (!scanToken || request.headers.get('Authorization') !== `Bearer ${scanToken}`) {
         return json({ error: 'Unauthorized' }, headers, 401);
       }
-      return json(await runScan(createConnectorRegistry(), createSupabaseStore()), headers);
+      try {
+        return json(await runScan(createConnectorRegistry(), createSupabaseStore()), headers);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Unknown scan failure';
+        console.error(detail);
+        return json({ error: 'Scan failed', detail }, headers, 500);
+      }
     }
     return json({ error: 'Not found' }, headers, 404);
   } catch (error) {
@@ -74,11 +81,9 @@ function createSupabaseStore(): ScanStore {
     },
 
     async deactivateMissingForSource(company, activeIds) {
-      const companyFilter = encodeURIComponent(company);
-      const idFilter = activeIds.length > 0 ? `&id=not.in.(${activeIds.map(encodeURIComponent).join(',')})` : '';
-      await supabaseFetch(`/rest/v1/jobs?source_company=eq.${companyFilter}&active=eq.true${idFilter}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ active: false })
+      await supabaseFetch('/rest/v1/rpc/deactivate_missing_jobs', {
+        method: 'POST',
+        body: JSON.stringify({ p_source_company: company, p_active_ids: activeIds })
       });
     },
 
@@ -148,8 +153,12 @@ async function supabaseFetch(path: string, options: RequestInit = {}) {
       ...(options.headers || {})
     }
   });
-  if (!response.ok) throw new Error(`Supabase request failed with HTTP ${response.status}`);
-  return response.status === 204 ? null : response.json();
+  if (!response.ok) {
+    const method = options.method || 'GET';
+    const resource = path.split('?')[0];
+    throw new Error(`Supabase ${method} ${resource} failed with HTTP ${response.status}`);
+  }
+  return readJsonBody(response);
 }
 
 function json(body: unknown, headers: Record<string, string>, status = 200) {

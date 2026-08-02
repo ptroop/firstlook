@@ -13,7 +13,7 @@ The backend runs separately from GitHub Pages. Supabase hosts one Edge Function,
 2. Open PowerShell in this `backend` folder:
 
 ```powershell
-cd C:\Users\swaro\Documents\Codex\2026-08-02\hiw\work\job-monitor\backend
+cd C:\Users\swaro\Desktop\first-look-job-monitor\backend
 npm.cmd install
 ```
 
@@ -51,6 +51,25 @@ https://YOUR-PROJECT.supabase.co/functions/v1/first-look-api
 
 7. Create a Vault secret for the function URL and schedule the scan using the SQL in the migration file. The cron job calls `/scan` every 30 minutes; it does not redeploy GitHub Pages.
 
-## Current boundary
+## Connector operations
 
-The scanner reads public `JobPosting` JSON-LD blocks and stores likely India/finance/early-career roles. Employer platforms that render jobs only in client-side JavaScript will need source-specific ATS adapters. Push subscriptions are stored, but VAPID delivery is the next isolated step.
+The Moody's connector is the first verified source adapter. It follows every official India search-results page, opens each official detail page, applies the finance and explicit 0-2-years filters, and stores the direct SuccessFactors Apply URL.
+
+The other 20 target employers currently report `unsupported` in scan diagnostics. They are not reported as successful zero-result scans. Add and live-verify one source adapter at a time through `connectors/registry.ts`.
+
+Run the backend tests from this folder:
+
+```powershell
+npm.cmd test
+```
+
+Apply new migrations and deploy the function with:
+
+```powershell
+npx.cmd supabase db push --linked
+npx.cmd supabase functions deploy first-look-api --project-ref xbckwzodpwfpvvkujbgp --no-verify-jwt
+```
+
+The 30-minute cron request uses a 60-second HTTP timeout. This is required because a complete connector scan can exceed `pg_net`'s 5-second default.
+
+Jobs are deactivated only within a source after that source completes successfully. Partial, failed, and unsupported connectors preserve existing jobs. Push subscriptions are stored, but VAPID delivery remains a separate feature.
