@@ -1,4 +1,5 @@
 import { createConnectorRegistry } from './connectors/registry.ts';
+import { presentJob, type JobRow } from './presenters.ts';
 import { runScan, type ScanStore } from './scan.ts';
 import type { ConnectorDiagnostic, NormalizedJob } from './types.ts';
 
@@ -39,7 +40,7 @@ function corsHeaders(origin: string | null) {
 
 async function getJobs(headers: Record<string, string>) {
   const rows = await supabaseFetch('/rest/v1/jobs?active=eq.true&select=id,source_company,source_url,apply_url,title,location,description,first_seen_at,posted_at&order=first_seen_at.desc&limit=100');
-  return new Response(JSON.stringify({ jobs: rows }), { headers });
+  return new Response(JSON.stringify({ jobs: (rows as JobRow[]).map(presentJob) }), { headers });
 }
 
 async function saveSubscription(request: Request, headers: Record<string, string>) {

@@ -25,6 +25,9 @@ const companies = [
 const companyGrid = document.querySelector('#company-grid');
 const jobList = document.querySelector('#job-list');
 const matchesEmpty = document.querySelector('#matches-empty');
+const matchesEmptyTitle = matchesEmpty.querySelector('h3');
+const matchesEmptyMessage = matchesEmpty.querySelector('p');
+const matchesMeta = document.querySelector('#matches .section-meta');
 const toast = document.querySelector('#toast');
 const API_BASE = window.JOB_MONITOR_API || '';
 const VAPID_PUBLIC_KEY = window.JOB_MONITOR_VAPID_PUBLIC_KEY || '';
@@ -53,9 +56,13 @@ function navigate(view) {
 }
 
 function renderJobs(jobs) {
-  if (!jobs.length) return;
+  if (!jobs.length) {
+    showFeedState('No roles here yet.', "When a matching role is found, it will appear here with the employer's original application link.", 'No matching roles');
+    return;
+  }
   matchesEmpty.hidden = true;
   jobList.hidden = false;
+  matchesMeta.textContent = `${jobs.length} ${jobs.length === 1 ? 'role' : 'roles'}`;
   jobList.innerHTML = jobs.map((job) => `
     <article class="job-card">
       <div><h3>${escapeHtml(job.title)}</h3><p class="job-company">${escapeHtml(job.company)}</p></div>
@@ -63,6 +70,14 @@ function renderJobs(jobs) {
       <a class="button button-outline" href="${escapeAttribute(job.applyUrl)}" target="_blank" rel="noreferrer">Apply</a>
     </article>
   `).join('');
+}
+
+function showFeedState(title, message, meta) {
+  matchesEmptyTitle.textContent = title;
+  matchesEmptyMessage.textContent = message;
+  matchesMeta.textContent = meta;
+  matchesEmpty.hidden = false;
+  jobList.hidden = true;
 }
 
 function escapeHtml(value) {
@@ -76,12 +91,12 @@ function escapeAttribute(value) {
 async function loadJobs() {
   if (!API_BASE) return;
   try {
-    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/api/jobs`);
-    if (!response.ok) return;
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/jobs`);
+    if (!response.ok) throw new Error(`Jobs API returned ${response.status}`);
     const payload = await response.json();
     renderJobs(Array.isArray(payload.jobs) ? payload.jobs : []);
   } catch (_error) {
-    // The static page keeps its honest empty state when the API is unavailable.
+    showFeedState('Job feed unavailable.', 'The employer monitor could not be reached. Try again shortly.', 'Connection error');
   }
 }
 
