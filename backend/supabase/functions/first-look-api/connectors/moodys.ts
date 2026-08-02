@@ -83,6 +83,8 @@ export async function runMoodysConnector(fetcher: JobFetch = fetch): Promise<Con
 
     const detailUrls = unique(pageHtml.flatMap((html) => discoverMoodysJobUrls(html, INDIA_SEARCH_URL)));
     discoveredCount = detailUrls.length;
+    const advertisedCount = advertisedResultCount(firstHtml);
+    if (advertisedCount !== null && discoveredCount < advertisedCount) requestErrors += 1;
 
     await mapWithConcurrency(detailUrls, DETAIL_CONCURRENCY, async (detailUrl) => {
       try {
@@ -190,6 +192,12 @@ function parsePostedDate(value: string): string | null {
 
 function pageNumber(url: string): number {
   return Number(url.match(/\/(\d+)\/?$/)?.[1] || 1);
+}
+
+function advertisedResultCount(html: string): number | null {
+  const value = html.match(/data-results-count=["'](\d+)["']/i)?.[1]
+    || html.match(/\b([\d,]+)\s+jobs?\s+found\s+in\s+India\b/i)?.[1];
+  return value ? Number(value.replace(/,/g, '')) : null;
 }
 
 function unique<T>(values: T[]): T[] {

@@ -68,3 +68,10 @@ test('crawls pages, classifies details, and reports exclusions', async () => {
   assert.deepEqual(result.diagnostic.excluded, { not_finance: 1 });
   assert.equal(result.jobs[0]?.employerJobId, '13927');
 });
+
+test('does not report success when result markup yields fewer jobs than advertised', async () => {
+  const changedMarkup = '<p>37 jobs found in India</p><ul id="search-results-jobs"></ul>';
+  const result = await runMoodysConnector(async () => new Response(changedMarkup, { status: 200 }));
+  assert.equal(result.diagnostic.status, 'partial');
+  assert.equal(result.diagnostic.discoveredCount, 0);
+});
