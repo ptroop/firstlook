@@ -1,7 +1,11 @@
 {
   "name": "first-look-supabase-backend",
   "private": true,
+  "scripts": {
+    "test": "tsx --test supabase/functions/first-look-api/filters.test.ts"
+  },
   "devDependencies": {
-    "supabase": "latest"
+    "supabase": "latest",
+    "tsx": "^4.23.4"
   }
 }
