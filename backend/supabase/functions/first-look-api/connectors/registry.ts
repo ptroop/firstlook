@@ -54,3 +54,6 @@ function unsupportedConnector(company: string): JobConnector {
   };
 }
 
+export function selectConnectorGroup<T extends { scanGroup: string }>(connectors: T[], scanGroup: string): T[] {
+  return connectors.filter((connector) => connector.scanGroup === scanGroup);
+}

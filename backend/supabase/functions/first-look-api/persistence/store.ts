@@ -1,11 +1,14 @@
 import type {
   CandidateDecision,
+  CanonicalJobInput,
   ConnectorDiagnostic,
   HydratedSourceObservation,
   InventoryListing,
   NormalizedJob,
   SourceConnectorDiagnostic,
 } from '../types.ts';
+import type { DeterministicClassification } from '../classification/deterministic.ts';
+import type { CanonicalCandidate } from '../canonicalize.ts';
 import { readJsonBody } from '../http.ts';
 import type { ScanStore } from '../scan.ts';
 
@@ -98,6 +101,9 @@ export interface SourceAwareStore {
   upsertInventory(runId: number, rows: SelectedInventory[], seenAt: string): Promise<void>;
   dueCandidates(connectorId: string, limit: number): Promise<InventoryListing[]>;
   persistObservation(runId: number, observation: HydratedSourceObservation, seenAt: string): Promise<number>;
+  findCanonicalCandidates(company: string): Promise<CanonicalCandidate[]>;
+  upsertCanonicalJob(jobId: string, job: CanonicalJobInput, classification: DeterministicClassification, seenAt: string): Promise<void>;
+  linkObservation(sourceId: number, jobId: string | null, status: 'linked' | 'pending' | 'conflict'): Promise<void>;
   saveClassification(jobId: string, record: Record<string, unknown>): Promise<void>;
   finishRun(runId: number, diagnostic: SourceConnectorDiagnostic): Promise<void>;
   finalizeCompleteReconciliation(connectorId: string, runId: number): Promise<void>;
@@ -195,6 +201,68 @@ export function createSourceAwareStore(client: RestClient): SourceAwareStore {
       const id = Number(rows?.[0]?.id);
       if (!Number.isFinite(id)) throw new Error(`Source observation was not persisted for ${observation.sourceName}`);
       return id;
+    },
+
+    async findCanonicalCandidates(company) {
+      const rows = await client.request(`/rest/v1/jobs?company=eq.${encodeURIComponent(company)}&select=id,company,employer_job_id,title,location,posted_at,official_detail_url,official_apply_url,description_hash,description,job_category`);
+      return (rows ?? []).map((row: Record<string, unknown>) => ({
+        id: String(row.id),
+        company: String(row.company),
+        employerJobId: typeof row.employer_job_id === 'string' ? row.employer_job_id : null,
+        title: String(row.title),
+        location: String(row.location ?? ''),
+        postedAt: typeof row.posted_at === 'string' ? row.posted_at : null,
+        officialDetailUrl: typeof row.official_detail_url === 'string' ? row.official_detail_url : null,
+        officialApplyUrl: typeof row.official_apply_url === 'string' ? row.official_apply_url : null,
+        descriptionHash: typeof row.description_hash === 'string' ? row.description_hash : null,
+        officialVerifiedAt: null,
+        description: String(row.description ?? ''),
+        jobCategory: String(row.job_category ?? ''),
+      }));
+    },
+
+    async upsertCanonicalJob(jobId, job, classification, seenAt) {
+      await client.request('/rest/v1/jobs?on_conflict=id', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates' },
+        body: JSON.stringify({
+          id: jobId,
+          company: job.company,
+          source_company: job.company,
+          employer_job_id: job.employerJobId,
+          source_url: job.officialDetailUrl || job.officialApplyUrl || '',
+          apply_url: job.officialApplyUrl || job.officialDetailUrl || '',
+          official_detail_url: job.officialDetailUrl,
+          official_apply_url: job.officialApplyUrl,
+          title: job.title,
+          location: job.location,
+          description: job.description.slice(0, 20_000),
+          experience_text: classification.evidence.experience.join('; '),
+          job_category: job.jobCategory,
+          posted_at: job.postedAt,
+          location_status: classification.locationStatus,
+          finance_status: classification.financeStatus,
+          experience_status: classification.experienceStatus,
+          minimum_years: classification.minimumYears,
+          maximum_years: classification.maximumYears,
+          match_tier: classification.matchTier,
+          classification_method: classification.classificationMethod,
+          classification_version: 'deterministic-v1',
+          description_hash: job.descriptionHash,
+          classified_at: seenAt,
+          last_seen_at: seenAt,
+          active: true,
+          consecutive_complete_misses: 0,
+          closed_at: null,
+        }),
+      });
+    },
+
+    async linkObservation(sourceId, jobId, status) {
+      await client.request(`/rest/v1/job_sources?id=eq.${sourceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ job_id: jobId, canonicalization_status: status }),
+      });
     },
 
     async saveClassification(jobId, record) {

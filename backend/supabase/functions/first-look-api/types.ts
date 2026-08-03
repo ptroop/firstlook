@@ -48,7 +48,7 @@ export interface InventoryListing {
 }
 
 export interface CandidateDecision {
-  status: 'hydrate' | 'defer';
+  status: 'hydrate' | 'defer' | 'audit';
   reasons: CandidateReason[];
 }
 
@@ -66,6 +66,7 @@ export interface HydratedSourceObservation {
   title: string;
   location: string;
   description: string;
+  experienceText: string;
   jobCategory: string;
   postedAt: string | null;
   listingMetadataHash: string;

@@ -13,6 +13,11 @@ function fakeClient() {
       if (path === '/rest/v1/source_scan_runs' && method === 'POST') return [{ id: 41 }];
       if (path.startsWith('/rest/v1/job_sources') && method === 'POST') return [{ id: 91 }];
       if (path.startsWith('/rest/v1/source_inventory?') && method === 'GET') return [];
+      if (path.startsWith('/rest/v1/jobs?company=eq.') && method === 'GET') return [{
+        id: 'citi_123', company: 'Citi', employer_job_id: '123', title: 'Analyst',
+        location: 'Mumbai, India', posted_at: null, official_detail_url: inventory.detailUrl,
+        official_apply_url: 'https://jobs.citi.com/apply/123', description_hash: 'content-123',
+      }];
       return [];
     },
   };
@@ -86,5 +91,30 @@ test('uses the complete-reconciliation RPC only when explicitly finalized', asyn
     path: '/rest/v1/rpc/finalize_complete_reconciliation',
     method: 'POST',
     body: { p_connector_id: 'citi-official-india', p_run_id: 41 },
+  });
+});
+
+test('finds canonical candidates, upserts the job, and links the source explicitly', async () => {
+  const { client, calls } = fakeClient();
+  const store = createSourceAwareStore(client);
+  const candidates = await store.findCanonicalCandidates('Citi');
+  await store.upsertCanonicalJob('citi_123', {
+    company: 'Citi', employerJobId: '123', title: 'Analyst', location: 'Mumbai, India',
+    description: 'Finance role', jobCategory: 'Finance', postedAt: null,
+    officialDetailUrl: inventory.detailUrl, officialApplyUrl: 'https://jobs.citi.com/apply/123',
+    descriptionHash: 'content-123',
+  }, {
+    locationStatus: 'india', financeStatus: 'exact', experienceStatus: 'zero_to_two',
+    minimumYears: 0, maximumYears: 2, matchTier: 'exact', classificationMethod: 'deterministic',
+    evidence: { location: ['India'], finance: ['Finance'], experience: ['0-2 years'] },
+  }, '2026-08-03T00:00:00.000Z');
+  await store.linkObservation(91, 'citi_123', 'linked');
+
+  assert.equal(candidates[0].employerJobId, '123');
+  assert.ok(calls.some((call) => call.path === '/rest/v1/jobs?on_conflict=id' && call.method === 'POST'));
+  assert.deepEqual(calls.at(-1), {
+    path: '/rest/v1/job_sources?id=eq.91',
+    method: 'PATCH',
+    body: { job_id: 'citi_123', canonicalization_status: 'linked' },
   });
 });

@@ -17,6 +17,7 @@ const observation = {
   title: 'Model/Anlys/Valid Analyst I - C09',
   location: 'Mumbai, India',
   description: 'Credit risk model validation.',
+  experienceText: '0-2 years',
   jobCategory: 'Risk Management',
   postedAt: '2026-08-01T00:00:00.000Z',
   listingMetadataHash: 'meta',
