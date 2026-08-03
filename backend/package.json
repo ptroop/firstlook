@@ -2,7 +2,8 @@
   "name": "first-look-supabase-backend",
   "private": true,
   "scripts": {
-    "test": "tsx --test supabase/functions/first-look-api/filters.test.ts supabase/functions/first-look-api/connectors/moodys.test.ts supabase/functions/first-look-api/scan.test.ts supabase/functions/first-look-api/presenters.test.ts supabase/functions/first-look-api/http.test.ts"
+    "test": "tsx --test supabase/functions/first-look-api/filters.test.ts supabase/functions/first-look-api/candidates.test.ts supabase/functions/first-look-api/connectors/moodys.test.ts supabase/functions/first-look-api/scan.test.ts supabase/functions/first-look-api/presenters.test.ts supabase/functions/first-look-api/http.test.ts",
+    "test:candidates": "tsx --test supabase/functions/first-look-api/candidates.test.ts"
   },
   "devDependencies": {
     "supabase": "latest",
