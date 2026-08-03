@@ -1,5 +1,6 @@
 import type { JobConnector } from '../types.ts';
 import type { OfficialJobConnector } from './contract.ts';
+import { createCitiConnector } from './citi.ts';
 import { createDeshawConnector } from './deshaw.ts';
 import { createMoodysConnector, runMoodysConnector } from './moodys.ts';
 
@@ -39,6 +40,8 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createMoodysConnector(fetch, 'moodys-reconcile'),
     createDeshawConnector(fetch, 'deshaw-watch'),
     createDeshawConnector(fetch, 'deshaw-reconcile'),
+    createCitiConnector(fetch, 'citi-watch'),
+    createCitiConnector(fetch, 'citi-reconcile'),
   ];
 }
 

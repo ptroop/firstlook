@@ -45,12 +45,24 @@ test('hydrates every generic early-career title', () => {
 test('hydrates sparse metadata rather than assuming non-finance', () => {
   const decision = selectCandidate({
     ...baseListing,
+    title: 'Analyst',
     category: null,
     department: 'Technology',
   });
 
   assert.equal(decision.status, 'hydrate');
   assert.ok(decision.reasons.includes('missing_category'));
+});
+
+test('defers a strongly structured software title even when the board omits category metadata', () => {
+  const decision = selectCandidate({
+    ...baseListing,
+    title: 'Senior Java Developer - Assistant Vice President',
+    category: null,
+    department: null,
+  });
+
+  assert.deepEqual(decision, { status: 'defer', reasons: ['strong_non_finance_category'] });
 });
 
 test('hydrates related education metadata and portal-corroborated listings', () => {

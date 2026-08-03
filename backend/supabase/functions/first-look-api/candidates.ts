@@ -8,7 +8,7 @@ const FINANCE_METADATA = /\b(?:finance|financial|fp&a|financial planning|account
 const EARLY_CAREER_TITLE = /\b(?:graduate|trainee|intern(?:ship)?|apprentice|analyst|associate|officer|executive|coordinator|specialist|consultant|advisor|researcher)\b/i;
 const GENERIC_TITLE = /^(?:graduate|trainee|intern|apprentice|analyst|associate|officer|executive|coordinator|specialist|consultant|advisor|researcher)(?:\s+[ivx0-9]+)?$/i;
 const EDUCATION_SIGNAL = /\b(?:mba|pgdm|chartered accountant|\bca\b|cfa|commerce|economics|finance|accounting)\b/i;
-const STRONG_NON_FINANCE = /\b(?:software engineering|software development|engineering|information technology|technology|cybersecurity|human resources|people operations|talent acquisition|marketing|communications|graphic design|product design|facilities|workplace services|customer service)\b/i;
+const STRONG_NON_FINANCE = /\b(?:software engineering|software development|software (?:engineer|developer)|java developer|python developer|data engineer|engineering|information technology|technology|cybersecurity|human resources|people operations|talent acquisition|marketing|communications|graphic design|product design|facilities|workplace services|customer service)\b/i;
 const MAX_REASONS = 12;
 
 export interface CandidateContext {
@@ -22,24 +22,32 @@ export function selectCandidate(
   const reasons: CandidateReason[] = [];
   const metadata = [listing.title, listing.category, listing.department].filter(Boolean).join(' ');
   const rawMetadata = boundedJsonText(listing.rawMetadata);
+  const titleIsStronglyNonFinance = STRONG_NON_FINANCE.test(listing.title);
 
   if (FINANCE_METADATA.test(metadata)) reasons.push('finance_metadata');
   if (EARLY_CAREER_TITLE.test(listing.title)) reasons.push('early_career_title');
   if (GENERIC_TITLE.test(listing.title.trim())) reasons.push('generic_title');
-  if (!listing.category?.trim()) reasons.push('missing_category');
-  if (!listing.department?.trim()) reasons.push('missing_department');
   if (EDUCATION_SIGNAL.test(rawMetadata)) reasons.push('education_signal');
   if (context.portalCorroborated) reasons.push('portal_corroborated');
   if (isConnectorSpecificCandidate(listing)) reasons.push('connector_rule');
 
-  const uniqueReasons = uniqueBounded(reasons);
-  if (uniqueReasons.length > 0) {
-    return { status: 'hydrate', reasons: uniqueReasons };
+  const positiveReasons = uniqueBounded(reasons);
+  if (positiveReasons.length > 0) {
+    if (!listing.category?.trim()) reasons.push('missing_category');
+    if (!listing.department?.trim()) reasons.push('missing_department');
+    return { status: 'hydrate', reasons: uniqueBounded(reasons) };
   }
 
-  if (STRONG_NON_FINANCE.test(metadata)) {
+  if (titleIsStronglyNonFinance) {
     return { status: 'defer', reasons: ['strong_non_finance_category'] };
   }
+
+  if (!listing.category?.trim()) reasons.push('missing_category');
+  if (!listing.department?.trim()) reasons.push('missing_department');
+  const uncertaintyReasons = uniqueBounded(reasons);
+  if (uncertaintyReasons.length > 0) return { status: 'hydrate', reasons: uncertaintyReasons };
+
+  if (STRONG_NON_FINANCE.test(metadata)) return { status: 'defer', reasons: ['strong_non_finance_category'] };
 
   return { status: 'hydrate', reasons: ['insufficient_exclusion_evidence'] };
 }
@@ -89,4 +97,3 @@ function stableHash(value: string): number {
   }
   return hash >>> 0;
 }
-

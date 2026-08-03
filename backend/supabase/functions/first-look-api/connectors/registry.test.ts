@@ -24,3 +24,9 @@ test('registers separate D. E. Shaw watch and reconciliation groups', () => {
   const deshaw = connectors.filter((connector) => connector.connectorId === 'deshaw-official-india');
   assert.deepEqual(deshaw.map((connector) => connector.scanGroup), ['deshaw-watch', 'deshaw-reconcile']);
 });
+
+test('registers separate bounded Citi watch and full reconciliation groups', () => {
+  const connectors = createOfficialConnectorRegistry();
+  const citi = connectors.filter((connector) => connector.connectorId === 'citi-official-india');
+  assert.deepEqual(citi.map((connector) => connector.scanGroup), ['citi-watch', 'citi-reconcile']);
+});
