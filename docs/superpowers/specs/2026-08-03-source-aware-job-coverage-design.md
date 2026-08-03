@@ -4,7 +4,7 @@
 
 Turn First Look from a single-source matching feed into a source-aware job monitor that:
 
-- captures every listing fetched from each supported employer's official India careers surface before filtering;
+- inventories lightweight metadata from each supported employer's complete official India careers index, while fetching full details only for a high-recall candidate set;
 - distinguishes official career pages from LinkedIn, Naukri, iimjobs, Indeed, and future sources;
 - combines duplicate observations into one canonical job card without losing source evidence;
 - keeps the employer's verified direct-apply URL as the preferred application destination;
@@ -16,16 +16,17 @@ The existing Supabase backend, GitHub Pages frontend, and 30-minute scan schedul
 
 ## Non-Negotiable Invariants
 
-1. Discovery and classification are separate stages.
-2. Every successfully fetched official India listing is persisted before finance or experience filtering.
-3. An AI or deterministic classification failure never deletes, hides, or deactivates a fetched official listing.
-4. A connector may report `complete` only when its pagination and detail-fetch contract is satisfied.
-5. A partial or failed connector never deactivates previously active listings.
-6. A job absent from one complete scan is not immediately considered closed; closure requires two consecutive complete misses.
-7. Every source URL remains attributable to the scan that observed it.
-8. An official direct-apply URL takes precedence over portal application URLs.
-9. If deduplication is uncertain, preserve separate jobs for review rather than incorrectly merging them.
-10. The UI never translates `unsupported`, `partial`, `failed`, or anomalous source health into `no jobs`.
+1. Index enumeration, candidate selection, detail hydration, and final classification are separate stages.
+2. Every official India index entry is tracked as minimal inventory, but unrelated inventory does not become a full job record or receive a detail fetch.
+3. Every high-recall candidate that is hydrated is persisted before final finance or experience classification.
+4. An AI or deterministic final-classification failure never deletes, hides, or deactivates a hydrated candidate.
+5. A connector may report enumeration `complete` only when its pagination contract is satisfied, and candidate hydration `complete` only when every due candidate detail fetch is satisfied.
+6. A partial or failed connector never deactivates previously active listings.
+7. A job absent from one complete scan is not immediately considered closed; closure requires two consecutive complete misses.
+8. Every hydrated source URL remains attributable to the scan that observed it.
+9. An official direct-apply URL takes precedence over portal application URLs.
+10. If deduplication is uncertain, preserve separate jobs for review rather than incorrectly merging them.
+11. The UI never translates `unsupported`, `partial`, `failed`, or anomalous source health into `no jobs`.
 
 ## Approaches Considered
 
@@ -37,27 +38,44 @@ This is fast but unsafe. The current classifier misses common wording such as `1
 
 This handles varied wording but makes discovery nondeterministic. Model outages, invalid JSON, quota exhaustion, or a mistaken classification could prevent a legitimate listing from entering the system.
 
-### Persist first, then apply layered classification
+### Inventory first, then hydrate a high-recall candidate set
 
-This is the selected approach. Official and portal observations are stored independently, canonicalized, and then classified. Deterministic parsing handles clear cases; a pinned OpenRouter model reviews only ambiguous new or changed descriptions. Classification affects feed labels and notification priority, never source retention.
+This is the selected approach. The connector reads the complete lightweight results index so new IDs cannot disappear unnoticed, but stores only minimal metadata for clearly unrelated roles. New or changed entries with finance signals, early-career signals, generic titles, unknown categories, or portal corroboration are hydrated from their detail pages and become source observations. Deterministic parsing handles clear details; a pinned OpenRouter model reviews only ambiguous new or changed descriptions. Final classification affects feed labels and notification priority, never hydrated-source retention.
 
 ## System Boundaries
 
-The design contains five independent units:
+The design contains six independent units:
 
-1. **Source connectors** enumerate listings and fetch complete job details.
-2. **Source observation storage** preserves exactly what each source reported.
-3. **Canonicalization** links observations that represent the same vacancy.
-4. **Classification** determines location, finance relevance, experience eligibility, and confidence.
-5. **Presentation and notification** exposes one job with source badges and sends one deduplicated alert.
+1. **Source connectors** enumerate lightweight listing indexes.
+2. **Inventory and candidate selection** tracks all index IDs and selects a deliberately broad detail-fetch set.
+3. **Source observation storage** preserves complete evidence for hydrated candidates.
+4. **Canonicalization** links observations that represent the same vacancy.
+5. **Classification** determines location, finance relevance, experience eligibility, and confidence from full details.
+6. **Presentation and notification** exposes one job with source badges and sends one deduplicated alert.
 
 CV generation and full career-ops-style CV rewriting are a separate implementation slice. The OpenRouter client introduced here will be reusable by that feature, but this specification does not send CV files or personal information to a model.
 
 ## Data Model
 
+### `source_inventory`
+
+`source_inventory` is a compact, non-user-facing index used to detect new, changed, and disappeared official listings without downloading every job description.
+
+Required fields:
+
+- `connector_id`, `source_external_id`, `company`.
+- `title`, `location`, `category`, `department` when exposed by the results index.
+- `detail_url`, `listing_metadata_hash`.
+- `first_seen_at`, `last_seen_at`, `last_scan_run_id`.
+- `candidate_status`: `hydrate`, `defer`, `hydrated`, or `audit`.
+- `candidate_reasons`: bounded structured reasons from the high-recall prefilter.
+- `consecutive_complete_misses`, `active`.
+
+This table stores no full description and is not returned by `GET /jobs`. Closed non-candidate inventory may be pruned after a retention window because its purpose is change detection and coverage audit, not user history.
+
 ### `jobs`
 
-`jobs` represents a canonical vacancy rather than a source-specific listing.
+`jobs` represents a hydrated canonical candidate vacancy rather than a source-specific listing or every item in the employer's board.
 
 Required fields:
 
@@ -80,7 +98,7 @@ The existing `source_company` and `source_url` semantics will be migrated rather
 
 ### `job_sources`
 
-`job_sources` records one source's observation of a canonical job.
+`job_sources` records one hydrated source observation of a canonical candidate job.
 
 Required fields:
 
@@ -92,7 +110,9 @@ Required fields:
 - `listing_url`, `detail_url`, `apply_url`.
 - `is_official`.
 - `first_seen_at`, `last_seen_at`, `last_verified_at`.
-- `active`, `content_hash`.
+- `active`, `listing_metadata_hash`, `content_hash`.
+- `hydration_status`: `pending`, `complete`, or `failed`.
+- `detail_checked_at`, `next_detail_check_at`.
 - `first_scan_run_id`, `last_scan_run_id`.
 - `raw_metadata`: bounded JSON containing non-sensitive source fields needed for debugging.
 
@@ -105,10 +125,13 @@ An observation is persisted before canonicalization. If no canonical match can b
 The existing diagnostics table will be extended with:
 
 - `source_type`, `connector_id`, `connector_version`.
+- `run_type`: `watch`, `reconcile`, or `hydrate`.
 - `status`: `complete`, `partial`, `failed`, `unsupported`, or `anomalous`.
+- `hydration_status`: `complete`, `backlog`, or `degraded`.
 - `reported_total`, `pages_expected`, `pages_fetched`.
-- `listings_discovered`, `details_expected`, `details_fetched`.
-- `apply_urls_resolved`, `india_listings_persisted`.
+- `listings_discovered`, `inventory_created`, `inventory_changed`.
+- `candidates_selected`, `details_due`, `details_fetched`, `details_backlogged`.
+- `apply_urls_resolved`, `candidate_observations_persisted`.
 - `new_observations`, `changed_observations`, `canonical_jobs_created`.
 - `baseline_count`, `count_change_ratio`.
 - bounded exclusions and error summaries.
@@ -126,6 +149,19 @@ Classification history is retained separately for auditability:
 
 This makes model changes reviewable and prevents repeated AI calls for unchanged descriptions.
 
+### `connector_state`
+
+Each supported source has one operational state record:
+
+- `connector_id`, `source_type`, `source_name`, `company`, `scan_group`.
+- `baseline_completed_at`, `last_watch_complete_at`, `last_reconcile_complete_at`, `last_reported_total`.
+- `last_page_count`, `consecutive_failures`, `next_due_at`.
+- `reconcile_interval_hours`: connector-specific based on board size and API capabilities.
+- `detail_recheck_hours`: 24 by default.
+- `detail_batch_size`: connector-specific and bounded by observed runtime.
+
+The first successful enumeration establishes the source baseline. Baseline observations populate the feed but do not generate hundreds of historical new-job notifications.
+
 ## Source Connectors
 
 ### Official connectors
@@ -138,12 +174,46 @@ Each connector must:
 2. follow every pagination cursor, offset, or result page;
 3. record the source-reported total when available;
 4. collect stable job IDs and every detail URL;
-5. fetch every detail page with bounded concurrency and timeouts;
-6. extract the full description, structured location, posting date, experience wording, and direct-apply destination;
-7. persist each India or India-uncertain observation before classification; and
-8. return machine-checkable completeness diagnostics.
+5. upsert minimal inventory and run the high-recall candidate selector;
+6. fetch every due candidate detail page with bounded concurrency and timeouts;
+7. extract the full description, structured location, posting date, experience wording, and direct-apply destination;
+8. persist each hydrated candidate observation before final classification; and
+9. return machine-checkable enumeration, selection, and hydration diagnostics.
 
-A connector is `complete` only if all expected pages and detail records were fetched and the discovered count agrees with the source-reported total when one exists. A source with no reported total may be complete only when pagination termination is explicit and all discovered detail pages succeed.
+A connector's enumeration status is `complete` only if every expected results page was fetched and the discovered count agrees with the source-reported total when one exists. A source with no reported total may complete enumeration only when pagination termination is explicit. Candidate hydration is independently `complete` only when every candidate detail due in that run was fetched and parsed; remaining due work is reported as `backlog`, while failed due details produce `degraded`. Non-candidate inventory never prevents candidate hydration from completing.
+
+### Enumeration and detail hydration
+
+Large employers are processed in two stages. Enumeration follows the complete official pagination surface and writes only compact inventory rows. Candidate hydration fetches full details only when a listing is new or changed and the high-recall selector marks it for hydration, when its previous hydration failed, when a portal reports the same listing, or when an active candidate is due for periodic revalidation.
+
+The high-recall selector hydrates a listing when any of these conditions holds:
+
+1. title, category, or department contains any finance-taxonomy signal;
+2. title contains an early-career signal such as graduate, trainee, intern, apprentice, analyst, associate, officer, executive, coordinator, specialist, consultant, advisor, or researcher;
+3. the title is generic, the category or department is missing, or the source metadata is otherwise insufficient to exclude it safely;
+4. education metadata mentions MBA, PGDM, CA, CFA, commerce, economics, finance, accounting, or a related field;
+5. a portal source reports the same employer listing; or
+6. a connector-specific rule covers known employer terminology such as D. E. Shaw's generic `Analyst` titles.
+
+Only entries with a strong structured non-finance category and no finance, education, early-career, generic-title, or portal signal may be deferred. A bounded detail batch prevents large sources such as Citi from exhausting one Edge Function invocation. Due candidates remain visible as `Details pending`; unprocessed due details form an explicit backlog. On normal post-baseline scans, all newly selected candidates are expected to finish in the same scan group. Presence reconciliation depends on complete enumeration, while classification confidence depends on hydration and final job closure still requires two consecutive complete enumeration misses.
+
+To detect prefilter drift, each connector hydrates a small deterministic sample of newly deferred entries, capped per company per day. If the audit finds a relevant false negative, the connector becomes `anomalous`, affected inventory is re-evaluated, and the taxonomy or connector-specific rule must be corrected before normal health is restored.
+
+The initial baseline suppresses new-job notifications for pre-existing candidates. Listings first seen after `baseline_completed_at` may notify as soon as candidate hydration establishes an exact or possible match. Inventory that is safely deferred is neither displayed nor sent to OpenRouter.
+
+### Fast watch and full reconciliation
+
+Large boards do not download their complete index every 30 minutes unless the official ATS can return it cheaply. Each connector chooses the strongest available strategy in this order:
+
+1. official change feed, `modifiedSince` filter, webhook, ETag, or conditional request;
+2. official server-side location, department, category, keyword, and posting-date filters; or
+3. paginated lightweight summary enumeration.
+
+The 30-minute `watch` run unions several deliberately overlapping official searches: finance-taxonomy terms, early-career terms, generic titles, graduate programmes, employer-specific departments, and recently posted jobs. It hydrates only new or changed candidate IDs.
+
+A `reconcile` run enumerates the complete lightweight India index to catch unusual titles or search behaviour and audits entries missed by the watch queries. Boards with at most 200 index entries reconcile every 30 minutes. Boards with 201-1,000 entries reconcile at least every two hours. Larger boards reconcile at least every six hours. A changed source-reported total, portal-only sighting, taxonomy-audit failure, or connector anomaly triggers an immediate reconciliation. Connectors may reconcile more often when conditional requests or compact APIs make it inexpensive.
+
+The health view reports watch freshness and full-reconciliation freshness separately. A successful watch cannot masquerade as recent full-board reconciliation.
 
 ### Portal connectors
 
@@ -153,7 +223,7 @@ A portal-only observation is visible with its platform badge and the label `Offi
 
 ### Execution scheduling
 
-The complete employer list will not run in one Edge Function invocation. Connectors are assigned to bounded scan groups based on observed page count and latency. Each group runs every 30 minutes with staggered start times, bounded per-source concurrency, and a target runtime below the deployed function timeout. Heavy custom connectors run alone; fast ATS-family connectors may share a group.
+The complete employer list will not run in one Edge Function invocation. Connectors are assigned to bounded scan groups based on observed page count and latency. Each watch group runs every 30 minutes with staggered start times; reconciliation and hydration groups run only when due. Every invocation uses bounded per-source concurrency and targets completion below the deployed function timeout. Heavy custom connectors run alone; fast ATS-family connectors may share a group.
 
 Failure or timeout in one group cannot prevent another group from running. Diagnostics and lifecycle updates remain source-scoped. Job updates are database writes consumed dynamically by the PWA, so neither a scan nor a new listing triggers a GitHub Pages deployment.
 
@@ -275,7 +345,7 @@ Notification payloads include canonical job ID, company, title, match tier, disc
 
 ### Connector contract tests
 
-Every connector requires fixtures and tests for pagination, reported totals, detail discovery, detail parsing, direct-apply resolution, malformed listings, timeouts, and completeness status.
+Every connector requires fixtures and tests for pagination, reported totals, inventory updates, high-recall candidate selection, candidate-detail parsing, direct-apply resolution, deferred-entry audits, malformed listings, timeouts, and completeness status.
 
 ### Classification tests
 
@@ -283,7 +353,7 @@ Golden fixtures include the verified Moody's Senior Financial Data Analyst and D
 
 ### Persistence and lifecycle tests
 
-Tests prove that all official observations are stored before classification, source provenance survives canonicalization, partial scans cannot deactivate jobs, closure requires two complete misses, portal observations cannot overwrite official data, and uncertain deduplication does not merge.
+Tests prove that all official index IDs enter minimal inventory, only selected candidates are hydrated into source observations, generic titles cannot be deferred, source provenance survives canonicalization, partial scans cannot deactivate jobs, closure requires two complete misses, portal observations cannot overwrite official data, and uncertain deduplication does not merge.
 
 ### OpenRouter tests
 
@@ -294,15 +364,15 @@ Network calls are mocked. Tests cover schema-valid results, malformed JSON, unsu
 Before each connector is declared supported:
 
 1. local tests and syntax/type checks pass;
-2. a live official scan reconciles listing and detail counts;
+2. a live official scan reconciles the complete listing index and every due candidate-detail count;
 3. saved direct-apply links are reopened successfully;
 4. the API returns source badges and verification metadata; and
 5. the PWA shows one canonical card and a source-aware notification.
 
 ## Rollout
 
-1. Migrate canonical jobs, source observations, diagnostics, and classification history without losing the deployed Moody's record.
-2. Change ingestion so official observations are persisted before classification.
+1. Migrate source inventory, canonical jobs, source observations, diagnostics, and classification history without losing the deployed Moody's record.
+2. Change ingestion so complete official index metadata is inventoried and high-recall candidates are hydrated before final classification.
 3. Replace the flat keyword regex with location, finance-taxonomy, and experience-parser modules.
 4. Add canonicalization, source-aware API fields, badges, Sources details, and source-health states.
 5. Add the OpenRouter ambiguity adapter with concrete model configuration, strict schema validation, caching, and failure-safe behaviour.
@@ -315,7 +385,7 @@ Before each connector is declared supported:
 
 This document is the program-level design. Implementation is divided into independently reviewable slices so career-page integrity is completed before portal or CV expansion:
 
-1. **Career-page integrity and source provenance:** schema migration, persist-before-filter ingestion, classification rewrite, source-aware API and UI, staggered scan groups, coverage diagnostics, and live-verified D. E. Shaw and Citi connectors.
+1. **Career-page integrity and source provenance:** schema migration, lightweight complete inventory, high-recall candidate hydration, classification rewrite, source-aware API and UI, staggered scan groups, coverage diagnostics, and live-verified D. E. Shaw and Citi connectors.
 2. **Official employer expansion:** shared ATS-family adapters followed by custom adapters for the approved employer list, each gated by fixtures and live count reconciliation.
 3. **Portal sentinels and reconciliation:** legitimate LinkedIn, Naukri, iimjobs, and Indeed inputs, canonical linking, portal-only labels, and coverage-gap handling.
 4. **Push delivery:** VAPID delivery, one notification per canonical job, source-aware copy, update notifications, and delivery diagnostics.
@@ -327,11 +397,15 @@ After this specification is approved, the next implementation plan covers only s
 
 - One canonical job can expose multiple accurately labelled source links.
 - The official direct-apply URL is primary whenever verified.
-- Every fetched official India listing is persisted regardless of its classification.
-- A bad keyword, model response, or quota failure cannot erase or hide an official listing.
-- Complete connectors fetch every expected page and detail record or report a visible non-complete status.
+- Every official India index ID is tracked in compact inventory; only high-recall candidates and audit samples receive full detail fetches.
+- A bad final-classification keyword, model response, or quota failure cannot erase or hide a hydrated candidate.
+- Complete connectors fetch every expected index page and every due candidate detail or report a visible non-complete status.
 - Unsupported, partial, failed, and anomalous sources never appear as legitimate zero-result scans.
 - Existing jobs survive source failures and close only after two complete misses.
 - D. E. Shaw and Citi live scans reconcile with manually verified official listings before support is declared.
+- Large sources inventory listing summaries while hydrating only new, changed, failed, portal-corroborated, audited, or stale candidate details in bounded batches.
+- Generic titles and missing categories always enter candidate hydration, while only strongly structured non-finance entries may be deferred.
+- Deferred-entry audits detect taxonomy drift and make false-negative coverage failures visible.
+- Initial source baselines do not create a notification flood, while listings first seen after baseline remain eligible for immediate alerts.
 - OpenRouter is called only for new or changed ambiguous jobs, and every result is reproducible from recorded model, prompt, taxonomy, and description versions.
 - Notifications identify the discovery source and are deduplicated across portal and official observations.
