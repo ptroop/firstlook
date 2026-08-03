@@ -1,8 +1,7 @@
 import { createConnectorRegistry } from './connectors/registry.ts';
-import { readJsonBody } from './http.ts';
+import { createLegacyScanStore, createSupabaseRestClient } from './persistence/store.ts';
 import { presentJob, type JobRow } from './presenters.ts';
 import { runScan, type ScanStore } from './scan.ts';
-import type { ConnectorDiagnostic, NormalizedJob } from './types.ts';
 
 Deno.serve(async (request) => {
   const origin = request.headers.get('Origin');
@@ -62,103 +61,17 @@ async function saveSubscription(request: Request, headers: Record<string, string
 }
 
 function createSupabaseStore(): ScanStore {
-  return {
-    async startRun(startedAt) {
-      const rows = await supabaseFetch('/rest/v1/scan_runs', {
-        method: 'POST',
-        headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({ started_at: startedAt })
-      });
-      return rows[0]?.id || null;
-    },
-
-    async upsertJob(job, seenAt) {
-      await supabaseFetch('/rest/v1/jobs?on_conflict=id', {
-        method: 'POST',
-        headers: { Prefer: 'resolution=merge-duplicates' },
-        body: JSON.stringify(jobRow(job, seenAt))
-      });
-    },
-
-    async deactivateMissingForSource(company, activeIds) {
-      await supabaseFetch('/rest/v1/rpc/deactivate_missing_jobs', {
-        method: 'POST',
-        body: JSON.stringify({ p_source_company: company, p_active_ids: activeIds })
-      });
-    },
-
-    async recordSourceResult(runId, diagnostic) {
-      await supabaseFetch('/rest/v1/source_scan_runs', {
-        method: 'POST',
-        body: JSON.stringify(sourceDiagnosticRow(runId, diagnostic))
-      });
-    },
-
-    async finishRun(runId, summary, finishedAt) {
-      if (!runId) return;
-      await supabaseFetch(`/rest/v1/scan_runs?id=eq.${runId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          finished_at: finishedAt,
-          sources_checked: summary.sourcesChecked,
-          jobs_found: summary.jobsFound,
-          error_count: summary.errorCount
-        })
-      });
-    }
-  };
-}
-
-function jobRow(job: NormalizedJob, seenAt: string) {
-  return {
-    id: job.id,
-    employer_job_id: job.employerJobId,
-    source_company: job.company,
-    source_url: job.sourceUrl,
-    apply_url: job.applyUrl,
-    title: job.title,
-    location: job.location,
-    description: job.description.slice(0, 4000),
-    experience_text: job.experienceText,
-    job_category: job.jobCategory,
-    posted_at: job.postedAt,
-    last_seen_at: seenAt,
-    active: true
-  };
-}
-
-function sourceDiagnosticRow(runId: number | null, item: ConnectorDiagnostic) {
-  return {
-    scan_run_id: runId,
-    source_company: item.company,
-    status: item.status,
-    discovered_count: item.discoveredCount,
-    fetched_count: item.fetchedCount,
-    matching_count: item.matchingCount,
-    excluded_json: item.excluded,
-    error_message: item.errorMessage,
-    started_at: item.startedAt,
-    finished_at: item.finishedAt
-  };
+  return createLegacyScanStore(createSupabaseRestClient({
+    baseUrl: Deno.env.get('SUPABASE_URL') || '',
+    serviceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+  }));
 }
 
 async function supabaseFetch(path: string, options: RequestInit = {}) {
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-  const response = await fetch(`${Deno.env.get('SUPABASE_URL')}${path}`, {
-    ...options,
-    headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    }
-  });
-  if (!response.ok) {
-    const method = options.method || 'GET';
-    const resource = path.split('?')[0];
-    throw new Error(`Supabase ${method} ${resource} failed with HTTP ${response.status}`);
-  }
-  return readJsonBody(response);
+  return createSupabaseRestClient({
+    baseUrl: Deno.env.get('SUPABASE_URL') || '',
+    serviceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
+  }).request(path, options);
 }
 
 function json(body: unknown, headers: Record<string, string>, status = 200) {
