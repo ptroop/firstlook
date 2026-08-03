@@ -18,6 +18,10 @@ const goldmanSchedule = readFileSync(
   new URL('../../migrations/010_goldman_scan_schedule.sql', import.meta.url),
   'utf8',
 );
+const talentBrewSchedule = readFileSync(
+  new URL('../../migrations/20260803171004_add_blackrock_barclays_schedules.sql', import.meta.url),
+  'utf8',
+);
 
 test('rotates hydration by never-checked then oldest-checked inventory', () => {
   assert.match(migration, /add column if not exists last_hydrated_at timestamptz/);
@@ -76,4 +80,16 @@ test('adds Goldman to the private scan helper, watchdog, and 30-minute schedule'
   assert.match(goldmanSchedule, /goldman-sachs-official-india/);
   assert.match(goldmanSchedule, /'first-look-goldman-reconcile'[\s\S]*'9,39 \* \* \* \*'/);
   assert.doesNotMatch(goldmanSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});
+
+test('adds BlackRock and Barclays to the private scan helper and staggered schedules', () => {
+  for (const group of ['blackrock-watch', 'blackrock-reconcile', 'barclays-watch', 'barclays-reconcile']) {
+    assert.match(talentBrewSchedule, new RegExp(`'${group}'`));
+  }
+  assert.match(talentBrewSchedule, /first-look-blackrock-watch[\s\S]*'11,41 \* \* \* \*'/);
+  assert.match(talentBrewSchedule, /first-look-barclays-watch[\s\S]*'17,47 \* \* \* \*'/);
+  assert.match(talentBrewSchedule, /blackrock-official-india/);
+  assert.match(talentBrewSchedule, /barclays-official-india/);
+  assert.match(talentBrewSchedule, /cron\.unschedule\(existing_job_id\)/);
+  assert.doesNotMatch(talentBrewSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
 });

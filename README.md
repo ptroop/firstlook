@@ -31,6 +31,6 @@ Upload the contents of this folder to a repository and enable GitHub Pages from 
 
 ## Backend
 
-The `backend/` folder contains the Supabase Edge Function, migrations, connector tests, and 30-minute scanner. Moody's is currently the first live verified connector; the remaining employers are reported as unsupported until their official search adapters are added.
+The `backend/` folder contains the Supabase Edge Function, migrations, connector tests, and 30-minute scanner. The live verified official connectors currently cover Moody's, D. E. Shaw, Citi, Goldman Sachs, BlackRock, and Barclays. Additional employers remain in the source roadmap until their actual official search surfaces pass the same inventory, detail, and Apply URL checks.
 
 The frontend must not contain the Gemini key, VAPID private key, or any other secret. Those belong in Supabase Edge Function secrets.

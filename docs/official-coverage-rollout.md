@@ -26,12 +26,12 @@ The first scan of a new connector may create a detail backlog. Later 30-minute r
 | Live | Moody's | `careers.moodys.com` | Complete pagination, official detail, and SuccessFactors apply URL |
 | Live | D. E. Shaw | `deshawindia.com/careers/work-with-us` | Complete HTML catalog, role detail, and direct recruit URL |
 | Live | Citi | `jobs.citi.com/location/india-jobs` | Bounded watch plus full pagination audit and Workday apply URL |
+| Live | BlackRock | `careers.blackrock.com/location/india-jobs` | Paginated official inventory, India filtering, and direct Workday apply resolution |
+| Live | Barclays | `search.jobs.barclays/location/india-jobs` | Paginated official inventory, total/page reconciliation, and direct Workday apply resolution |
 | 1 | KPMG India | `ejgk.fa.em2.oraclecloud.com/.../CX_1/jobs` | Reusable Oracle Recruiting Cloud adapter |
 | 1 | American Express | `careers.americanexpress.com/.../CX_1/jobs` | Same Oracle adapter with employer-specific facets |
 | 1 | Deloitte India | `southasiacareers.deloitte.com` | Paginated catalog with advertised-total proof |
 | 1 | Wells Fargo | `wellsfargojobs.com/en/jobs/?country=India` | Paginated official inventory and detail hydration |
-| 1 | BlackRock | `careers.blackrock.com/location/india-jobs` | Paginated official inventory and detail hydration |
-| 1 | Barclays | `search.jobs.barclays/search-jobs/India` | Paginated inventory with total/page reconciliation |
 | 1 | NatWest | `jobs.natwestgroup.com/search/.../country/india` | Paginated inventory with stable requisition IDs |
 | 1 | Goldman Sachs | `goldmansachs.com/careers/apply` | Discover professional and student endpoints separately, then merge by requisition ID |
 | 1 | JPMorgan Chase | `careers.jpmorgan.com` | Verify the public search endpoint and keep jobs/programmes as distinct paths |

@@ -44,5 +44,7 @@ test('reports coverage only for implemented official connectors', () => {
     'deshaw-official-india',
     'citi-official-india',
     'goldman-sachs-official-india',
+    'blackrock-official-india',
+    'barclays-official-india',
   ]);
 });

@@ -4,19 +4,18 @@ import { createCitiConnector } from './citi.ts';
 import { createDeshawConnector } from './deshaw.ts';
 import { createGoldmanConnector } from './goldman.ts';
 import { createMoodysConnector, runMoodysConnector } from './moodys.ts';
+import { BARCLAYS_CONFIG, BLACKROCK_CONFIG, createTalentBrewConnector } from './talentbrew.ts';
 
 const UNSUPPORTED_COMPANIES = [
   'JPMorgan Chase',
   'KPMG',
   'Deloitte',
-  'BlackRock',
   'HSBC',
   'D. E. Shaw',
   'Accenture',
   'PwC',
   'Wells Fargo',
   'Citi',
-  'Barclays',
   'Deutsche Bank',
   'Morgan Stanley',
   'Bank of America',
@@ -43,6 +42,10 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createCitiConnector(fetch, 'citi-watch'),
     createCitiConnector(fetch, 'citi-reconcile'),
     createGoldmanConnector(fetch, 'goldman-reconcile'),
+    createTalentBrewConnector(BLACKROCK_CONFIG, fetch, 'blackrock-watch'),
+    createTalentBrewConnector(BLACKROCK_CONFIG, fetch, 'blackrock-reconcile'),
+    createTalentBrewConnector(BARCLAYS_CONFIG, fetch, 'barclays-watch'),
+    createTalentBrewConnector(BARCLAYS_CONFIG, fetch, 'barclays-reconcile'),
   ];
 }
 
