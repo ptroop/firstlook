@@ -88,9 +88,15 @@ function collect(
     const start = match.index ?? 0;
     const end = start + match[0].length;
     if (consumed.some(([usedStart, usedEnd]) => start < usedEnd && end > usedStart)) continue;
+    if (isCorporateHistoryPhrase(text, start)) continue;
     bounds.push(makeBound(match));
     consumed.push([start, end]);
   }
+}
+
+function isCorporateHistoryPhrase(text: string, start: number): boolean {
+  const prefix = text.slice(Math.max(0, start - 24), start);
+  return /\b(?:more than|over|nearly|almost|founded in|since)\s*$/i.test(prefix);
 }
 
 function findPreferredOnly(text: string): string | null {
@@ -133,4 +139,3 @@ function zeroToTwo(minimumYears: number | null, maximumYears: number | null, evi
 function ambiguous(evidence: string[]): ExperienceResult {
   return { status: 'ambiguous', minimumYears: null, maximumYears: null, evidence };
 }
-

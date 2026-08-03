@@ -33,7 +33,11 @@ export function decideCanonicalLink(
     .filter(Boolean)
     .map(canonicalUrl)
     .some((url) => observationUrls.has(url)));
-  if (urlMatches.some((candidate) => identifiersConflict(observation.employerJobId, candidate.employerJobId))) {
+  // D. E. Shaw's ApplicationPage1 URL is a shared application bundle, not a
+  // role identity. The detail-page employer ID must win, otherwise every
+  // distinct listing conflicts with the first role using that bundle URL.
+  const identityUrlMatches = isSharedApplicationUrl(observation.applyUrl) ? [] : urlMatches;
+  if (identityUrlMatches.some((candidate) => identifiersConflict(observation.employerJobId, candidate.employerJobId))) {
     return { status: 'conflict', jobId: null, matchedBy: null };
   }
 
@@ -42,10 +46,10 @@ export function decideCanonicalLink(
     if (idMatch) return { status: 'linked', jobId: idMatch.id, matchedBy: 'employer_job_id' };
   }
 
-  if (urlMatches.length === 1) {
-    return { status: 'linked', jobId: urlMatches[0].id, matchedBy: 'official_url' };
+  if (identityUrlMatches.length === 1) {
+    return { status: 'linked', jobId: identityUrlMatches[0].id, matchedBy: 'official_url' };
   }
-  if (urlMatches.length > 1) return { status: 'conflict', jobId: null, matchedBy: null };
+  if (identityUrlMatches.length > 1) return { status: 'conflict', jobId: null, matchedBy: null };
 
   const fingerprintMatches = sameCompany.filter((candidate) =>
     normalizeText(candidate.title) === normalizeText(observation.title)
@@ -112,6 +116,20 @@ function canonicalUrl(input: string): string {
   }
 }
 
+function isSharedApplicationUrl(input: string | null): boolean {
+  if (!input) return false;
+  try {
+    const url = new URL(input);
+    const keys = [...url.searchParams.keys()].map((key) => key.toLowerCase());
+    return url.hostname.toLowerCase().replace(/^www\./, '') === 'apply.deshawindia.com'
+      && url.pathname.toLowerCase() === '/applicationpage1.html'
+      && url.searchParams.get('entity')?.toUpperCase() === 'DESIS'
+      && keys.every((key) => key === 'entity');
+  } catch {
+    return false;
+  }
+}
+
 function normalizeText(value: string): string {
   return value.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
 }
@@ -132,4 +150,3 @@ function stableHash(value: string): number {
   }
   return hash >>> 0;
 }
-

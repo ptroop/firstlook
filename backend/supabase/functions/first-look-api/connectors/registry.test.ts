@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createOfficialConnectorRegistry, selectConnectorGroup } from './registry.ts';
+import { createOfficialConnectorRegistry, selectConnectorGroup, supportedOfficialConnectorIds } from './registry.ts';
 
 test('selects only the requested bounded scan group', () => {
   const connectors = [
     { connectorId: 'moodys', scanGroup: 'moodys-reconcile' },
     { connectorId: 'deshaw', scanGroup: 'deshaw-reconcile' },
     { connectorId: 'citi', scanGroup: 'citi-reconcile' },
+    { connectorId: 'goldman', scanGroup: 'goldman-reconcile' },
   ];
   assert.deepEqual(selectConnectorGroup(connectors, 'citi-reconcile'), [connectors[2]]);
   assert.deepEqual(selectConnectorGroup(connectors, 'unknown'), []);
@@ -29,4 +30,19 @@ test('registers separate bounded Citi watch and full reconciliation groups', () 
   const connectors = createOfficialConnectorRegistry();
   const citi = connectors.filter((connector) => connector.connectorId === 'citi-official-india');
   assert.deepEqual(citi.map((connector) => connector.scanGroup), ['citi-watch', 'citi-reconcile']);
+});
+
+test('registers Goldman Sachs full India reconciliation', () => {
+  const connectors = createOfficialConnectorRegistry();
+  const goldman = connectors.filter((connector) => connector.connectorId === 'goldman-sachs-official-india');
+  assert.deepEqual(goldman.map((connector) => connector.scanGroup), ['goldman-reconcile']);
+});
+
+test('reports coverage only for implemented official connectors', () => {
+  assert.deepEqual(supportedOfficialConnectorIds(), [
+    'moodys-official-india',
+    'deshaw-official-india',
+    'citi-official-india',
+    'goldman-sachs-official-india',
+  ]);
 });

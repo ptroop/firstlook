@@ -10,13 +10,15 @@ const PAGE_CONCURRENCY = 4;
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_BODY_BYTES = 1_500_000;
 
+type CitiCategoryFacet = { id: string; slug: string };
+
 export function createCitiConnector(
   fetcher: JobFetch = fetch,
   scanGroup = 'citi-reconcile',
 ): OfficialJobConnector {
   return {
     connectorId: 'citi-official-india',
-    connectorVersion: 'citi-v1',
+    connectorVersion: 'citi-v5',
     company: COMPANY,
     scanGroup,
     async enumerate(request) {
@@ -43,30 +45,15 @@ export function createCitiConnector(
       if (advertisedPages === null) errorSummaries.push('Catalog did not expose a page count');
 
       const availablePages = advertisedPages ?? 1;
-      const requestedLimit = request.runType === 'watch' ? WATCH_PAGE_LIMIT : MAX_RECONCILE_PAGES;
-      const pagesExpected = Math.min(availablePages, requestedLimit);
-      if (request.runType !== 'watch' && availablePages > MAX_RECONCILE_PAGES) {
-        errorSummaries.push(`Pagination exceeded ${MAX_RECONCILE_PAGES} pages`);
-      }
+      const categories = request.runType === 'watch' ? [] : parseCitiCategoryFacets(firstHtml);
+      const catalog = categories.length > 0
+        ? await fetchCategoryPartitions(fetcher, categories, errorSummaries)
+        : await fetchRootPages(fetcher, firstHtml, availablePages, request.runType, errorSummaries);
 
-      const pageBodies: Array<string | undefined> = Array.from({ length: pagesExpected });
-      pageBodies[0] = firstHtml;
-      await mapWithConcurrency(
-        Array.from({ length: Math.max(0, pagesExpected - 1) }, (_, index) => index + 2),
-        PAGE_CONCURRENCY,
-        async (page) => {
-          const url = pageUrl(page);
-          try {
-            pageBodies[page - 1] = await fetchText(fetcher, url);
-          } catch (error) {
-            errorSummaries.push(errorSummary(url, error));
-          }
-        },
-      );
-
-      const pagesFetched = pageBodies.filter(Boolean).length;
+      const pagesExpected = catalog.pagesExpected;
+      const pagesFetched = catalog.pagesFetched;
       const listings = uniqueBy(
-        pageBodies.flatMap((html) => html ? parseCitiResultsPage(html, FIRST_PAGE_URL) : []),
+        [firstHtml, ...catalog.bodies].flatMap((html) => parseCitiResultsPage(html, FIRST_PAGE_URL)),
         (listing) => listing.sourceExternalId,
       );
       if (request.runType !== 'watch' && reportedTotal !== null && listings.length !== reportedTotal) {
@@ -146,28 +133,54 @@ export function parseCitiResultsPage(html: string, baseUrl: string): InventoryLi
   return uniqueBy(listings, (listing) => listing.sourceExternalId);
 }
 
+export function parseCitiCategoryFacets(html: string): CitiCategoryFacet[] {
+  const sectionStart = html.search(/<section\b[^>]*id=["']category-filters-section["'][^>]*>/i);
+  if (sectionStart < 0) return [];
+  const sectionEnd = html.indexOf('</section>', sectionStart);
+  const section = html.slice(sectionStart, sectionEnd >= 0 ? sectionEnd + 10 : html.length);
+  const facets: CitiCategoryFacet[] = [];
+  for (const match of section.matchAll(/<input\b[^>]*>/gi)) {
+    const input = match[0];
+    if (!attribute(input, 'class').split(/\s+/).includes('filter-checkbox')) continue;
+    const id = attribute(input, 'data-id');
+    const name = attribute(input, 'data-display');
+    if (!/^\d+$/.test(id) || !name) continue;
+    facets.push({ id, slug: slugify(name) });
+  }
+  return uniqueBy(facets, (facet) => facet.id);
+}
+
 export function parseCitiJob(html: string, detailUrl: string) {
-  const title = htmlToText(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '');
-  const employerJobId = valueAfterHeading(html, /^Job Req Id:?$/i);
-  const location = valueAfterHeading(html, /^Location:?$/i);
+  const structured = parseCitiStructuredJob(html);
+  const title = htmlToText(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '') || structured.title;
+  const employerJobId = valueAfterHeading(html, /^Job Req Id:?$/i) || structured.employerJobId;
+  const location = valueAfterHeading(html, /^Location(?:\(s\))?:?$/i) || structured.location;
   const posted = valueAfterHeading(html, /^Posted:?$/i);
-  const descriptionHtml = contentFromClass(html, 'ats-description');
+  const atsDescriptionHtml = contentFromClass(html, 'ats-description');
+  const descriptionHtml = structured.descriptionHtml || atsDescriptionHtml;
   const description = htmlToText(descriptionHtml);
   const experienceText = [...descriptionHtml.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)]
     .map((match) => htmlToText(match[1]))
     .find((text) => /\b(?:\d+\s*(?:-|–|to)\s*\d+\s+years?|\d+\+?\s+years?|freshers?|no prior experience|experience preferred)\b/i.test(text))
     || description.match(/[^.]*\b(?:\d+\s*(?:-|–|to)\s*\d+\s+years?|\d+\+?\s+years?|freshers?|no prior experience|experience preferred)\b[^.]*\.?/i)?.[0]?.trim()
     || '';
-  const familyGroup = valueAfterHeading(descriptionHtml, /^Job Family Group:?$/i);
-  const family = valueAfterHeading(descriptionHtml, /^Job Family:?$/i);
+  const familyGroup = valueAfterHeading(atsDescriptionHtml, /^Job Family Group:?$/i);
+  const family = valueAfterHeading(atsDescriptionHtml, /^Job Family:?$/i);
   const jobCategory = [familyGroup, family].filter(Boolean).join(' / ');
-  const applyUrl = [...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)]
-    .map((match) => decodeHtml(match[1]))
+  const applyUrl = [...html.matchAll(/<a\b[^>]*>/gi)]
+    .flatMap((match) => [attribute(match[0], 'data-apply-url'), attribute(match[0], 'href')])
     .find((href) => /^https:\/\/citi\.wd\d+\.myworkdayjobs\.com\/[^?#]+\/apply(?:[?#].*)?$/i.test(href))
     || '';
 
   if (!employerJobId || !title || !location || !description || !applyUrl) {
-    throw new Error('Missing required Citi job fields');
+    const missing = [
+      !employerJobId && 'employer job ID',
+      !title && 'title',
+      !location && 'location',
+      !description && 'description',
+      !applyUrl && 'apply URL',
+    ].filter(Boolean).join(', ');
+    throw new Error('Missing required Citi job fields: ' + missing);
   }
   return {
     employerJobId,
@@ -177,9 +190,37 @@ export function parseCitiJob(html: string, detailUrl: string) {
     experienceText,
     jobCategory,
     applyUrl,
-    postedAt: parsePostedDate(posted),
+    postedAt: parsePostedDate(posted) || parseStructuredPostedDate(structured.datePosted),
     detailUrl,
   };
+}
+
+function parseCitiStructuredJob(html: string) {
+  for (const match of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      const values = Array.isArray(parsed) ? parsed : [parsed];
+      const posting = values.find((value) => value && typeof value === 'object' && value['@type'] === 'JobPosting');
+      if (!posting) continue;
+      const address = (Array.isArray(posting.jobLocation) ? posting.jobLocation[0] : posting.jobLocation)?.address;
+      return {
+        title: typeof posting.title === 'string' ? posting.title.trim() : '',
+        employerJobId: typeof posting.identifier === 'string'
+          ? posting.identifier.trim()
+          : typeof posting.identifier?.value === 'string' ? posting.identifier.value.trim() : '',
+        location: address && typeof address === 'object'
+          ? [address.addressLocality, address.addressRegion, address.addressCountry]
+            .filter((value) => typeof value === 'string' && value.trim())
+            .join(', ')
+          : '',
+        descriptionHtml: typeof posting.description === 'string' ? posting.description : '',
+        datePosted: typeof posting.datePosted === 'string' ? posting.datePosted : '',
+      };
+    } catch {
+      continue;
+    }
+  }
+  return { title: '', employerJobId: '', location: '', descriptionHtml: '', datePosted: '' };
 }
 
 async function fetchText(fetcher: JobFetch, url: string): Promise<string> {
@@ -209,8 +250,102 @@ function advertisedPageCount(html: string): number | null {
   return value ? Number(value) : null;
 }
 
+function inferredPageCount(html: string, pageOneUrl: string): number | null {
+  const advertised = advertisedPageCount(html);
+  if (advertised !== null) return advertised;
+  const total = advertisedResultCount(html);
+  const pageSize = parseCitiResultsPage(html, pageOneUrl).length;
+  if (total === 0) return 1;
+  return total !== null && pageSize > 0 ? Math.ceil(total / pageSize) : null;
+}
+
 function pageUrl(page: number): string {
   return `${CATALOG_ROOT}/${page}`;
+}
+
+async function fetchRootPages(
+  fetcher: JobFetch,
+  firstHtml: string,
+  availablePages: number,
+  runType: 'watch' | 'reconcile' | 'hydrate',
+  errorSummaries: string[],
+) {
+  const requestedLimit = runType === 'watch' ? WATCH_PAGE_LIMIT : MAX_RECONCILE_PAGES;
+  const pagesExpected = Math.min(availablePages, requestedLimit);
+  if (runType !== 'watch' && availablePages > MAX_RECONCILE_PAGES) {
+    errorSummaries.push(`Pagination exceeded ${MAX_RECONCILE_PAGES} pages`);
+  }
+  const bodies: Array<string | undefined> = Array.from({ length: pagesExpected });
+  bodies[0] = firstHtml;
+  await fetchNumberedPages(fetcher, Array.from({ length: Math.max(0, pagesExpected - 1) }, (_, index) => index + 2), pageUrl, bodies, errorSummaries);
+  return { bodies: bodies.filter((body): body is string => Boolean(body)).slice(1), pagesExpected, pagesFetched: bodies.filter(Boolean).length };
+}
+
+async function fetchCategoryPartitions(
+  fetcher: JobFetch,
+  categories: CitiCategoryFacet[],
+  errorSummaries: string[],
+) {
+  const firstPages: Array<string | undefined> = Array.from({ length: categories.length });
+  await mapWithConcurrency(categories.map((category, index) => ({ category, index })), PAGE_CONCURRENCY, async ({ category, index }) => {
+    const url = categoryPageUrl(category, 1);
+    try {
+      firstPages[index] = await fetchText(fetcher, url);
+    } catch (error) {
+      errorSummaries.push(errorSummary(url, error));
+    }
+  });
+
+  const remaining = categories.flatMap((category, index) => {
+    const html = firstPages[index];
+    if (!html) return [];
+    const url = categoryPageUrl(category, 1);
+    const pages = inferredPageCount(html, url);
+    if (pages === null) return [];
+    if (pages > MAX_RECONCILE_PAGES) {
+      errorSummaries.push(`${categoryPageUrl(category, 1)}: pagination exceeded ${MAX_RECONCILE_PAGES} pages`);
+    }
+    return Array.from({ length: Math.max(0, Math.min(pages, MAX_RECONCILE_PAGES) - 1) }, (_, offset) => ({ category, page: offset + 2 }));
+  });
+  const remainingBodies: Array<string | undefined> = Array.from({ length: remaining.length });
+  await mapWithConcurrency(remaining.map((item, index) => ({ ...item, index })), PAGE_CONCURRENCY, async ({ category, page, index }) => {
+    const url = categoryPageUrl(category, page);
+    try {
+      remainingBodies[index] = await fetchText(fetcher, url);
+    } catch (error) {
+      errorSummaries.push(errorSummary(url, error));
+    }
+  });
+  return {
+    bodies: [...firstPages, ...remainingBodies].filter((body): body is string => Boolean(body)),
+    pagesExpected: 1 + categories.length + remaining.length,
+    pagesFetched: 1 + firstPages.filter(Boolean).length + remainingBodies.filter(Boolean).length,
+  };
+}
+
+async function fetchNumberedPages(
+  fetcher: JobFetch,
+  pages: number[],
+  urlForPage: (page: number) => string,
+  bodies: Array<string | undefined>,
+  errorSummaries: string[],
+) {
+  await mapWithConcurrency(pages, PAGE_CONCURRENCY, async (page) => {
+    const url = urlForPage(page);
+    try {
+      bodies[page - 1] = await fetchText(fetcher, url);
+    } catch (error) {
+      errorSummaries.push(errorSummary(url, error));
+    }
+  });
+}
+
+function categoryPageUrl(category: CitiCategoryFacet, page: number): string {
+  return `https://jobs.citi.com/employment/india-${category.slug}-jobs/287/${category.id}/1269750/2/${page}`;
+}
+
+function slugify(value: string): string {
+  return value.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 function valueAfterHeading(html: string, label: RegExp): string {
@@ -249,6 +384,11 @@ function parsePostedDate(value: string): string | null {
   const month = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf(match[1].toLowerCase());
   if (month < 0) return null;
   return new Date(Date.UTC(Number(match[3]), month, Number(match[2]))).toISOString();
+}
+
+function parseStructuredPostedDate(value: string): string | null {
+  const match = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  return match ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).toISOString() : null;
 }
 
 function htmlToText(value: string): string {

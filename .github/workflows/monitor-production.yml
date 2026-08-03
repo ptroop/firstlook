@@ -1,0 +1,61 @@
+name: Monitor production coverage
+
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: first-look-production-monitor
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    env:
+      FIRST_LOOK_API_URL: https://xbckwzodpwfpvvkujbgp.supabase.co/functions/v1/first-look-api
+      REQUIRE_FRESH_COVERAGE: "1"
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure the incident label exists
+        run: gh label create production-monitor --color B60205 --description "Automated production coverage failure" --force
+
+      - name: Check health, coverage, and jobs
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          node backend/scripts/verify-production.mjs > monitor-output.txt 2>&1
+          status=$?
+          cat monitor-output.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Open or update a production incident
+        if: steps.check.outputs.status != '0'
+        shell: bash
+        run: |
+          issue_number=$(gh issue list --state open --label production-monitor --json number --jq '.[0].number')
+          if [ -z "$issue_number" ]; then
+            gh issue create --title "Production job coverage needs attention" --label production-monitor --body-file monitor-output.txt
+          else
+            gh issue comment "$issue_number" --body-file monitor-output.txt
+          fi
+
+      - name: Close the incident after recovery
+        if: steps.check.outputs.status == '0'
+        shell: bash
+        run: |
+          issue_number=$(gh issue list --state open --label production-monitor --json number --jq '.[0].number')
+          if [ -n "$issue_number" ]; then
+            gh issue comment "$issue_number" --body "Production coverage recovered automatically."
+            gh issue close "$issue_number" --reason completed
+          fi

@@ -102,6 +102,7 @@ export interface SourceAwareStore {
   upsertInventory(runId: number, rows: SelectedInventory[], seenAt: string): Promise<void>;
   dueCandidates(connectorId: string, limit: number): Promise<InventoryListing[]>;
   persistObservation(runId: number, observation: HydratedSourceObservation, seenAt: string): Promise<number>;
+  markInventoryHydrated(connectorId: string, sourceExternalId: string, metadataHash: string, hydratedAt: string): Promise<void>;
   findCanonicalCandidates(company: string): Promise<CanonicalCandidate[]>;
   getCachedClassification?(jobId: string, descriptionHash: string, version: string): Promise<OpenRouterClassification | null>;
   upsertCanonicalJob(jobId: string, job: CanonicalJobInput, classification: DeterministicClassification, seenAt: string): Promise<void>;
@@ -137,7 +138,14 @@ export function createSourceAwareStore(client: RestClient): SourceAwareStore {
 
     async upsertInventory(runId, rows, seenAt) {
       if (rows.length === 0) return;
-      const payload = rows.map(({ listing, decision }) => ({
+      const connectorId = rows[0].listing.connectorId;
+      const existingRows = await client.request(`/rest/v1/source_inventory?connector_id=eq.${encodeURIComponent(connectorId)}&select=source_external_id,candidate_status,last_hydrated_at,hydrated_metadata_hash&limit=5000`);
+      const existingById = new Map((existingRows ?? []).map((row: Record<string, unknown>) => [String(row.source_external_id), row]));
+      const payload = rows.map(({ listing, decision }) => {
+        const existing = existingById.get(listing.sourceExternalId);
+        const remainsHydrated = existing?.candidate_status === 'hydrated'
+          && existing.hydrated_metadata_hash === listing.listingMetadataHash;
+        return {
         connector_id: listing.connectorId,
         source_external_id: listing.sourceExternalId,
         company: listing.company,
@@ -149,11 +157,14 @@ export function createSourceAwareStore(client: RestClient): SourceAwareStore {
         listing_metadata_hash: listing.listingMetadataHash,
         last_seen_at: seenAt,
         last_scan_run_id: runId,
-        candidate_status: decision.status,
+        candidate_status: remainsHydrated ? 'hydrated' : decision.status,
         candidate_reasons: decision.reasons,
         consecutive_complete_misses: 0,
         active: true,
-      }));
+        last_hydrated_at: remainsHydrated ? existing.last_hydrated_at : null,
+        hydrated_metadata_hash: remainsHydrated ? existing.hydrated_metadata_hash : null,
+      };
+      });
       await client.request('/rest/v1/source_inventory?on_conflict=connector_id,source_external_id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates' },
@@ -163,7 +174,7 @@ export function createSourceAwareStore(client: RestClient): SourceAwareStore {
 
     async dueCandidates(connectorId, limit) {
       const boundedLimit = Math.max(0, Math.min(500, Math.floor(limit)));
-      const path = `/rest/v1/source_inventory?connector_id=eq.${encodeURIComponent(connectorId)}&active=eq.true&candidate_status=in.(hydrate,audit)&select=*&order=first_seen_at.asc&limit=${boundedLimit}`;
+      const path = `/rest/v1/source_inventory?connector_id=eq.${encodeURIComponent(connectorId)}&active=eq.true&candidate_status=in.(hydrate,audit)&select=*&order=last_hydrated_at.asc.nullsfirst,first_seen_at.desc&limit=${boundedLimit}`;
       const rows = await client.request(path);
       return (rows ?? []).map(inventoryFromRow);
     },
@@ -203,6 +214,17 @@ export function createSourceAwareStore(client: RestClient): SourceAwareStore {
       const id = Number(rows?.[0]?.id);
       if (!Number.isFinite(id)) throw new Error(`Source observation was not persisted for ${observation.sourceName}`);
       return id;
+    },
+
+    async markInventoryHydrated(connectorId, sourceExternalId, metadataHash, hydratedAt) {
+      await client.request(`/rest/v1/source_inventory?connector_id=eq.${encodeURIComponent(connectorId)}&source_external_id=eq.${encodeURIComponent(sourceExternalId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          candidate_status: 'hydrated',
+          hydrated_metadata_hash: metadataHash,
+          last_hydrated_at: hydratedAt,
+        }),
+      });
     },
 
     async findCanonicalCandidates(company) {

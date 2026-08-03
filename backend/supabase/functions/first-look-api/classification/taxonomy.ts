@@ -15,6 +15,9 @@ const EXACT_FINANCE_CONCEPTS = [
   /\b(?:transaction services|financial due diligence|restructuring|deals?|corporate development|financial advisory)\b/i,
 ];
 const LIKELY_FINANCE = /\b(?:banking|investments?|markets?|portfolio|risk|regulatory|credit|economics|commerce|cfa|chartered accountant|\bca\b|mba|pgdm)\b/i;
+const STRONG_NON_FINANCE_TITLE = /\b(?:software|java|python|full[ -]?stack|developer|dev|engineer(?:ing)?|cloud|cybersecurity|ui|ux|it quality|travel manager)\b/i;
+const GENERAL_APPLICATION = /\b(?:general,? exploratory application|without specifying a role|all positions in)\b/i;
+const GENERIC_EMPLOYER_FINANCE = /\b(?:financial services?(?: industry)?|banking industry)\b/gi;
 
 export function classifyLocation(location: string): { status: LocationStatus; evidence: string[] } {
   const indiaEvidence = location.match(INDIA)?.[0];
@@ -26,13 +29,20 @@ export function classifyLocation(location: string): { status: LocationStatus; ev
 }
 
 export function classifyFinance(input: { title: string; jobCategory: string; description: string }): { status: FinanceStatus; evidence: string[] } {
-  const text = `${input.title} ${input.jobCategory} ${input.description}`;
-  const evidence = EXACT_FINANCE_CONCEPTS
-    .map((pattern) => text.match(pattern)?.[0])
+  if (GENERAL_APPLICATION.test(`${input.title} ${input.description}`)) return { status: 'unrelated', evidence: [] };
+  const metadata = `${input.title} ${input.jobCategory}`;
+  const metadataEvidence = EXACT_FINANCE_CONCEPTS
+    .map((pattern) => metadata.match(pattern)?.[0])
     .filter((match): match is string => Boolean(match));
-  if (evidence.length > 0) return { status: 'exact', evidence: [...new Set(evidence)] };
-  const likely = text.match(LIKELY_FINANCE)?.[0];
+  if (metadataEvidence.length > 0) return { status: 'exact', evidence: [...new Set(metadataEvidence)] };
+  if (STRONG_NON_FINANCE_TITLE.test(input.title)) return { status: 'unrelated', evidence: [] };
+
+  const description = input.description.replace(GENERIC_EMPLOYER_FINANCE, '');
+  const descriptionEvidence = EXACT_FINANCE_CONCEPTS
+    .map((pattern) => description.match(pattern)?.[0])
+    .filter((match): match is string => Boolean(match));
+  if (descriptionEvidence.length > 0) return { status: 'exact', evidence: [...new Set(descriptionEvidence)] };
+  const likely = `${metadata} ${description}`.match(LIKELY_FINANCE)?.[0];
   if (likely) return { status: 'likely', evidence: [likely] };
   return { status: 'unrelated', evidence: [] };
 }
-

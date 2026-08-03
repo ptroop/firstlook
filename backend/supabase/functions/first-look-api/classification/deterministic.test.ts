@@ -64,6 +64,12 @@ test('extracts numeric years and evidence without inventing missing bounds', () 
   });
 });
 
+test('ignores company-history years when parsing job requirements', () => {
+  const result = parseExperience('Candidates need 1-2 years of experience. Goldman Sachs has more than 150 years of history.');
+  assert.equal(result.status, 'zero_to_two');
+  assert.deepEqual(result.evidence, ['1-2 years']);
+});
+
 const baseJob = {
   title: 'Senior Financial Data Analyst',
   location: 'Bengaluru, India',
@@ -125,6 +131,32 @@ test('does not exclude finance roles merely because they include data or technol
 
   assert.equal(result.financeStatus, 'exact');
   assert.equal(result.matchTier, 'exact');
+});
+
+test('does not classify a software role as finance from generic bank boilerplate', () => {
+  const result = classifyDeterministically({
+    title: 'Senior Java Backend Developer - Assistant Vice President',
+    location: 'Chennai, India',
+    description: 'Build Java services and cloud infrastructure for a global financial services company.',
+    jobCategory: 'Technology / Applications Development',
+    experienceText: '5-8 years of experience',
+  });
+
+  assert.equal(result.financeStatus, 'unrelated');
+  assert.equal(result.matchTier, 'not_targeted');
+});
+
+test('does not surface an exploratory talent-pool page as a live vacancy', () => {
+  const result = classifyDeterministically({
+    title: 'All positions in Financial Operations',
+    location: 'Hyderabad, Bengaluru or Gurugram, India',
+    description: 'If you would like the group to consider your candidacy without specifying a role, we invite you to submit a general, exploratory application here.',
+    jobCategory: 'Financial Operations',
+    experienceText: '',
+  });
+
+  assert.equal(result.financeStatus, 'unrelated');
+  assert.equal(result.matchTier, 'not_targeted');
 });
 
 test('uses possible for uncertainty and not-targeted only for explicit exclusions', () => {

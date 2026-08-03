@@ -18,11 +18,16 @@ export function createDeshawConnector(
     async enumerate() {
       const html = await fetchText(fetcher, CATALOG_URL);
       const listings = parseDeshawCatalog(html, CATALOG_URL);
-      const reportedTotal = reportedCatalogTotal(html);
+      const advertisedTotal = reportedCatalogTotal(html);
+      const cardCount = catalogCardCount(html);
+      const reportedTotal = advertisedTotal ?? cardCount;
       const errorSummaries: string[] = [];
-      if (reportedTotal === null) errorSummaries.push('Catalog did not expose a reported total');
-      else if (reportedTotal !== listings.length) {
-        errorSummaries.push(`Reported ${reportedTotal} listings but discovered ${listings.length}`);
+      if (advertisedTotal !== null && advertisedTotal !== listings.length) {
+        errorSummaries.push(`Reported ${advertisedTotal} listings but discovered ${listings.length}`);
+      }
+      if (cardCount === 0) errorSummaries.push('Catalog contained no job cards');
+      else if (cardCount !== listings.length) {
+        errorSummaries.push(`Catalog exposed ${cardCount} job cards but discovered ${listings.length}`);
       }
       return {
         listings,
@@ -95,25 +100,58 @@ export function parseDeshawCatalog(html: string, baseUrl: string): InventoryList
 }
 
 export function parseDeshawJob(html: string, detailUrl: string) {
+  const structured = parseDeshawJobPosting(html);
   const employerJobId = attributeFromDocument(html, 'data-job-id') || detailUrl.match(/-(\d+)\/?$/)?.[1] || '';
   const header = html.match(/<header\b[^>]*class=["'][^"']*JobDescription_header__[^"']*["'][^>]*>([\s\S]*?)<\/header>/i)?.[1] || '';
-  const title = htmlToText(header.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '');
+  const title = htmlToText(header.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '') || structured.title;
   const headingParts = (header.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1] || '')
     .split(/<br\s*\/?\s*>/i)
     .map(htmlToText)
     .filter(Boolean);
-  const jobCategory = headingParts[0] || '';
-  const location = normalizeDetailLocation(headingParts.slice(1).join(' '));
+  const jobCategory = headingParts[0] || structured.jobCategory;
+  const location = normalizeDetailLocation(headingParts.slice(1).join(' ')) || structured.location;
   const sections = [...html.matchAll(/<section\b[^>]*class=["'][^"']*JobDescription_pageTextBox__[^"']*["'][^>]*>([\s\S]*?)<\/section>/gi)]
     .map((match) => htmlToText(match[1]));
-  const description = sections.join(' ').trim();
+  const description = sections.join(' ').trim() || structured.description;
   const experienceText = description.match(/[^.]*\b(?:\d+\s*(?:-|to)\s*\d+\s+years?|\d+\+?\s+years?|freshers?|no prior experience)[^.]*\.?/i)?.[0]?.trim() || '';
-  const applyUrl = decodeHtml(html.match(/href=["']([^"']*(?:apply\.deshawindia\.com|\/recruit\/jobs\/)[^"']*)["']/i)?.[1] || '');
+  const applyUrl = decodeHtml(html.match(/href=["']([^"']*(?:apply\.deshawindia\.com|\/recruit\/jobs\/)[^"']*)["']/i)?.[1] || '') || structured.applyUrl;
 
   if (!employerJobId || !title || !location || !description || !applyUrl) {
     throw new Error('Missing required D. E. Shaw job fields');
   }
   return { employerJobId, title, location, description, experienceText, jobCategory, applyUrl };
+}
+
+function parseDeshawJobPosting(html: string): {
+  title: string;
+  location: string;
+  description: string;
+  jobCategory: string;
+  applyUrl: string;
+} {
+  for (const match of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const value = JSON.parse(match[1].trim()) as Record<string, unknown>;
+      if (value['@type'] !== 'JobPosting') continue;
+      const address = value.jobLocation && typeof value.jobLocation === 'object'
+        ? (value.jobLocation as Record<string, unknown>).address
+        : null;
+      const postalAddress = address && typeof address === 'object' ? address as Record<string, unknown> : null;
+      const location = [postalAddress?.addressLocality, postalAddress?.addressRegion]
+        .filter((part): part is string => typeof part === 'string' && Boolean(part.trim()))
+        .join(', ');
+      return {
+        title: typeof value.title === 'string' ? value.title.trim() : '',
+        location: normalizeDetailLocation(location),
+        description: typeof value.description === 'string' ? htmlToText(value.description) : '',
+        jobCategory: typeof value.occupationalCategory === 'string' ? value.occupationalCategory.trim() : '',
+        applyUrl: typeof value.url === 'string' && /\/recruit\/jobs\//i.test(value.url) ? value.url : '',
+      };
+    } catch {
+      // Ignore malformed JSON-LD and continue with the rendered template.
+    }
+  }
+  return { title: '', location: '', description: '', jobCategory: '', applyUrl: '' };
 }
 
 async function fetchText(fetcher: JobFetch, url: string): Promise<string> {
@@ -136,6 +174,12 @@ async function fetchText(fetcher: JobFetch, url: string): Promise<string> {
 function reportedCatalogTotal(html: string): number | null {
   const value = html.match(/\bViewing\s+\d+\s+of\s+([\d,]+)\s+Jobs\b/i)?.[1];
   return value ? Number(value.replace(/,/g, '')) : null;
+}
+
+function catalogCardCount(html: string): number {
+  return [...html.matchAll(/<div\b[^>]*class=["']([^"']*)["'][^>]*>/gi)]
+    .filter((match) => match[1].split(/\s+/).includes('job'))
+    .length;
 }
 
 function normalizeCatalogLocation(value: string): string | null {

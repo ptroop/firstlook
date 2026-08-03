@@ -1,5 +1,5 @@
 import { loadRuntimeConfig } from './config.ts';
-import { createOfficialConnectorRegistry, selectConnectorGroup } from './connectors/registry.ts';
+import { createOfficialConnectorRegistry, selectConnectorGroup, supportedOfficialConnectorIds } from './connectors/registry.ts';
 import { parseScanRequest, safePublicError } from './http.ts';
 import { createSourceAwareStore, createSupabaseRestClient } from './persistence/store.ts';
 import {
@@ -85,7 +85,8 @@ async function getJobs(headers: Record<string, string>) {
 
 async function getCoverage(headers: Record<string, string>) {
   const select = 'connector_id,source_company,source_type,run_type,status,hydration_status,reported_total,pages_expected,pages_fetched,listings_discovered,details_due,details_fetched,details_backlogged,apply_urls_resolved,error_summary,finished_at';
-  const rows = (await supabaseClient().request(`/rest/v1/source_scan_runs?select=${select}&order=finished_at.desc&limit=300`)) as CoverageRow[];
+  const connectorIds = supportedOfficialConnectorIds().map(encodeURIComponent).join(',');
+  const rows = (await supabaseClient().request(`/rest/v1/source_scan_runs?connector_id=in.(${connectorIds})&select=${select}&order=finished_at.desc&limit=300`)) as CoverageRow[];
   return json({
     sources: presentCoverage(rows),
     portalGaps: { portalOnlyJobs: 0, note: 'Portal ingestion is not configured in this release' },

@@ -1,0 +1,56 @@
+name: Test and deploy Supabase backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-supabase.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: first-look-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: xbckwzodpwfpvvkujbgp
+      FIRST_LOOK_API_URL: https://xbckwzodpwfpvvkujbgp.supabase.co/functions/v1/first-look-api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      - run: npm test
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.111.0
+
+      - name: Link production project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Apply pending migrations
+        run: supabase db push --linked --yes
+
+      - name: Deploy scanner and read API
+        run: supabase functions deploy first-look-api --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
+
+      - name: Verify production routes
+        run: node scripts/verify-production.mjs

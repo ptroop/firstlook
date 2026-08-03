@@ -128,7 +128,9 @@ function renderJobs(jobs) {
 }
 
 function renderCoverage(payload) {
-  const sources = Array.isArray(payload?.sources) ? payload.sources : [];
+  const sources = Array.isArray(payload?.sources)
+    ? payload.sources.filter((source) => source?.latestStatus !== 'unsupported')
+    : [];
   if (!sources.length) {
     coverageMeta.textContent = 'No scan history';
     coverageList.innerHTML = '<p class="coverage-empty">Coverage will appear after the first source scan.</p>';

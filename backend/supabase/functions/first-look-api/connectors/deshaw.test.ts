@@ -52,6 +52,32 @@ test('marks the catalog partial when malformed cards break the reported count', 
   assert.match(result.diagnostic.errorSummaries[0], /reported 6.*discovered 5/i);
 });
 
+test('treats the successfully parsed single-page catalog as complete when the page omits a total', async () => {
+  const withoutTotal = catalogHtml.replace(/Viewing\s+6\s+of\s+6\s+Jobs/i, 'Open positions');
+  const connector = createDeshawConnector(async () => new Response(withoutTotal, { status: 200 }));
+  const result = await connector.enumerate({
+    runType: 'reconcile', detailBatchSize: 10, now: new Date('2026-08-03T00:00:00.000Z'),
+  });
+
+  assert.equal(result.diagnostic.status, 'complete');
+  assert.equal(result.diagnostic.reportedTotal, 6);
+  assert.deepEqual(result.diagnostic.errorSummaries, []);
+});
+
+test('still marks a no-total catalog partial when a visible card cannot be parsed', async () => {
+  const malformed = catalogHtml
+    .replace(/Viewing\s+6\s+of\s+6\s+Jobs/i, 'Open positions')
+    .replace('data-job-id="6989"', 'data-missing-job-id="6989"');
+  const connector = createDeshawConnector(async () => new Response(malformed, { status: 200 }));
+  const result = await connector.enumerate({
+    runType: 'reconcile', detailBatchSize: 10, now: new Date('2026-08-03T00:00:00.000Z'),
+  });
+
+  assert.equal(result.diagnostic.status, 'partial');
+  assert.equal(result.diagnostic.reportedTotal, 6);
+  assert.match(result.diagnostic.errorSummaries[0], /6 job cards.*discovered 5/i);
+});
+
 test('hydrates the official detail, experience wording, and Apply Now URL', async () => {
   const listing = parseDeshawCatalog(catalogHtml, catalogUrl).find((item) => item.sourceExternalId === '7074')!;
   const connector = createDeshawConnector(async () => new Response(detailHtml, { status: 200 }));
@@ -75,4 +101,33 @@ test('preserves a role-specific official recruit redirect when the detail expose
     parseDeshawJob(roleSpecific, 'https://www.deshawindia.com/careers/senior-analyst-manager-pricing-financial-operations-6759').applyUrl,
     'https://www.deshawindia.com/recruit/jobs/Adv/Link/AnlPricFinOpJul25',
   );
+});
+
+test('hydrates the exploratory application template from JobPosting JSON-LD', () => {
+  const exploratory = `
+    <a href="https://www.apply.deshawindia.com/ApplicationPage1.html?entity=DESIS">Apply Now</a>
+    <header class="JobDescription_header__current">
+      <h1>All positions in Financial Operations</h1>
+      <h2>Financial Operations<br>Hyderabad, Bengaluru or Gurugram</h2>
+    </header>
+    <script type="application/ld+json">${JSON.stringify({
+      '@type': 'JobPosting',
+      title: 'All positions in Financial Operations',
+      occupationalCategory: 'Financial Operations',
+      description: 'If you would like the group to consider your candidacy without specifying a role, we invite you to submit a general, exploratory application here.',
+      jobLocation: { '@type': 'Place', address: { '@type': 'PostalAddress' } },
+    })}</script>`;
+
+  assert.deepEqual(parseDeshawJob(
+    exploratory,
+    'https://www.deshawindia.com/careers/all-positions-in-financial-operations-2781',
+  ), {
+    employerJobId: '2781',
+    title: 'All positions in Financial Operations',
+    location: 'Hyderabad, Bengaluru or Gurugram, India',
+    description: 'If you would like the group to consider your candidacy without specifying a role, we invite you to submit a general, exploratory application here.',
+    experienceText: '',
+    jobCategory: 'Financial Operations',
+    applyUrl: 'https://www.apply.deshawindia.com/ApplicationPage1.html?entity=DESIS',
+  });
 });

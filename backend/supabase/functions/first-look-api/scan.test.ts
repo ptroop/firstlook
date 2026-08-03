@@ -170,6 +170,7 @@ function sourceStore(due = [inventoryListing]) {
     },
     dueCandidates: async () => due,
     persistObservation: async () => { calls.push('observation'); return 91; },
+    markInventoryHydrated: async () => { calls.push('hydrated'); },
     findCanonicalCandidates: async () => [],
     getCachedClassification: async () => null,
     upsertCanonicalJob: async (_jobId: string, _job: any, classification: any) => {
@@ -195,7 +196,7 @@ test('persists inventory then observation before classification and finalizes a 
   });
 
   assert.deepEqual(fakeStore.calls, [
-    'start', 'inventory:123', 'observation', 'canonical', 'link', 'classification', 'finish', 'finalize',
+    'start', 'inventory:123', 'observation', 'hydrated', 'canonical', 'link', 'classification', 'finish', 'finalize',
   ]);
   assert.equal(summary.jobsFound, 1);
   assert.equal(fakeStore.diagnostics[0].status, 'complete');

@@ -144,6 +144,12 @@ export async function runSourceAwareScan(
         try {
           const observation = await connector.hydrate(listing, request);
           const sourceId = await store.persistObservation(runId, observation, startedAt);
+          await store.markInventoryHydrated(
+            connector.connectorId,
+            listing.sourceExternalId,
+            listing.listingMetadataHash,
+            startedAt,
+          );
           detailsFetched += 1;
           if (observation.applyUrl) applyUrlsResolved += 1;
 

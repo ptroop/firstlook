@@ -57,6 +57,27 @@ test('refuses a URL merge when verified employer IDs conflict', () => {
   assert.deepEqual(result, { status: 'conflict', jobId: null, matchedBy: null });
 });
 
+test('does not merge distinct D. E. Shaw roles through its shared application bundle URL', () => {
+  const result = decideCanonicalLink({
+    ...observation,
+    connectorId: 'deshaw-official-india',
+    company: 'D. E. Shaw',
+    employerJobId: '2781',
+    detailUrl: 'https://www.deshawindia.com/careers/all-positions-in-financial-operations-2781',
+    applyUrl: 'https://www.apply.deshawindia.com/ApplicationPage1.html?entity=DESIS',
+    title: 'All positions in Financial Operations',
+  }, [{
+    ...existing,
+    id: 'deshaw_5423',
+    company: 'D. E. Shaw',
+    employerJobId: '5423',
+    officialDetailUrl: 'https://www.deshawindia.com/careers/lead-tech-qte-5423',
+    officialApplyUrl: 'https://www.apply.deshawindia.com/ApplicationPage1.html?entity=DESIS',
+  }]);
+
+  assert.deepEqual(result, { status: 'pending', jobId: null, matchedBy: null });
+});
+
 test('keeps same-title roles in conflicting locations separate', () => {
   const result = decideCanonicalLink({
     ...observation,

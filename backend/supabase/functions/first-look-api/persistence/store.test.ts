@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { createSourceAwareStore, type RestClient } from './store.ts';
 
-function fakeClient() {
+function fakeClient(existingInventory: Array<Record<string, unknown>> = []) {
   const calls: Array<{ path: string; method: string; body: unknown }> = [];
   const client: RestClient = {
     async request(path, options = {}) {
@@ -12,7 +12,7 @@ function fakeClient() {
       calls.push({ path, method, body });
       if (path === '/rest/v1/source_scan_runs' && method === 'POST') return [{ id: 41 }];
       if (path.startsWith('/rest/v1/job_sources') && method === 'POST') return [{ id: 91 }];
-      if (path.startsWith('/rest/v1/source_inventory?') && method === 'GET') return [];
+      if (path.startsWith('/rest/v1/source_inventory?') && method === 'GET') return existingInventory;
       if (path.startsWith('/rest/v1/jobs?company=eq.') && method === 'GET') return [{
         id: 'citi_123', company: 'Citi', employer_job_id: '123', title: 'Analyst',
         location: 'Mumbai, India', posted_at: null, official_detail_url: inventory.detailUrl,
@@ -45,10 +45,35 @@ test('upserts every lightweight inventory row without creating job sources', asy
     { listing: { ...inventory, sourceExternalId: '124', title: 'Software Engineer' }, decision: { status: 'defer', reasons: ['strong_non_finance_category'] } },
   ], '2026-08-03T00:00:00.000Z');
 
-  const upsert = calls.find((call) => call.path.startsWith('/rest/v1/source_inventory'));
+  const upsert = calls.find((call) => call.method === 'POST' && call.path.startsWith('/rest/v1/source_inventory'));
   assert.equal(upsert?.method, 'POST');
   assert.equal((upsert?.body as unknown[]).length, 2);
   assert.equal(calls.some((call) => call.path.startsWith('/rest/v1/job_sources')), false);
+});
+
+test('keeps unchanged hydrated inventory out of the hydration queue and resets changed listings', async () => {
+  const hydratedAt = '2026-08-02T00:00:00.000Z';
+  const { client, calls } = fakeClient([{
+    source_external_id: '123',
+    candidate_status: 'hydrated',
+    last_hydrated_at: hydratedAt,
+    hydrated_metadata_hash: 'meta-123',
+  }]);
+  const store = createSourceAwareStore(client);
+
+  await store.upsertInventory(41, [
+    { listing: inventory, decision: { status: 'hydrate', reasons: ['generic_title'] } },
+    { listing: { ...inventory, sourceExternalId: '124', listingMetadataHash: 'meta-124' }, decision: { status: 'hydrate', reasons: ['generic_title'] } },
+  ], '2026-08-03T00:00:00.000Z');
+
+  const upsert = calls.find((call) => call.method === 'POST' && call.path.startsWith('/rest/v1/source_inventory'));
+  const body = upsert?.body as Array<Record<string, unknown>>;
+  assert.equal(body[0].candidate_status, 'hydrated');
+  assert.equal(body[0].last_hydrated_at, hydratedAt);
+  assert.equal(body[0].hydrated_metadata_hash, 'meta-123');
+  assert.equal(body[1].candidate_status, 'hydrate');
+  assert.equal(body[1].last_hydrated_at, null);
+  assert.equal(body[1].hydrated_metadata_hash, null);
 });
 
 test('persists a hydrated source observation with bounded raw metadata', async () => {
@@ -91,6 +116,25 @@ test('uses the complete-reconciliation RPC only when explicitly finalized', asyn
     path: '/rest/v1/rpc/finalize_complete_reconciliation',
     method: 'POST',
     body: { p_connector_id: 'citi-official-india', p_run_id: 41 },
+  });
+});
+
+test('orders candidate hydration by never-checked newest listings first and marks completion', async () => {
+  const { client, calls } = fakeClient();
+  const store = createSourceAwareStore(client);
+  await store.dueCandidates('citi-official-india', 25);
+  await store.markInventoryHydrated('citi-official-india', '123', 'meta-123', '2026-08-03T00:00:00.000Z');
+
+  const due = calls.find((call) => call.method === 'GET' && call.path.startsWith('/rest/v1/source_inventory?'));
+  assert.match(due?.path ?? '', /order=last_hydrated_at\.asc\.nullsfirst,first_seen_at\.desc/);
+  assert.deepEqual(calls.at(-1), {
+    path: '/rest/v1/source_inventory?connector_id=eq.citi-official-india&source_external_id=eq.123',
+    method: 'PATCH',
+    body: {
+      candidate_status: 'hydrated',
+      hydrated_metadata_hash: 'meta-123',
+      last_hydrated_at: '2026-08-03T00:00:00.000Z',
+    },
   });
 });
 

@@ -2,10 +2,10 @@ import type { JobConnector } from '../types.ts';
 import type { OfficialJobConnector } from './contract.ts';
 import { createCitiConnector } from './citi.ts';
 import { createDeshawConnector } from './deshaw.ts';
+import { createGoldmanConnector } from './goldman.ts';
 import { createMoodysConnector, runMoodysConnector } from './moodys.ts';
 
 const UNSUPPORTED_COMPANIES = [
-  'Goldman Sachs',
   'JPMorgan Chase',
   'KPMG',
   'Deloitte',
@@ -42,7 +42,12 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createDeshawConnector(fetch, 'deshaw-reconcile'),
     createCitiConnector(fetch, 'citi-watch'),
     createCitiConnector(fetch, 'citi-reconcile'),
+    createGoldmanConnector(fetch, 'goldman-reconcile'),
   ];
+}
+
+export function supportedOfficialConnectorIds(): string[] {
+  return [...new Set(createOfficialConnectorRegistry().map((connector) => connector.connectorId))];
 }
 
 function unsupportedConnector(company: string): JobConnector {
