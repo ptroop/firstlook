@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import {
   discoverMoodysJobUrls,
   discoverMoodysPages,
+  createMoodysConnector,
+  parseMoodysInventoryPage,
   parseMoodysJob,
   runMoodysConnector
 } from './moodys.ts';
@@ -79,4 +81,59 @@ test('does not report success when result markup yields fewer jobs than advertis
   const result = await runMoodysConnector(async () => new Response(changedMarkup, { status: 200 }));
   assert.equal(result.diagnostic.status, 'partial');
   assert.equal(result.diagnostic.discoveredCount, 0);
+});
+
+test('turns every official search result into lightweight inventory', () => {
+  const listings = parseMoodysInventoryPage(searchHtml, baseUrl);
+  assert.deepEqual(listings.map((listing) => ({
+    id: listing.sourceExternalId,
+    title: listing.title,
+    location: listing.location,
+  })), [
+    { id: '98452084112', title: 'Senior Financial Data Analyst', location: 'Bengaluru, India' },
+    { id: '96475569408', title: 'Senior Data Engineer', location: null },
+  ]);
+});
+
+test('enumerates complete Moody’s inventory without fetching job details', async () => {
+  const requested: string[] = [];
+  const connector = createMoodysConnector(async (url) => {
+    requested.push(url);
+    if (url.endsWith('/2/1')) return new Response(searchHtml, { status: 200 });
+    if (url.endsWith('/2/2')) return new Response('<ul id="search-results-jobs"></ul>', { status: 200 });
+    return new Response('not found', { status: 404 });
+  });
+  const result = await connector.enumerate({
+    runType: 'reconcile', detailBatchSize: 10, now: new Date('2026-08-03T00:00:00.000Z'),
+  });
+
+  assert.equal(result.diagnostic.status, 'complete');
+  assert.equal(result.diagnostic.reportedTotal, 2);
+  assert.equal(result.diagnostic.pagesExpected, 2);
+  assert.equal(result.diagnostic.pagesFetched, 2);
+  assert.equal(result.listings.length, 2);
+  assert.equal(requested.some((url) => /\/en\/job\//.test(url)), false);
+});
+
+test('hydrates one selected Moody’s candidate and preserves its direct apply URL', async () => {
+  const connector = createMoodysConnector(async () => new Response(detailHtml, { status: 200 }));
+  const listing = parseMoodysInventoryPage(searchHtml, baseUrl)[0];
+  const result = await connector.hydrate(listing, {
+    runType: 'hydrate', detailBatchSize: 1, now: new Date('2026-08-03T00:00:00.000Z'),
+  });
+
+  assert.equal(result.sourceExternalId, '98452084112');
+  assert.equal(result.employerJobId, '13927');
+  assert.equal(result.applyUrl, 'https://career8.successfactors.com/sfcareer/jobreqcareer?jobId=13927&company=MoodysProd');
+  assert.match(result.experienceText, /0-2 years/);
+});
+
+test('marks Moody’s enumeration partial when advertised totals do not reconcile', async () => {
+  const changedMarkup = '<p>37 jobs found in India</p><ul id="search-results-jobs"></ul>';
+  const connector = createMoodysConnector(async () => new Response(changedMarkup, { status: 200 }));
+  const result = await connector.enumerate({
+    runType: 'reconcile', detailBatchSize: 10, now: new Date('2026-08-03T00:00:00.000Z'),
+  });
+  assert.equal(result.diagnostic.status, 'partial');
+  assert.equal(result.listings.length, 0);
 });

@@ -1,5 +1,6 @@
 import type { JobConnector } from '../types.ts';
-import { runMoodysConnector } from './moodys.ts';
+import type { OfficialJobConnector } from './contract.ts';
+import { createMoodysConnector, runMoodysConnector } from './moodys.ts';
 
 const UNSUPPORTED_COMPANIES = [
   'Goldman Sachs',
@@ -28,6 +29,13 @@ export function createConnectorRegistry(): JobConnector[] {
   return [
     { company: "Moody's", run: () => runMoodysConnector() },
     ...UNSUPPORTED_COMPANIES.map(unsupportedConnector)
+  ];
+}
+
+export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
+  return [
+    createMoodysConnector(fetch, 'moodys-watch'),
+    createMoodysConnector(fetch, 'moodys-reconcile'),
   ];
 }
 

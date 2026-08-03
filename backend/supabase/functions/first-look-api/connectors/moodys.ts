@@ -4,14 +4,97 @@ import type {
   ConnectorResult,
   ExclusionReason,
   JobFetch,
+  InventoryListing,
   NormalizedJob
 } from '../types.ts';
+import type { OfficialJobConnector } from './contract.ts';
 
 const COMPANY = "Moody's";
 const INDIA_SEARCH_URL = 'https://careers.moodys.com/en/location/india-jobs/49841/1269750/2/1';
 const REQUEST_TIMEOUT_MS = 12_000;
 const DETAIL_CONCURRENCY = 4;
 const MAX_SEARCH_PAGES = 20;
+
+export function createMoodysConnector(
+  fetcher: JobFetch = fetch,
+  scanGroup = 'moodys-reconcile',
+): OfficialJobConnector {
+  return {
+    connectorId: 'moodys-official-india',
+    connectorVersion: 'moodys-v2',
+    company: COMPANY,
+    scanGroup,
+    async enumerate() {
+      const pageHtml: string[] = [];
+      const knownPages = new Set<string>([INDIA_SEARCH_URL]);
+      const pendingPages = [INDIA_SEARCH_URL];
+      const errorSummaries: string[] = [];
+      let reportedTotal: number | null = null;
+
+      while (pendingPages.length > 0 && pageHtml.length < MAX_SEARCH_PAGES) {
+        const pageUrl = pendingPages.shift() as string;
+        try {
+          const html = await fetchText(fetcher, pageUrl);
+          pageHtml.push(html);
+          if (reportedTotal === null) reportedTotal = advertisedResultCount(html);
+          for (const discovered of discoverMoodysPages(html, pageUrl)) {
+            if (!knownPages.has(discovered)) {
+              knownPages.add(discovered);
+              pendingPages.push(discovered);
+            }
+          }
+        } catch (error) {
+          errorSummaries.push(`${pageUrl}: ${error instanceof Error ? error.message : 'request failed'}`.slice(0, 500));
+        }
+      }
+
+      if (pendingPages.length > 0) errorSummaries.push(`Pagination exceeded ${MAX_SEARCH_PAGES} pages`);
+      const listings = uniqueBy(
+        pageHtml.flatMap((html) => parseMoodysInventoryPage(html, INDIA_SEARCH_URL)),
+        (listing) => listing.sourceExternalId,
+      );
+      if (reportedTotal !== null && listings.length !== reportedTotal) {
+        errorSummaries.push(`Reported ${reportedTotal} listings but discovered ${listings.length}`);
+      }
+      const complete = errorSummaries.length === 0 && pageHtml.length === knownPages.size;
+      return {
+        listings,
+        diagnostic: {
+          status: complete ? 'complete' : 'partial',
+          reportedTotal,
+          pagesExpected: knownPages.size,
+          pagesFetched: pageHtml.length,
+          errorSummaries,
+        },
+      };
+    },
+    async hydrate(listing) {
+      const html = await fetchText(fetcher, listing.detailUrl);
+      const parsed = parseMoodysJob(html, listing.detailUrl);
+      return {
+        connectorId: 'moodys-official-india',
+        sourceType: 'official_career',
+        sourceName: "Moody's Careers",
+        sourceExternalId: listing.sourceExternalId,
+        company: COMPANY,
+        employerJobId: parsed.employerJobId,
+        listingUrl: listing.detailUrl,
+        detailUrl: listing.detailUrl,
+        applyUrl: parsed.applyUrl,
+        isOfficial: true,
+        title: parsed.title,
+        location: parsed.location,
+        description: parsed.description,
+        experienceText: parsed.experienceText,
+        jobCategory: parsed.jobCategory,
+        postedAt: parsed.postedAt,
+        listingMetadataHash: listing.listingMetadataHash,
+        contentHash: hashText(`${parsed.title}\u0000${parsed.location}\u0000${parsed.description}`),
+        rawMetadata: { employerJobId: parsed.employerJobId },
+      };
+    },
+  };
+}
 
 export function discoverMoodysPages(html: string, baseUrl: string): string[] {
   const urls = [baseUrl];
@@ -31,6 +114,39 @@ export function discoverMoodysJobUrls(html: string, baseUrl: string): string[] {
     }
   }
   return unique(urls);
+}
+
+export function parseMoodysInventoryPage(html: string, baseUrl: string): InventoryListing[] {
+  const listings: InventoryListing[] = [];
+  const pattern = /<a\b[^>]*class=["'][^"']*search-results-list__job-link[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi;
+  for (const match of html.matchAll(pattern)) {
+    const anchor = match[0];
+    const href = attribute(anchor, 'href');
+    if (!href || !/\/en\/job\//i.test(href)) continue;
+    const detailUrl = new URL(href, baseUrl).href;
+    const sourceExternalId = attribute(anchor, 'data-job-id') || detailUrl.match(/\/(\d+)\/?$/)?.[1] || '';
+    const title = htmlToText(match[1]);
+    if (!sourceExternalId || !title) continue;
+    const start = match.index ?? 0;
+    const nextAnchor = html.indexOf('search-results-list__job-link', start + anchor.length);
+    const card = html.slice(start, nextAnchor >= 0 ? nextAnchor : Math.min(html.length, start + 1_500));
+    const location = classText(card, 'search-results-list__job-info-list') || null;
+    const category = attribute(anchor, 'data-category') || null;
+    const department = attribute(anchor, 'data-department') || null;
+    listings.push({
+      connectorId: 'moodys-official-india',
+      sourceExternalId,
+      company: COMPANY,
+      title,
+      location,
+      category,
+      department,
+      detailUrl,
+      listingMetadataHash: hashText([title, location, category, department, detailUrl].join('\u0000')),
+      rawMetadata: { searchUrl: baseUrl },
+    });
+  }
+  return uniqueBy(listings, (listing) => listing.sourceExternalId);
 }
 
 export function parseMoodysJob(html: string, detailUrl: string): NormalizedJob {
@@ -215,6 +331,25 @@ function advertisedResultCount(html: string): number | null {
 
 function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
+}
+
+function uniqueBy<T>(values: T[], identity: (value: T) => string): T[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = identity(value);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function hashText(value: string): string {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
 function increment(target: ConnectorDiagnostic['excluded'], reason: ExclusionReason | 'malformed') {
