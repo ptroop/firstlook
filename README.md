@@ -29,8 +29,8 @@ The service worker and notification APIs require HTTP(S); opening `index.html` d
 
 Upload the contents of this folder to a repository and enable GitHub Pages from the branch/folder containing `index.html`. Set `window.JOB_MONITOR_API` in `index.html` to the deployed Supabase Edge Function URL when the backend is ready.
 
-## Backend scaffold
+## Backend
 
-The `backend/` folder contains the separate Supabase Edge Function and Postgres migration. It is not deployed yet. Follow `backend/README.md` to create the database, set the GitHub Pages origin, and deploy the 30-minute scanner.
+The `backend/` folder contains the Supabase Edge Function, migrations, connector tests, and 30-minute scanner. Moody's is currently the first live verified connector; the remaining employers are reported as unsupported until their official search adapters are added.
 
 The frontend must not contain the Gemini key, VAPID private key, or any other secret. Those belong in Supabase Edge Function secrets.

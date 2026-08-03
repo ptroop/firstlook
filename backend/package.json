@@ -1,7 +1,12 @@
 {
   "name": "first-look-supabase-backend",
   "private": true,
+  "scripts": {
+    "test": "tsx --test supabase/functions/first-look-api/filters.test.ts supabase/functions/first-look-api/candidates.test.ts supabase/functions/first-look-api/config.test.ts supabase/functions/first-look-api/classification/deterministic.test.ts supabase/functions/first-look-api/classification/openrouter.test.ts supabase/functions/first-look-api/persistence/store.test.ts supabase/functions/first-look-api/canonicalize.test.ts supabase/functions/first-look-api/connectors/registry.test.ts supabase/functions/first-look-api/connectors/moodys.test.ts supabase/functions/first-look-api/connectors/deshaw.test.ts supabase/functions/first-look-api/connectors/citi.test.ts supabase/functions/first-look-api/scan.test.ts supabase/functions/first-look-api/presenters.test.ts supabase/functions/first-look-api/http.test.ts",
+    "test:candidates": "tsx --test supabase/functions/first-look-api/candidates.test.ts"
+  },
   "devDependencies": {
-    "supabase": "latest"
+    "supabase": "latest",
+    "tsx": "^4.23.4"
   }
 }

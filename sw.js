@@ -1,11 +1,42 @@
-const CACHE = 'first-look-v2';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'first-look-v3';
+const ASSETS = ['./', './index.html', './styles.css?v=3', './app.js?v=3', './manifest.webmanifest', './icon.svg'];
 
-self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS))));
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
-self.addEventListener('fetch', (event) => event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request))));
-self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : { title: 'New finance role', body: 'A matching role is ready to review.' };
-  event.waitUntil(self.registration.showNotification(data.title, { body: data.body, icon: './icon.svg', data: { url: data.url || './#matches' } }));
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
-self.addEventListener('notificationclick', (event) => { event.notification.close(); event.waitUntil(clients.openWindow(event.notification.data.url)); });
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
+});
+
+self.addEventListener('push', (event) => {
+  const data = event.data ? event.data.json() : {};
+  const jobId = data.jobId || 'first-look-role';
+  const applyUrl = data.applyUrl || data.url || './#matches';
+  event.waitUntil(self.registration.showNotification(data.title || 'New finance role', {
+    body: data.body || 'A matching role is ready to review.',
+    icon: './icon.svg',
+    tag: jobId,
+    renotify: false,
+    data: {
+      url: applyUrl,
+      jobId,
+      discoverySource: data.discoverySource || 'unknown',
+      matchTier: data.matchTier || 'possible',
+    },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(clients.openWindow(event.notification.data.url));
+});

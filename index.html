@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f7f6f3" />
-    <meta name="description" content="A focused list of finance employers for early-career MBA candidates." />
+    <meta name="theme-color" content="#f4f2ed" />
+    <meta name="description" content="Finance roles in India for MBA graduates with 0-2 years of experience." />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-    <title>First Look — finance roles</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <title>First Look - finance roles</title>
+    <link rel="stylesheet" href="./styles.css?v=3" />
   </head>
   <body>
     <div class="app-shell">
@@ -18,100 +18,70 @@
           <button class="nav-link is-active" data-view="overview">Overview</button>
           <button class="nav-link" data-view="matches">Open roles</button>
           <button class="nav-link" data-view="companies">Employers</button>
-          <button class="nav-link" data-view="cv">CV review</button>
         </nav>
-        <div class="topbar-actions">
-          <button class="button button-dark" id="alerts-button">Turn on alerts</button>
-        </div>
+        <button class="button button-dark" id="alerts-button">Turn on alerts</button>
       </header>
 
       <main>
         <section class="hero" id="overview" data-section="overview">
           <div class="hero-copy">
-            <p class="eyebrow">India · finance · 0–2 years</p>
-            <h1>Finance roles, found early.</h1>
-            <p class="hero-description">A small, focused list of finance employers with direct links to their career pages.</p>
-            <div class="hero-actions">
-              <button class="button button-dark" data-view="matches">See open roles</button>
-              <button class="text-button" data-view="companies">View employers</button>
-            </div>
+            <p class="eyebrow">India / finance / 0-2 years</p>
+            <h1>Finance roles,<br />found early.</h1>
+            <p class="hero-description">Official career pages, checked often. One role, one direct application link.</p>
+            <button class="button button-dark" data-view="matches">See open roles</button>
           </div>
-          <div class="hero-note">
-            <span class="note-label">Your search</span>
-            <p>For MBA and PGDM graduates looking across banking, advisory, markets, and corporate finance.</p>
-            <div class="mini-rule"></div>
-            <dl class="brief-list">
-              <div><dt>Employers</dt><dd>21</dd></div>
-              <div><dt>Experience</dt><dd>0–2 years</dd></div>
-              <div><dt>Apply through</dt><dd>Employer site</dd></div>
-            </dl>
-          </div>
+          <dl class="search-brief" aria-label="Search criteria">
+            <div><dt>Candidate</dt><dd>MBA or PGDM graduate</dd></div>
+            <div><dt>Experience</dt><dd>0-2 years</dd></div>
+            <div><dt>Location</dt><dd>India</dd></div>
+            <div><dt>Primary source</dt><dd>Employer career page</dd></div>
+          </dl>
         </section>
 
         <section class="content-section" id="matches" data-section="matches">
           <div class="section-heading">
-            <div>
-              <p class="eyebrow">Open roles</p>
-              <h2>New opportunities</h2>
-            </div>
-            <span class="section-meta">No roles loaded</span>
+            <h2>Open roles</h2>
+            <span class="section-meta" id="matches-meta">Loading</span>
           </div>
-          <div class="empty-state" id="matches-empty">
-            <div>
-              <h3>No roles here yet.</h3>
-              <p>When a matching role is found, it will appear here with the employer's original application link.</p>
+
+          <div class="coverage-panel" aria-labelledby="coverage-title">
+            <div class="coverage-heading">
+              <h3 id="coverage-title">Source health</h3>
+              <span id="coverage-meta">Checking career pages</span>
             </div>
-            <button class="text-button" data-view="companies">Browse employers</button>
+            <div class="coverage-list" id="coverage-list" aria-live="polite">
+              <div class="coverage-loading" aria-hidden="true"></div>
+              <div class="coverage-loading" aria-hidden="true"></div>
+              <div class="coverage-loading" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <div class="empty-state" id="matches-empty" aria-live="polite">
+            <div>
+              <h3>Checking for roles</h3>
+              <p>New matches will appear here with the source and direct application link.</p>
+            </div>
           </div>
           <div class="job-list" id="job-list" hidden></div>
         </section>
 
-        <section class="content-section companies-section" id="companies" data-section="companies">
+        <section class="content-section" id="companies" data-section="companies">
           <div class="section-heading">
-            <div>
-              <p class="eyebrow">Employers</p>
-              <h2>Go straight to the source.</h2>
-            </div>
+            <h2>Employers</h2>
             <span class="section-meta">21 career pages</span>
           </div>
+          <p class="section-intro">Open any employer page directly. Automated coverage is shown above only when its connector is verified.</p>
           <div class="company-grid" id="company-grid"></div>
-        </section>
-
-        <section class="content-section cv-section" id="cv" data-section="cv">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">CV review</p>
-              <h2>Make the application specific.</h2>
-            </div>
-            <span class="section-meta">Evidence first</span>
-          </div>
-          <div class="cv-layout">
-            <div class="cv-intro">
-              <p>Compare a role with the original CV, see what is supported, and get precise suggestions without inventing experience.</p>
-              <button class="button button-outline" id="cv-demo-button">See an example</button>
-            </div>
-            <div class="rubric-list" aria-label="CV review criteria">
-              <div><span>01</span><strong>Evidence</strong><small>What the CV already supports</small></div>
-              <div><span>02</span><strong>Gaps</strong><small>What the role asks for next</small></div>
-              <div><span>03</span><strong>Level</strong><small>Fit for 0–2 years</small></div>
-              <div><span>04</span><strong>Edits</strong><small>Clear, truthful improvements</small></div>
-            </div>
-          </div>
-          <div class="cv-report" id="cv-report" hidden>
-            <div class="report-score"><span>Example</span><strong>CV</strong><small>review</small></div>
-            <div class="report-copy"><h3>Evidence before adjectives.</h3><p>Each requirement is mapped to a real CV line. Missing evidence stays visible, and suggestions stay truthful.</p></div>
-            <button class="text-button" id="close-report">Close</button>
-          </div>
         </section>
       </main>
 
       <footer class="footer">
-        <span>first look · private workspace</span>
-        <span>Apply on the employer site.</span>
+        <span>Private job monitor</span>
+        <span>Applications open on the original source.</span>
       </footer>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script>window.JOB_MONITOR_API = 'https://xbckwzodpwfpvvkujbgp.supabase.co/functions/v1/first-look-api'; window.JOB_MONITOR_VAPID_PUBLIC_KEY = '';</script>
-    <script src="./app.js"></script>
+    <script src="./app.js?v=3"></script>
   </body>
 </html>
