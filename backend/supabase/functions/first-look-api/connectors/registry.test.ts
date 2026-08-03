@@ -18,3 +18,9 @@ test('registers separate Moody’s watch and reconciliation groups on one connec
   const moodys = connectors.filter((connector) => connector.connectorId === 'moodys-official-india');
   assert.deepEqual(moodys.map((connector) => connector.scanGroup), ['moodys-watch', 'moodys-reconcile']);
 });
+
+test('registers separate D. E. Shaw watch and reconciliation groups', () => {
+  const connectors = createOfficialConnectorRegistry();
+  const deshaw = connectors.filter((connector) => connector.connectorId === 'deshaw-official-india');
+  assert.deepEqual(deshaw.map((connector) => connector.scanGroup), ['deshaw-watch', 'deshaw-reconcile']);
+});

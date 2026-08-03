@@ -1,5 +1,6 @@
 import type { JobConnector } from '../types.ts';
 import type { OfficialJobConnector } from './contract.ts';
+import { createDeshawConnector } from './deshaw.ts';
 import { createMoodysConnector, runMoodysConnector } from './moodys.ts';
 
 const UNSUPPORTED_COMPANIES = [
@@ -36,6 +37,8 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
   return [
     createMoodysConnector(fetch, 'moodys-watch'),
     createMoodysConnector(fetch, 'moodys-reconcile'),
+    createDeshawConnector(fetch, 'deshaw-watch'),
+    createDeshawConnector(fetch, 'deshaw-reconcile'),
   ];
 }
 
