@@ -4,6 +4,8 @@ import type { OfficialJobConnector } from './connectors/contract.ts';
 import type { SourceAwareStore } from './persistence/store.ts';
 import { selectCandidate, selectDeferredAudit } from './candidates.ts';
 import { classifyDeterministically } from './classification/deterministic.ts';
+import { classifyWithOpenRouter, type OpenRouterCache } from './classification/openrouter.ts';
+import type { OpenRouterConfig } from './config.ts';
 import { decideCanonicalLink, makeCanonicalJobId, mergeCanonicalJob } from './canonicalize.ts';
 
 export interface ScanSummary {
@@ -93,7 +95,11 @@ export interface SourceAwareScanSummary {
 export async function runSourceAwareScan(
   connectors: OfficialJobConnector[],
   store: SourceAwareStore,
-  request: ConnectorRunRequest & { deferredAuditLimit?: number },
+  request: ConnectorRunRequest & {
+    deferredAuditLimit?: number;
+    openRouter?: OpenRouterConfig | null;
+    classifierFetch?: typeof fetch;
+  },
 ): Promise<SourceAwareScanSummary> {
   const diagnostics: SourceConnectorDiagnostic[] = [];
   let jobsFound = 0;
@@ -165,23 +171,47 @@ export async function runSourceAwareScan(
               officialApplyUrl: observation.isOfficial ? observation.applyUrl : null,
               descriptionHash: observation.contentHash,
             };
-          const classification = classifyDeterministically({
+          const deterministic = classifyDeterministically({
             title: merged.title,
             location: merged.location,
             description: merged.description,
             jobCategory: merged.jobCategory,
             experienceText: observation.experienceText,
           });
+          const modelClassification = deterministic.matchTier === 'possible'
+            ? await classifyWithOpenRouter({
+              jobId,
+              descriptionHash: observation.contentHash,
+              title: merged.title,
+              location: merged.location,
+              description: merged.description,
+              jobCategory: merged.jobCategory,
+              experienceText: observation.experienceText,
+              deterministic,
+            }, {
+              config: request.openRouter ?? null,
+              fetcher: request.classifierFetch,
+              cache: classificationCache(store),
+            })
+            : null;
+          const classification = modelClassification?.finalResult ?? deterministic;
+          const classificationVersion = modelClassification && request.openRouter
+            ? request.openRouter.promptVersion
+            : 'deterministic-v1';
           await store.upsertCanonicalJob(jobId, merged, classification, startedAt);
           await store.linkObservation(sourceId, jobId, 'linked');
           await store.saveClassification(jobId, {
             description_hash: observation.contentHash,
-            classification_version: 'deterministic-v1',
-            deterministic_result: classification,
-            deterministic_evidence: classification.evidence,
+            classification_version: classificationVersion,
+            deterministic_result: deterministic,
+            deterministic_evidence: deterministic.evidence,
+            model_result: modelClassification?.modelResult ?? null,
+            model_evidence: modelClassification?.modelResult?.evidence ?? null,
+            requested_model_id: modelClassification?.requestedModelId ?? null,
+            actual_model_id: modelClassification?.actualModelId ?? null,
             final_result: classification,
-            confidence: classification.matchTier === 'exact' ? 1 : 0.6,
-            validation_errors: [],
+            confidence: modelClassification?.confidence ?? (classification.matchTier === 'exact' ? 1 : 0.6),
+            validation_errors: modelClassification?.validationErrors ?? [],
             classified_at: startedAt,
           });
           if (!existing) {
@@ -241,6 +271,16 @@ export async function runSourceAwareScan(
     errorCount: diagnostics.filter((item) => ['partial', 'failed', 'anomalous'].includes(item.status)).length,
     unsupportedCount: diagnostics.filter((item) => item.status === 'unsupported').length,
     diagnostics,
+  };
+}
+
+function classificationCache(store: SourceAwareStore): OpenRouterCache | undefined {
+  if (!store.getCachedClassification) return undefined;
+  return {
+    get: (jobId, descriptionHash, version) => store.getCachedClassification!(jobId, descriptionHash, version),
+    set: async () => {
+      // The complete deterministic/model record is persisted once below.
+    },
   };
 }
 

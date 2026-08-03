@@ -27,3 +27,14 @@ test('rejects the random OpenRouter production router', () => {
     OPENROUTER_MODEL: 'openrouter/free',
   }), /concrete model/i);
 });
+
+test('keeps at most two concrete OpenRouter fallbacks and a fixed prompt version', () => {
+  const config = loadRuntimeConfig({
+    OPENROUTER_API_KEY: 'test-only-key',
+    OPENROUTER_MODEL: 'google/gemini-2.5-flash-lite',
+    OPENROUTER_FALLBACK_MODELS: 'openai/gpt-4.1-mini, anthropic/claude-3.5-haiku, meta/llama-4',
+    OPENROUTER_PROMPT_VERSION: 'finance-entry-v2',
+  });
+  assert.deepEqual(config.openRouter?.fallbackModels, ['openai/gpt-4.1-mini', 'anthropic/claude-3.5-haiku']);
+  assert.equal(config.openRouter?.promptVersion, 'finance-entry-v2');
+});

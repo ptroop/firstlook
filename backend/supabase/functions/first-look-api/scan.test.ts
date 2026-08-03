@@ -140,12 +140,30 @@ function sourceConnector(options: { status?: 'complete' | 'partial'; listings?: 
   };
 }
 
+function ambiguousSourceConnector() {
+  const connector = sourceConnector();
+  connector.hydrate = async (listing) => ({
+    ...observation,
+    sourceExternalId: listing.sourceExternalId,
+    employerJobId: listing.sourceExternalId,
+    experienceText: '0 to 2 yrs',
+    description: 'Credit risk and financial model analysis. Candidates should have 0 to 2 yrs of relevant experience.',
+    detailUrl: listing.detailUrl,
+    listingUrl: listing.detailUrl,
+  });
+  return connector;
+}
+
 function sourceStore(due = [inventoryListing]) {
   const calls: string[] = [];
   const diagnostics: any[] = [];
+  const canonicalClassifications: any[] = [];
+  const classificationRecords: any[] = [];
   return {
     calls,
     diagnostics,
+    canonicalClassifications,
+    classificationRecords,
     startRun: async () => { calls.push('start'); return 41; },
     upsertInventory: async (_runId: number, rows: any[]) => {
       calls.push(`inventory:${rows.map((row) => row.listing.sourceExternalId).join(',')}`);
@@ -153,9 +171,16 @@ function sourceStore(due = [inventoryListing]) {
     dueCandidates: async () => due,
     persistObservation: async () => { calls.push('observation'); return 91; },
     findCanonicalCandidates: async () => [],
-    upsertCanonicalJob: async () => { calls.push('canonical'); },
+    getCachedClassification: async () => null,
+    upsertCanonicalJob: async (_jobId: string, _job: any, classification: any) => {
+      canonicalClassifications.push(classification);
+      calls.push('canonical');
+    },
     linkObservation: async () => { calls.push('link'); },
-    saveClassification: async () => { calls.push('classification'); },
+    saveClassification: async (_jobId: string, record: any) => {
+      classificationRecords.push(record);
+      calls.push('classification');
+    },
     finishRun: async (_runId: number, diagnostic: any) => { diagnostics.push(diagnostic); calls.push('finish'); },
     finalizeCompleteReconciliation: async () => { calls.push('finalize'); },
   };
@@ -175,6 +200,75 @@ test('persists inventory then observation before classification and finalizes a 
   assert.equal(summary.jobsFound, 1);
   assert.equal(fakeStore.diagnostics[0].status, 'complete');
   assert.equal(fakeStore.diagnostics[0].hydrationStatus, 'complete');
+});
+
+test('uses OpenRouter only for an ambiguous job and persists the actual response model', async () => {
+  const fakeStore = sourceStore();
+  let requests = 0;
+  await runSourceAwareScan([ambiguousSourceConnector()], fakeStore, {
+    runType: 'reconcile',
+    detailBatchSize: 10,
+    now: new Date('2026-08-03T00:00:00.000Z'),
+    openRouter: {
+      apiKey: 'test-only-key',
+      model: 'google/gemini-2.5-flash-lite',
+      fallbackModels: [],
+      promptVersion: 'job-classification-v1',
+    },
+    classifierFetch: async () => {
+      requests += 1;
+      return new Response(JSON.stringify({
+        model: 'google/gemini-2.5-flash-lite-001',
+        choices: [{ message: { content: JSON.stringify({
+          locationStatus: 'india', financeStatus: 'exact', experienceStatus: 'zero_to_two',
+          minimumYears: 0, maximumYears: 2, confidence: 0.93,
+          evidence: {
+            location: ['Mumbai, India'], finance: ['Credit risk'], experience: ['0 to 2 yrs'],
+          },
+        }) } }],
+      }), { status: 200 });
+    },
+  });
+
+  assert.equal(requests, 1);
+  assert.equal(fakeStore.canonicalClassifications[0].matchTier, 'exact');
+  assert.equal(fakeStore.canonicalClassifications[0].classificationMethod, 'mixed');
+  assert.equal(fakeStore.classificationRecords[0].requested_model_id, 'google/gemini-2.5-flash-lite');
+  assert.equal(fakeStore.classificationRecords[0].actual_model_id, 'google/gemini-2.5-flash-lite-001');
+});
+
+test('keeps ambiguous jobs possible and pending when OpenRouter is not configured', async () => {
+  const fakeStore = sourceStore();
+  await runSourceAwareScan([ambiguousSourceConnector()], fakeStore, {
+    runType: 'reconcile', detailBatchSize: 10, now: new Date('2026-08-03T00:00:00.000Z'),
+  });
+  assert.equal(fakeStore.canonicalClassifications[0].matchTier, 'possible');
+  assert.equal(fakeStore.canonicalClassifications[0].classificationMethod, 'pending');
+  assert.match(fakeStore.classificationRecords[0].validation_errors.join(' '), /not configured/i);
+});
+
+test('does not call OpenRouter when deterministic classification is already exact', async () => {
+  const fakeStore = sourceStore();
+  const exactConnector = sourceConnector();
+  exactConnector.hydrate = async (listing) => ({
+    ...observation,
+    sourceExternalId: listing.sourceExternalId,
+    employerJobId: listing.sourceExternalId,
+    title: 'Credit Risk Analyst',
+    description: 'Credit risk and financial model analysis with 0-2 years of experience.',
+    detailUrl: listing.detailUrl,
+    listingUrl: listing.detailUrl,
+  });
+  let requests = 0;
+  await runSourceAwareScan([exactConnector], fakeStore, {
+    runType: 'reconcile', detailBatchSize: 10, now: new Date('2026-08-03T00:00:00.000Z'),
+    openRouter: {
+      apiKey: 'test-only-key', model: 'google/gemini-2.5-flash-lite', fallbackModels: [], promptVersion: 'job-classification-v1',
+    },
+    classifierFetch: async () => { requests += 1; throw new Error('must not be called'); },
+  });
+  assert.equal(requests, 0);
+  assert.equal(fakeStore.canonicalClassifications[0].classificationMethod, 'deterministic');
 });
 
 test('reports an explicit detail backlog and honors the hydration batch budget', async () => {

@@ -118,3 +118,35 @@ test('finds canonical candidates, upserts the job, and links the source explicit
     body: { job_id: 'citi_123', canonicalization_status: 'linked' },
   });
 });
+
+test('reads an OpenRouter classification cache entry by job, hash, and prompt version', async () => {
+  const requested: string[] = [];
+  const store = createSourceAwareStore({
+    async request(path) {
+      requested.push(path);
+      return [{
+        final_result: {
+          locationStatus: 'india', financeStatus: 'exact', experienceStatus: 'zero_to_two',
+          minimumYears: 0, maximumYears: 2, matchTier: 'exact', classificationMethod: 'mixed',
+          evidence: { location: ['India'], finance: ['credit risk'], experience: ['0-2 years'] },
+        },
+        model_result: {
+          locationStatus: 'india', financeStatus: 'exact', experienceStatus: 'zero_to_two',
+          minimumYears: 0, maximumYears: 2, confidence: 0.92,
+          evidence: { location: ['India'], finance: ['credit risk'], experience: ['0-2 years'] },
+        },
+        requested_model_id: 'google/gemini-2.5-flash-lite',
+        actual_model_id: 'google/gemini-2.5-flash-lite-001',
+        confidence: 0.92,
+        validation_errors: [],
+      }];
+    },
+  });
+  const cached = await store.getCachedClassification?.('citi_123', 'hash/123', 'finance v2');
+
+  assert.match(requested[0], /job_id=eq\.citi_123/);
+  assert.match(requested[0], /description_hash=eq\.hash%2F123/);
+  assert.match(requested[0], /classification_version=eq\.finance%20v2/);
+  assert.equal(cached?.actualModelId, 'google/gemini-2.5-flash-lite-001');
+  assert.equal(cached?.finalResult.classificationMethod, 'mixed');
+});

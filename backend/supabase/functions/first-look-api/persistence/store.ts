@@ -8,6 +8,7 @@ import type {
   SourceConnectorDiagnostic,
 } from '../types.ts';
 import type { DeterministicClassification } from '../classification/deterministic.ts';
+import type { OpenRouterClassification } from '../classification/openrouter.ts';
 import type { CanonicalCandidate } from '../canonicalize.ts';
 import { readJsonBody } from '../http.ts';
 import type { ScanStore } from '../scan.ts';
@@ -102,6 +103,7 @@ export interface SourceAwareStore {
   dueCandidates(connectorId: string, limit: number): Promise<InventoryListing[]>;
   persistObservation(runId: number, observation: HydratedSourceObservation, seenAt: string): Promise<number>;
   findCanonicalCandidates(company: string): Promise<CanonicalCandidate[]>;
+  getCachedClassification?(jobId: string, descriptionHash: string, version: string): Promise<OpenRouterClassification | null>;
   upsertCanonicalJob(jobId: string, job: CanonicalJobInput, classification: DeterministicClassification, seenAt: string): Promise<void>;
   linkObservation(sourceId: number, jobId: string | null, status: 'linked' | 'pending' | 'conflict'): Promise<void>;
   saveClassification(jobId: string, record: Record<string, unknown>): Promise<void>;
@@ -219,6 +221,24 @@ export function createSourceAwareStore(client: RestClient): SourceAwareStore {
         description: String(row.description ?? ''),
         jobCategory: String(row.job_category ?? ''),
       }));
+    },
+
+    async getCachedClassification(jobId, descriptionHash, version) {
+      const path = `/rest/v1/job_classifications?job_id=eq.${encodeURIComponent(jobId)}&description_hash=eq.${encodeURIComponent(descriptionHash)}&classification_version=eq.${encodeURIComponent(version)}&select=final_result,model_result,requested_model_id,actual_model_id,confidence,validation_errors&limit=1`;
+      const rows = await client.request(path);
+      const row = rows?.[0];
+      if (!isRecord(row) || !isRecord(row.final_result)) return null;
+      return {
+        finalResult: row.final_result as unknown as DeterministicClassification,
+        modelResult: isRecord(row.model_result) ? row.model_result as OpenRouterClassification['modelResult'] : null,
+        requestedModelId: typeof row.requested_model_id === 'string' ? row.requested_model_id : null,
+        actualModelId: typeof row.actual_model_id === 'string' ? row.actual_model_id : null,
+        confidence: typeof row.confidence === 'number' ? row.confidence : Number(row.confidence ?? 0.6),
+        validationErrors: Array.isArray(row.validation_errors)
+          ? row.validation_errors.filter((item): item is string => typeof item === 'string').slice(0, 10)
+          : [],
+        cacheHit: false,
+      };
     },
 
     async upsertCanonicalJob(jobId, job, classification, seenAt) {
