@@ -46,5 +46,6 @@ test('reports coverage only for implemented official connectors', () => {
     'goldman-sachs-official-india',
     'blackrock-official-india',
     'barclays-official-india',
+    'razorpay-official-india',
   ]);
 });

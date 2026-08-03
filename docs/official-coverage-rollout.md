@@ -28,6 +28,7 @@ The first scan of a new connector may create a detail backlog. Later 30-minute r
 | Live | Citi | `jobs.citi.com/location/india-jobs` | Bounded watch plus full pagination audit and Workday apply URL |
 | Live | BlackRock | `careers.blackrock.com/location/india-jobs` | Paginated official inventory, India filtering, and direct Workday apply resolution |
 | Live | Barclays | `search.jobs.barclays/location/india-jobs` | Paginated official inventory, total/page reconciliation, and direct Workday apply resolution |
+| Live | Razorpay | `job-boards.greenhouse.io/razorpaysoftwareprivatelimited` | Public Greenhouse inventory, stable requisition IDs, and role-level official Apply page |
 | 1 | KPMG India | `ejgk.fa.em2.oraclecloud.com/.../CX_1/jobs` | Reusable Oracle Recruiting Cloud adapter |
 | 1 | American Express | `careers.americanexpress.com/.../CX_1/jobs` | Same Oracle adapter with employer-specific facets |
 | 1 | Deloitte India | `southasiacareers.deloitte.com` | Paginated catalog with advertised-total proof |
@@ -44,6 +45,16 @@ The first scan of a new connector may create a detail backlog. Later 30-minute r
 | 3 | Morgan Stanley | `morganstanley.com/careers/career-opportunities-search` | Guided-search endpoint plus student/graduate stream |
 | 3 | Piramal Finance | `piramalfinance.com/careers` | Discover the ATS feed and monitor the official page until verified |
 | 3 | Fidelity Investments India | `jobs.fidelity.com/in` | India inventory; keep Fidelity International separate |
+| Pending | Amazon | `amazon.jobs/en/search` | Public India search with finance/category filters and role-level job pages |
+| Pending | Microsoft | `jobs.careers.microsoft.com` | Verify the current public search API and India location facets |
+| Pending | Shell | `shell.com/careers/search-and-apply` | Discover the public search service and direct vacancy pages |
+| Pending | Siemens | `jobs.siemens.com` | Verify the public Siemens search endpoint and requisition pages |
+| Pending | GE HealthCare | `jobs.gehealthcare.com` | Verify the current public job board and India facet |
+| Pending | Diageo | `diageo.com/en/careers` | Follow the official job search and verify the role API |
+| Pending | Pine Labs | `pinelabs.com/careers` | Discover the public job feed and direct application destination |
+| Pending | S&P Global | `careers.spglobal.com/jobs` | Verify the public Jibe search endpoint and India roles |
+| Pending | Morningstar | `morningstar.com/company/careers` | Verify the public global/India job search surface |
+| Pending | ICRA | `icra.in/careers` | Confirm whether live vacancies are exposed on an official public endpoint |
 
 Wave order balances reusable adapters, completeness, and employer value. Within Wave 1, build the shared KPMG/American Express adapter first, then Goldman Sachs and JPMorgan, followed by the remaining paginated portals.
 

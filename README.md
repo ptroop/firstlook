@@ -4,7 +4,7 @@ A no-dependency static PWA prototype for a personal India finance-jobs command c
 
 ## Included in this prototype
 
-- The 21-company target list supplied for the project
+- The 32-company target list supplied for the project
 - India / finance / 0–2 years positioning
 - Direct links to official employer career pages
 - Installable PWA manifest and service worker
@@ -31,6 +31,6 @@ Upload the contents of this folder to a repository and enable GitHub Pages from 
 
 ## Backend
 
-The `backend/` folder contains the Supabase Edge Function, migrations, connector tests, and 30-minute scanner. The live verified official connectors currently cover Moody's, D. E. Shaw, Citi, Goldman Sachs, BlackRock, and Barclays. Additional employers remain in the source roadmap until their actual official search surfaces pass the same inventory, detail, and Apply URL checks.
+The `backend/` folder contains the Supabase Edge Function, migrations, connector tests, and 30-minute scanner. The live verified official connectors currently cover Moody's, D. E. Shaw, Citi, Goldman Sachs, BlackRock, Barclays, and Razorpay. Additional employers remain in the source roadmap until their actual official search surfaces pass the same inventory, detail, and Apply URL checks.
 
 The frontend must not contain the Gemini key, VAPID private key, or any other secret. Those belong in Supabase Edge Function secrets.

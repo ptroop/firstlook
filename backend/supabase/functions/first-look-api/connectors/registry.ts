@@ -3,6 +3,7 @@ import type { OfficialJobConnector } from './contract.ts';
 import { createCitiConnector } from './citi.ts';
 import { createDeshawConnector } from './deshaw.ts';
 import { createGoldmanConnector } from './goldman.ts';
+import { RAZORPAY_CONFIG, createGreenhouseConnector } from './greenhouse.ts';
 import { createMoodysConnector, runMoodysConnector } from './moodys.ts';
 import { BARCLAYS_CONFIG, BLACKROCK_CONFIG, createTalentBrewConnector } from './talentbrew.ts';
 
@@ -24,6 +25,17 @@ const UNSUPPORTED_COMPANIES = [
   'NatWest',
   'Piramal Finance',
   'Fidelity'
+  , 'Amazon'
+  , 'Microsoft'
+  , 'Shell'
+  , 'Siemens'
+  , 'GE HealthCare'
+  , 'Diageo'
+  , 'Razorpay'
+  , 'Pine Labs'
+  , 'S&P Global'
+  , 'Morningstar'
+  , 'ICRA'
 ];
 
 export function createConnectorRegistry(): JobConnector[] {
@@ -46,6 +58,8 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createTalentBrewConnector(BLACKROCK_CONFIG, fetch, 'blackrock-reconcile'),
     createTalentBrewConnector(BARCLAYS_CONFIG, fetch, 'barclays-watch'),
     createTalentBrewConnector(BARCLAYS_CONFIG, fetch, 'barclays-reconcile'),
+    createGreenhouseConnector(RAZORPAY_CONFIG, fetch, 'razorpay-watch'),
+    createGreenhouseConnector(RAZORPAY_CONFIG, fetch, 'razorpay-reconcile'),
   ];
 }
 

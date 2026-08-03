@@ -22,6 +22,10 @@ const talentBrewSchedule = readFileSync(
   new URL('../../migrations/20260803171004_add_blackrock_barclays_schedules.sql', import.meta.url),
   'utf8',
 );
+const greenhouseSchedule = readFileSync(
+  new URL('../../migrations/20260803180128_add_razorpay_schedule.sql', import.meta.url),
+  'utf8',
+);
 
 test('rotates hydration by never-checked then oldest-checked inventory', () => {
   assert.match(migration, /add column if not exists last_hydrated_at timestamptz/);
@@ -92,4 +96,13 @@ test('adds BlackRock and Barclays to the private scan helper and staggered sched
   assert.match(talentBrewSchedule, /barclays-official-india/);
   assert.match(talentBrewSchedule, /cron\.unschedule\(existing_job_id\)/);
   assert.doesNotMatch(talentBrewSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});
+
+test('adds Razorpay to the private scan helper, watchdog, and staggered schedules', () => {
+  assert.match(greenhouseSchedule, /'razorpay-watch'/g);
+  assert.match(greenhouseSchedule, /'razorpay-reconcile'/g);
+  assert.match(greenhouseSchedule, /razorpay-official-india/);
+  assert.match(greenhouseSchedule, /first-look-razorpay-watch[\s\S]*'26,56 \* \* \* \*'/);
+  assert.ok(greenhouseSchedule.includes("'29 */2 * * *'"));
+  assert.doesNotMatch(greenhouseSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
 });

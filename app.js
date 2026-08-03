@@ -20,6 +20,17 @@ const companies = [
   ['NatWest', 'https://jobs.natwestgroup.com/'],
   ['Piramal Finance', 'https://www.piramalfinance.com/careers'],
   ['Fidelity', 'https://jobs.fidelity.com/in/'],
+  ['Amazon', 'https://www.amazon.jobs/en/search?country=IND&loc_query=India'],
+  ['Microsoft', 'https://jobs.careers.microsoft.com/global/en/search?q=&lc=India'],
+  ['Shell', 'https://www.shell.com/careers/search-and-apply.html'],
+  ['Siemens', 'https://jobs.siemens.com/careers'],
+  ['GE HealthCare', 'https://jobs.gehealthcare.com/global/en'],
+  ['Diageo', 'https://www.diageo.com/en/careers'],
+  ['Razorpay', 'https://razorpay.com/careers/'],
+  ['Pine Labs', 'https://www.pinelabs.com/careers'],
+  ['S&P Global', 'https://careers.spglobal.com/jobs'],
+  ['Morningstar', 'https://www.morningstar.com/company/careers'],
+  ['ICRA', 'https://www.icra.in/careers'],
 ];
 
 const fixture = {

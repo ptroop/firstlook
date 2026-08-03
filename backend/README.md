@@ -12,6 +12,7 @@ Supabase hosts the database, source scanner, and read API. GitHub Pages hosts on
 | Goldman Sachs official India careers | Reconcile the complete public India GraphQL inventory | Hydrate high-recall candidates in bounded batches | Every 30 minutes |
 | BlackRock official India careers | Reconcile the public paginated India catalog | Hydrate high-recall candidates in bounded batches | Watch every 30 minutes; reconcile every 2 hours |
 | Barclays official India careers | Reconcile the public paginated India catalog | Hydrate high-recall candidates in bounded batches | Watch every 30 minutes; reconcile every 2 hours |
+| Razorpay official Greenhouse board | Reconcile the public Greenhouse India catalog | Hydrate high-recall candidates in bounded batches | Watch every 30 minutes; reconcile every 2 hours |
 
 The source inventory is deliberately broader than the visible job feed. Deterministic rules select likely India finance roles, and only ambiguous candidates may be sent to OpenRouter. A failed model call leaves the role visible as `possible`; it never silently deletes it.
 
@@ -86,7 +87,7 @@ select vault.create_secret(
 select vault.create_secret('YOUR-LONG-RANDOM-SCAN-TOKEN', 'first_look_scan_token');
 ```
 
-The Vault token must exactly match the `SCAN_TOKEN` Edge Function secret. Then apply `007_source_scan_schedules.sql`, `010_goldman_scan_schedule.sql`, and `20260803171004_add_blackrock_barclays_schedules.sql`. These create staggered jobs for the six verified connectors. Each invocation also drains a bounded portion of the candidate-detail backlog, with never-hydrated and oldest-hydrated inventory first.
+The Vault token must exactly match the `SCAN_TOKEN` Edge Function secret. Then apply `007_source_scan_schedules.sql`, `010_goldman_scan_schedule.sql`, `20260803171004_add_blackrock_barclays_schedules.sql`, and `20260803180128_add_razorpay_schedule.sql`. These create staggered jobs for the seven verified connectors. Each invocation also drains a bounded portion of the candidate-detail backlog, with never-hydrated and oldest-hydrated inventory first.
 
 Migration `009_scan_watchdog.sql` adds a ten-minute self-healing check. It retries 30-minute groups only after 50 minutes without a new run, and retries Citi reconciliation only after 150 minutes. An advisory transaction lock prevents overlapping watchdog executions.
 
