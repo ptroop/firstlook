@@ -20,18 +20,40 @@ const SAMPLE_LIST = {
 import { test } from 'node:test';
 
 test('createWorkdayConnector - enumerate', async () => {
-  const fetcher = async (url: string) => {
-    if (url.includes('search')) {
-      return new Response(JSON.stringify(SAMPLE_LIST), { status: 200 });
+  let callCount = 0;
+  const requests: any[] = [];
+  const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ input, init });
+    callCount++;
+    if (String(input).includes('search')) {
+      if (callCount === 1) {
+        // First page: return limit (20) items to trigger pagination
+        const postings = Array(20).fill({ title: 'Engineer', externalPath: '/job/123', locationsText: 'Bengaluru, India' });
+        return new Response(JSON.stringify({ jobPostings: postings, totalCount: 20 }), { status: 200 });
+      } else {
+        // Second page: return 0 items
+        return new Response(JSON.stringify({ jobPostings: [], totalCount: 20 }), { status: 200 });
+      }
     }
     return new Response('', { status: 404 });
   };
   const connector = createWorkdayConnector(DUMMY_CONFIG, fetcher as unknown as typeof fetch, 'watch');
   const result = await connector.enumerate({ runType: 'watch', connectorId: 'dummy-official-india' });
   
-  assert.equal(result.listings.length, 1);
+  assert.equal(result.listings.length, 20);
   assert.equal(result.listings[0].sourceExternalId, '/job/123');
   assert.equal(result.diagnostic.status, 'complete');
+  assert.equal(callCount, 2);
+  
+  // Verify POST request body for first request
+  const body1 = JSON.parse(requests[0].init.body);
+  assert.equal(body1.limit, 20);
+  assert.equal(body1.offset, 0);
+
+  // Verify POST request body for second request
+  const body2 = JSON.parse(requests[1].init.body);
+  assert.equal(body2.limit, 20);
+  assert.equal(body2.offset, 20);
 });
 
 test('createWorkdayConnector - hydrate', async () => {
