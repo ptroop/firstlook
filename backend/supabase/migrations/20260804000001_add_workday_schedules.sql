@@ -120,62 +120,24 @@ grant execute on function public.recover_stale_first_look_scans() to postgres;
 
 do $$
 declare
-  existing_job_id bigint;
+  j bigint;
 begin
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-accenture-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-accenture-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-pwc-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-pwc-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-wells-fargo-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-wells-fargo-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-deutsche-bank-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-deutsche-bank-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-bank-of-america-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-bank-of-america-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-natwest-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-natwest-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-fidelity-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-fidelity-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-ge-healthcare-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-ge-healthcare-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-diageo-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-diageo-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-sp-global-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-sp-global-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-morningstar-watch';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
-  select jobid into existing_job_id from cron.job where jobname = 'first-look-morningstar-reconcile';
-  if existing_job_id is not null then perform cron.unschedule(existing_job_id); end if;
+  for j in select jobid from cron.job where jobname in (
+    'first-look-accenture-watch', 'first-look-accenture-reconcile',
+    'first-look-pwc-watch', 'first-look-pwc-reconcile',
+    'first-look-wells-fargo-watch', 'first-look-wells-fargo-reconcile',
+    'first-look-deutsche-bank-watch', 'first-look-deutsche-bank-reconcile',
+    'first-look-bank-of-america-watch', 'first-look-bank-of-america-reconcile',
+    'first-look-natwest-watch', 'first-look-natwest-reconcile',
+    'first-look-fidelity-watch', 'first-look-fidelity-reconcile',
+    'first-look-ge-healthcare-watch', 'first-look-ge-healthcare-reconcile',
+    'first-look-diageo-watch', 'first-look-diageo-reconcile',
+    'first-look-sp-global-watch', 'first-look-sp-global-reconcile',
+    'first-look-morningstar-watch', 'first-look-morningstar-reconcile'
+  )
+  loop
+    perform cron.unschedule(j);
+  end loop;
 end;
 $$;
 
