@@ -49,7 +49,7 @@ export function createWorkdayConnector(
           headers: { 'Content-Type': 'application/json' },
           body
         });
-        if (!res.ok) throw new Error('Workday fetch failed');
+        if (!res.ok) throw new Error(`Workday fetch failed: ${res.status} ${res.statusText}`);
         const data = await res.json();
         const postings = data.jobPostings || [];
         if (postings.length === 0) break;
@@ -66,14 +66,14 @@ export function createWorkdayConnector(
               category: null,
               department: null,
               detailUrl: `${config.baseUrl}${job.externalPath}`,
-              listingMetadataHash: job.externalPath,
+              listingMetadataHash: JSON.stringify(job),
               rawMetadata: job
             });
           }
         }
         
         offset += limit;
-        if (offset >= (data.totalCount || 0)) break;
+        if (postings.length < limit) break;
       }
 
       return {
@@ -93,7 +93,7 @@ export function createWorkdayConnector(
 
     hydrate: async (listing) => {
       const res = await fetcher(`${config.baseUrl}/wday/cxs/client/customUI/v1.2/jobPosting${listing.sourceExternalId}`);
-      if (!res.ok) throw new Error('Failed to hydrate Workday job');
+      if (!res.ok) throw new Error(`Failed to hydrate Workday job: ${res.status} ${res.statusText}`);
       const data = await res.json();
       
       const description = data.jobPostingInfo?.jobDescription || '';
