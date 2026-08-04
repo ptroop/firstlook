@@ -1,0 +1,3 @@
+- [x] Task 1: Create the generic Workday connector
+- [x] Task 2: Integrate Workday into the Registry
+- [x] Task 3: Add Database Migration for Workday Schedules
