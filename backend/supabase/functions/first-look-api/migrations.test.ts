@@ -26,6 +26,10 @@ const greenhouseSchedule = readFileSync(
   new URL('../../migrations/20260803180128_add_razorpay_schedule.sql', import.meta.url),
   'utf8',
 );
+const workdaySchedule = readFileSync(
+  new URL('../../migrations/20260804000001_add_workday_schedules.sql', import.meta.url),
+  'utf8',
+);
 
 test('rotates hydration by never-checked then oldest-checked inventory', () => {
   assert.match(migration, /add column if not exists last_hydrated_at timestamptz/);
@@ -105,5 +109,13 @@ test('adds Razorpay to the private scan helper, watchdog, and staggered schedule
   assert.match(greenhouseSchedule, /first-look-razorpay-watch[\s\S]*'26,56 \* \* \* \*'/);
   assert.ok(greenhouseSchedule.includes("'29 */2 * * *'"));
   assert.doesNotMatch(greenhouseSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});
+
+test('adds Workday staggered schedules and unschedules existing jobs', () => {
+  for (const group of ['accenture-watch', 'pwc-reconcile', 'morningstar-watch']) {
+    assert.match(workdaySchedule, new RegExp(`'${group}'`));
+  }
+  assert.match(workdaySchedule, /cron\.unschedule\(j\)/);
+  assert.doesNotMatch(workdaySchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
 });
 
