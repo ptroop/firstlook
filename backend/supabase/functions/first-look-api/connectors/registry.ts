@@ -6,10 +6,10 @@ import { createGoldmanConnector } from './goldman.ts';
 import { RAZORPAY_CONFIG, createGreenhouseConnector } from './greenhouse.ts';
 import { createMoodysConnector, runMoodysConnector } from './moodys.ts';
 import { BARCLAYS_CONFIG, BLACKROCK_CONFIG, createTalentBrewConnector } from './talentbrew.ts';
+import { AMEX_CONFIG, KPMG_CONFIG, createOracleConnector } from './oracle.ts';
 
 const UNSUPPORTED_COMPANIES = [
   'JPMorgan Chase',
-  'KPMG',
   'Deloitte',
   'HSBC',
   'D. E. Shaw',
@@ -20,7 +20,6 @@ const UNSUPPORTED_COMPANIES = [
   'Deutsche Bank',
   'Morgan Stanley',
   'Bank of America',
-  'American Express',
   'PayPal',
   'NatWest',
   'Piramal Finance',
@@ -60,6 +59,10 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createTalentBrewConnector(BARCLAYS_CONFIG, fetch, 'barclays-reconcile'),
     createGreenhouseConnector(RAZORPAY_CONFIG, fetch, 'razorpay-watch'),
     createGreenhouseConnector(RAZORPAY_CONFIG, fetch, 'razorpay-reconcile'),
+    createOracleConnector(KPMG_CONFIG, fetch, 'kpmg-watch'),
+    createOracleConnector(KPMG_CONFIG, fetch, 'kpmg-reconcile'),
+    createOracleConnector(AMEX_CONFIG, fetch, 'amex-watch'),
+    createOracleConnector(AMEX_CONFIG, fetch, 'amex-reconcile'),
   ];
 }
 

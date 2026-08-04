@@ -38,6 +38,18 @@ test('registers Goldman Sachs full India reconciliation', () => {
   assert.deepEqual(goldman.map((connector) => connector.scanGroup), ['goldman-reconcile']);
 });
 
+test('registers KPMG India watch and reconciliation groups', () => {
+  const connectors = createOfficialConnectorRegistry();
+  const kpmg = connectors.filter((connector) => connector.connectorId === 'kpmg-official-india');
+  assert.deepEqual(kpmg.map((connector) => connector.scanGroup), ['kpmg-watch', 'kpmg-reconcile']);
+});
+
+test('registers American Express watch and reconciliation groups', () => {
+  const connectors = createOfficialConnectorRegistry();
+  const amex = connectors.filter((connector) => connector.connectorId === 'amex-official-india');
+  assert.deepEqual(amex.map((connector) => connector.scanGroup), ['amex-watch', 'amex-reconcile']);
+});
+
 test('reports coverage only for implemented official connectors', () => {
   assert.deepEqual(supportedOfficialConnectorIds(), [
     'moodys-official-india',
@@ -47,5 +59,7 @@ test('reports coverage only for implemented official connectors', () => {
     'blackrock-official-india',
     'barclays-official-india',
     'razorpay-official-india',
+    'kpmg-official-india',
+    'amex-official-india'
   ]);
 });
