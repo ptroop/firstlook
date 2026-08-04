@@ -13,17 +13,15 @@ import {
   DIAGEO_CONFIG, SP_GLOBAL_CONFIG, MORNINGSTAR_CONFIG,
   JPMORGAN_CONFIG, MORGAN_STANLEY_CONFIG, PAYPAL_CONFIG, SHELL_CONFIG, SIEMENS_CONFIG, createWorkdayConnector 
 } from './workday.ts';
+import {
+  AMAZON_CONFIG, MICROSOFT_CONFIG, DELOITTE_CONFIG, HSBC_CONFIG,
+  PIRAMAL_CONFIG, PINE_LABS_CONFIG, ICRA_CONFIG, createFirecrawlConnector
+} from './firecrawl.ts';
 
 
-const UNSUPPORTED_COMPANIES = [
-  'Deloitte',
-  'HSBC',
-  'Piramal Finance',
-  'Amazon',
-  'Microsoft',
-  'Pine Labs',
-  'ICRA'
-];
+const UNSUPPORTED_COMPANIES: string[] = [];
+
+const FIRECRAWL_API_KEY = typeof Deno !== 'undefined' ? Deno.env.get('FIRECRAWL_API_KEY') || '' : '';
 
 export function createConnectorRegistry(): JobConnector[] {
   return [
@@ -71,6 +69,18 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     ].flatMap(config => [
       createWorkdayConnector(config, fetch, 'watch'),
       createWorkdayConnector(config, fetch, 'reconcile')
+    ]),
+    ...[
+      AMAZON_CONFIG,
+      MICROSOFT_CONFIG,
+      DELOITTE_CONFIG,
+      HSBC_CONFIG,
+      PIRAMAL_CONFIG,
+      PINE_LABS_CONFIG,
+      ICRA_CONFIG
+    ].flatMap(config => [
+      createFirecrawlConnector(config, FIRECRAWL_API_KEY, 'watch'),
+      createFirecrawlConnector(config, FIRECRAWL_API_KEY, 'reconcile')
     ]),
   ];
 }

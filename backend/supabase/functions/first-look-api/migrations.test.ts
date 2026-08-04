@@ -34,6 +34,10 @@ const workdayPhase2Schedule = readFileSync(
   new URL('../../migrations/20260804000002_add_workday_phase2_schedules.sql', import.meta.url),
   'utf8',
 );
+const firecrawlSchedule = readFileSync(
+  new URL('../../migrations/20260804000003_add_firecrawl_schedules.sql', import.meta.url),
+  'utf8',
+);
 
 test('rotates hydration by never-checked then oldest-checked inventory', () => {
   assert.match(migration, /add column if not exists last_hydrated_at timestamptz/);
@@ -131,3 +135,10 @@ test('adds Phase 2 Workday schedules for 5 companies', () => {
   assert.doesNotMatch(workdayPhase2Schedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
 });
 
+test('adds Firecrawl schedules for 7 companies', () => {
+  for (const group of ['amazon-firecrawl-india-watch', 'deloitte-firecrawl-india-reconcile', 'icra-firecrawl-india-watch']) {
+    assert.match(firecrawlSchedule, new RegExp(`'${group}'`));
+  }
+  assert.match(firecrawlSchedule, /cron\.unschedule\(j\)/);
+  assert.doesNotMatch(firecrawlSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});

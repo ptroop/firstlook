@@ -76,7 +76,14 @@ test('reports coverage only for implemented official connectors', () => {
     'morgan-stanley-official-india',
     'paypal-official-india',
     'shell-official-india',
-    'siemens-official-india'
+    'siemens-official-india',
+    'amazon-firecrawl-india',
+    'microsoft-firecrawl-india',
+    'deloitte-firecrawl-india',
+    'hsbc-firecrawl-india',
+    'piramal-firecrawl-india',
+    'pine-labs-firecrawl-india',
+    'icra-firecrawl-india'
   ]);
 });
 
@@ -86,5 +93,14 @@ test('registers Workday connectors for 16 companies', () => {
   for (const prefix of workdayPrefixes) {
     const subset = connectors.filter((c) => c.connectorId === `${prefix}-official-india`);
     assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-watch`, `${prefix}-reconcile`]);
+  }
+});
+
+test('registers Firecrawl connectors for 7 companies', () => {
+  const connectors = createOfficialConnectorRegistry();
+  const firecrawlPrefixes = ['amazon', 'microsoft', 'deloitte', 'hsbc', 'piramal', 'pine-labs', 'icra'];
+  for (const prefix of firecrawlPrefixes) {
+    const subset = connectors.filter((c) => c.connectorId === `${prefix}-firecrawl-india`);
+    assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-firecrawl-india-watch`, `${prefix}-firecrawl-india-reconcile`]);
   }
 });
