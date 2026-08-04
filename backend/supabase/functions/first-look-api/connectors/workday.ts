@@ -66,7 +66,7 @@ export function createWorkdayConnector(
               category: null,
               department: null,
               detailUrl: `${config.baseUrl}${job.externalPath}`,
-              listingMetadataHash: JSON.stringify(job),
+              listingMetadataHash: job.externalPath,
               rawMetadata: job
             });
           }
