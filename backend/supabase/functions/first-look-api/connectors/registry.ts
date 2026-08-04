@@ -7,33 +7,28 @@ import { RAZORPAY_CONFIG, createGreenhouseConnector } from './greenhouse.ts';
 import { createMoodysConnector, runMoodysConnector } from './moodys.ts';
 import { BARCLAYS_CONFIG, BLACKROCK_CONFIG, createTalentBrewConnector } from './talentbrew.ts';
 import { AMEX_CONFIG, KPMG_CONFIG, createOracleConnector } from './oracle.ts';
+import { 
+  ACCENTURE_CONFIG, PWC_CONFIG, WELLS_FARGO_CONFIG, DEUTSCHE_BANK_CONFIG, 
+  BANK_OF_AMERICA_CONFIG, NATWEST_CONFIG, FIDELITY_CONFIG, GE_HEALTHCARE_CONFIG, 
+  DIAGEO_CONFIG, SP_GLOBAL_CONFIG, MORNINGSTAR_CONFIG, createWorkdayConnector 
+} from './workday.ts';
+
 
 const UNSUPPORTED_COMPANIES = [
   'JPMorgan Chase',
   'Deloitte',
   'HSBC',
   'D. E. Shaw',
-  'Accenture',
-  'PwC',
-  'Wells Fargo',
   'Citi',
-  'Deutsche Bank',
   'Morgan Stanley',
-  'Bank of America',
   'PayPal',
-  'NatWest',
-  'Piramal Finance',
-  'Fidelity'
+  'Piramal Finance'
   , 'Amazon'
   , 'Microsoft'
   , 'Shell'
   , 'Siemens'
-  , 'GE HealthCare'
-  , 'Diageo'
   , 'Razorpay'
   , 'Pine Labs'
-  , 'S&P Global'
-  , 'Morningstar'
   , 'ICRA'
 ];
 
@@ -63,6 +58,28 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createOracleConnector(KPMG_CONFIG, fetch, 'kpmg-reconcile'),
     createOracleConnector(AMEX_CONFIG, fetch, 'amex-watch'),
     createOracleConnector(AMEX_CONFIG, fetch, 'amex-reconcile'),
+    createWorkdayConnector(ACCENTURE_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(ACCENTURE_CONFIG, fetch, 'reconcile'),
+    createWorkdayConnector(PWC_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(PWC_CONFIG, fetch, 'reconcile'),
+    createWorkdayConnector(WELLS_FARGO_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(WELLS_FARGO_CONFIG, fetch, 'reconcile'),
+    createWorkdayConnector(DEUTSCHE_BANK_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(DEUTSCHE_BANK_CONFIG, fetch, 'reconcile'),
+    createWorkdayConnector(BANK_OF_AMERICA_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(BANK_OF_AMERICA_CONFIG, fetch, 'reconcile'),
+    createWorkdayConnector(NATWEST_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(NATWEST_CONFIG, fetch, 'reconcile'),
+    createWorkdayConnector(FIDELITY_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(FIDELITY_CONFIG, fetch, 'reconcile'),
+    createWorkdayConnector(GE_HEALTHCARE_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(GE_HEALTHCARE_CONFIG, fetch, 'reconcile'),
+    createWorkdayConnector(DIAGEO_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(DIAGEO_CONFIG, fetch, 'reconcile'),
+    createWorkdayConnector(SP_GLOBAL_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(SP_GLOBAL_CONFIG, fetch, 'reconcile'),
+    createWorkdayConnector(MORNINGSTAR_CONFIG, fetch, 'watch'),
+    createWorkdayConnector(MORNINGSTAR_CONFIG, fetch, 'reconcile'),
   ];
 }
 

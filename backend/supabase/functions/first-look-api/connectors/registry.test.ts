@@ -60,6 +60,26 @@ test('reports coverage only for implemented official connectors', () => {
     'barclays-official-india',
     'razorpay-official-india',
     'kpmg-official-india',
-    'amex-official-india'
+    'amex-official-india',
+    'accenture-official-india',
+    'pwc-official-india',
+    'wells-fargo-official-india',
+    'deutsche-bank-official-india',
+    'bank-of-america-official-india',
+    'natwest-official-india',
+    'fidelity-official-india',
+    'ge-healthcare-official-india',
+    'diageo-official-india',
+    'sp-global-official-india',
+    'morningstar-official-india'
   ]);
+});
+
+test('registers Workday connectors for 11 companies', () => {
+  const connectors = createOfficialConnectorRegistry();
+  const workdayPrefixes = ['accenture', 'pwc', 'wells-fargo', 'deutsche-bank', 'bank-of-america', 'natwest', 'fidelity', 'ge-healthcare', 'diageo', 'sp-global', 'morningstar'];
+  for (const prefix of workdayPrefixes) {
+    const subset = connectors.filter((c) => c.connectorId === `${prefix}-official-india`);
+    assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-watch`, `${prefix}-reconcile`]);
+  }
 });
