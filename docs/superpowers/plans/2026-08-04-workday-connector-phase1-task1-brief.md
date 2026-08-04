@@ -1,3 +1,58 @@
+### Task 1: Create the generic Workday connector
+
+**Files:**
+- Create: `backend/supabase/functions/first-look-api/connectors/workday.ts`
+- Create: `backend/supabase/functions/first-look-api/connectors/workday.test.ts`
+
+**Interfaces:**
+- Produces: `createWorkdayConnector(config, fetcher, runType)` returning `OfficialJobConnector`
+- Produces: Config constants for Accenture, PwC, Wells Fargo, Deutsche Bank, Bank of America, NatWest, Fidelity, GE HealthCare, Diageo, S&P Global, Morningstar.
+
+- [ ] **Step 1: Write the failing test for Workday enumeration**
+
+```typescript
+// backend/supabase/functions/first-look-api/connectors/workday.test.ts
+import { assertEquals, assertStringIncludes } from 'jsr:@std/assert';
+import { createWorkdayConnector } from './workday.ts';
+import type { InventoryListing } from '../types.ts';
+
+const DUMMY_CONFIG = {
+  companyName: 'Dummy Co',
+  baseUrl: 'https://dummy.wd3.myworkdayjobs.com/Dummy_Careers',
+  connectorIdPrefix: 'dummy',
+};
+
+const SAMPLE_LIST = {
+  jobPostings: [
+    { title: 'Engineer', externalPath: '/job/123', locationsText: 'Bengaluru, India' },
+    { title: 'Manager', externalPath: '/job/456', locationsText: 'London, UK' }
+  ]
+};
+
+Deno.test('createWorkdayConnector - enumerate', async () => {
+  const fetcher = async (url: string) => {
+    if (url.includes('search')) {
+      return new Response(JSON.stringify(SAMPLE_LIST), { status: 200 });
+    }
+    return new Response('', { status: 404 });
+  };
+  const connector = createWorkdayConnector(DUMMY_CONFIG, fetcher, 'watch');
+  const result = await connector.enumerate({ runType: 'watch', connectorId: 'dummy-official-india' });
+  
+  assertEquals(result.listings.length, 1);
+  assertEquals(result.listings[0].sourceExternalId, '/job/123');
+  assertEquals(result.diagnostic.status, 'complete');
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && npm test -- workday.test.ts`
+Expected: FAIL with "Cannot resolve module" or "createWorkdayConnector is not a function"
+
+- [ ] **Step 3: Write minimal implementation**
+
+```typescript
 // backend/supabase/functions/first-look-api/connectors/workday.ts
 import type { InventoryListing, JobConnectorResult, HydratedJob } from '../types.ts';
 import type { OfficialJobConnector } from './contract.ts';
@@ -19,11 +74,6 @@ export const GE_HEALTHCARE_CONFIG: WorkdayConfig = { companyName: 'GE HealthCare
 export const DIAGEO_CONFIG: WorkdayConfig = { companyName: 'Diageo', baseUrl: 'https://diageo.wd3.myworkdayjobs.com/Diageo_Careers', connectorIdPrefix: 'diageo' };
 export const SP_GLOBAL_CONFIG: WorkdayConfig = { companyName: 'S&P Global', baseUrl: 'https://spglobal.wd5.myworkdayjobs.com/SPGlobal_Careers', connectorIdPrefix: 'sp-global' };
 export const MORNINGSTAR_CONFIG: WorkdayConfig = { companyName: 'Morningstar', baseUrl: 'https://morningstar.wd5.myworkdayjobs.com/Morningstar_Careers', connectorIdPrefix: 'morningstar' };
-export const JPMORGAN_CONFIG: WorkdayConfig = { companyName: 'JPMorgan Chase', baseUrl: 'https://jpmorgan.wd5.myworkdayjobs.com/JPMorgan_Careers', connectorIdPrefix: 'jpmorgan' };
-export const MORGAN_STANLEY_CONFIG: WorkdayConfig = { companyName: 'Morgan Stanley', baseUrl: 'https://morganstanley.wd5.myworkdayjobs.com/Morgan_Stanley_Careers', connectorIdPrefix: 'morgan-stanley' };
-export const PAYPAL_CONFIG: WorkdayConfig = { companyName: 'PayPal', baseUrl: 'https://paypal.wd1.myworkdayjobs.com/PayPal', connectorIdPrefix: 'paypal' };
-export const SHELL_CONFIG: WorkdayConfig = { companyName: 'Shell', baseUrl: 'https://shell.wd3.myworkdayjobs.com/Shell', connectorIdPrefix: 'shell' };
-export const SIEMENS_CONFIG: WorkdayConfig = { companyName: 'Siemens', baseUrl: 'https://siemens.wd3.myworkdayjobs.com/External_Careers', connectorIdPrefix: 'siemens' };
 
 const INDIA_LOCATIONS = /\b(?:india|bengaluru|bangalore|gurgaon|gurugram|mumbai|pune|hyderabad|delhi|noida|chennai)\b/i;
 
@@ -54,7 +104,7 @@ export function createWorkdayConnector(
           headers: { 'Content-Type': 'application/json' },
           body
         });
-        if (!res.ok) throw new Error(`Workday fetch failed: ${res.status} ${res.statusText}`);
+        if (!res.ok) throw new Error('Workday fetch failed');
         const data = await res.json();
         const postings = data.jobPostings || [];
         if (postings.length === 0) break;
@@ -78,7 +128,7 @@ export function createWorkdayConnector(
         }
         
         offset += limit;
-        if (postings.length < limit) break;
+        if (offset >= (data.totalCount || 0)) break;
       }
 
       return {
@@ -98,7 +148,7 @@ export function createWorkdayConnector(
 
     hydrate: async (listing) => {
       const res = await fetcher(`${config.baseUrl}/wday/cxs/client/customUI/v1.2/jobPosting${listing.sourceExternalId}`);
-      if (!res.ok) throw new Error(`Failed to hydrate Workday job: ${res.status} ${res.statusText}`);
+      if (!res.ok) throw new Error('Failed to hydrate Workday job');
       const data = await res.json();
       
       const description = data.jobPostingInfo?.jobDescription || '';
@@ -112,3 +162,18 @@ export function createWorkdayConnector(
     }
   };
 }
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd backend && npm test -- workday.test.ts`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/supabase/functions/first-look-api/connectors/workday.ts backend/supabase/functions/first-look-api/connectors/workday.test.ts
+git commit -m "feat: implement generic Workday API connector"
+```
+
+

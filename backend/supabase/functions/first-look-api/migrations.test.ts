@@ -30,6 +30,10 @@ const workdaySchedule = readFileSync(
   new URL('../../migrations/20260804000001_add_workday_schedules.sql', import.meta.url),
   'utf8',
 );
+const workdayPhase2Schedule = readFileSync(
+  new URL('../../migrations/20260804000002_add_workday_phase2_schedules.sql', import.meta.url),
+  'utf8',
+);
 
 test('rotates hydration by never-checked then oldest-checked inventory', () => {
   assert.match(migration, /add column if not exists last_hydrated_at timestamptz/);
@@ -117,5 +121,13 @@ test('adds Workday staggered schedules and unschedules existing jobs', () => {
   }
   assert.match(workdaySchedule, /cron\.unschedule\(j\)/);
   assert.doesNotMatch(workdaySchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});
+
+test('adds Phase 2 Workday schedules for 5 companies', () => {
+  for (const group of ['jpmorgan-watch', 'morgan-stanley-reconcile', 'siemens-watch']) {
+    assert.match(workdayPhase2Schedule, new RegExp(`'${group}'`));
+  }
+  assert.match(workdayPhase2Schedule, /cron\.unschedule\(j\)/);
+  assert.doesNotMatch(workdayPhase2Schedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
 });
 

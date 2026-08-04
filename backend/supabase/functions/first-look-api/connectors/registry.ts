@@ -10,26 +10,19 @@ import { AMEX_CONFIG, KPMG_CONFIG, createOracleConnector } from './oracle.ts';
 import { 
   ACCENTURE_CONFIG, PWC_CONFIG, WELLS_FARGO_CONFIG, DEUTSCHE_BANK_CONFIG, 
   BANK_OF_AMERICA_CONFIG, NATWEST_CONFIG, FIDELITY_CONFIG, GE_HEALTHCARE_CONFIG, 
-  DIAGEO_CONFIG, SP_GLOBAL_CONFIG, MORNINGSTAR_CONFIG, createWorkdayConnector 
+  DIAGEO_CONFIG, SP_GLOBAL_CONFIG, MORNINGSTAR_CONFIG,
+  JPMORGAN_CONFIG, MORGAN_STANLEY_CONFIG, PAYPAL_CONFIG, SHELL_CONFIG, SIEMENS_CONFIG, createWorkdayConnector 
 } from './workday.ts';
 
 
 const UNSUPPORTED_COMPANIES = [
-  'JPMorgan Chase',
   'Deloitte',
   'HSBC',
-  'D. E. Shaw',
-  'Citi',
-  'Morgan Stanley',
-  'PayPal',
-  'Piramal Finance'
-  , 'Amazon'
-  , 'Microsoft'
-  , 'Shell'
-  , 'Siemens'
-  , 'Razorpay'
-  , 'Pine Labs'
-  , 'ICRA'
+  'Piramal Finance',
+  'Amazon',
+  'Microsoft',
+  'Pine Labs',
+  'ICRA'
 ];
 
 export function createConnectorRegistry(): JobConnector[] {
@@ -69,7 +62,12 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
       GE_HEALTHCARE_CONFIG,
       DIAGEO_CONFIG,
       SP_GLOBAL_CONFIG,
-      MORNINGSTAR_CONFIG
+      MORNINGSTAR_CONFIG,
+      JPMORGAN_CONFIG,
+      MORGAN_STANLEY_CONFIG,
+      PAYPAL_CONFIG,
+      SHELL_CONFIG,
+      SIEMENS_CONFIG
     ].flatMap(config => [
       createWorkdayConnector(config, fetch, 'watch'),
       createWorkdayConnector(config, fetch, 'reconcile')

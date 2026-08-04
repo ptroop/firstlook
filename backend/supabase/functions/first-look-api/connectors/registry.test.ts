@@ -71,13 +71,18 @@ test('reports coverage only for implemented official connectors', () => {
     'ge-healthcare-official-india',
     'diageo-official-india',
     'sp-global-official-india',
-    'morningstar-official-india'
+    'morningstar-official-india',
+    'jpmorgan-official-india',
+    'morgan-stanley-official-india',
+    'paypal-official-india',
+    'shell-official-india',
+    'siemens-official-india'
   ]);
 });
 
-test('registers Workday connectors for 11 companies', () => {
+test('registers Workday connectors for 16 companies', () => {
   const connectors = createOfficialConnectorRegistry();
-  const workdayPrefixes = ['accenture', 'pwc', 'wells-fargo', 'deutsche-bank', 'bank-of-america', 'natwest', 'fidelity', 'ge-healthcare', 'diageo', 'sp-global', 'morningstar'];
+  const workdayPrefixes = ['accenture', 'pwc', 'wells-fargo', 'deutsche-bank', 'bank-of-america', 'natwest', 'fidelity', 'ge-healthcare', 'diageo', 'sp-global', 'morningstar', 'jpmorgan', 'morgan-stanley', 'paypal', 'shell', 'siemens'];
   for (const prefix of workdayPrefixes) {
     const subset = connectors.filter((c) => c.connectorId === `${prefix}-official-india`);
     assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-watch`, `${prefix}-reconcile`]);

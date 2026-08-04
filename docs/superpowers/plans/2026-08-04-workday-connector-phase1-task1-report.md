@@ -75,3 +75,8 @@ ok 89 - createWorkdayConnector - hydrate handles missing fields safely
 # pass 128
 # fail 0
 ```
+
+## Quick Fix: Spec Violation
+- **Issue:** `listingMetadataHash` was using `JSON.stringify(job)` instead of `job.externalPath`.
+- **Fix:** Changed `listingMetadataHash: JSON.stringify(job)` to `listingMetadataHash: job.externalPath` to prevent unnecessary payload bloat.
+- **Tests:** Re-ran `npx tsx --test supabase/functions/first-look-api/connectors/workday.test.ts` and all tests passed successfully.

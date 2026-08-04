@@ -1,0 +1,144 @@
+﻿2ef2115 feat: register 11 Workday companies
+ .../first-look-api/connectors/registry.test.ts     | 22 +++++++++++-
+ .../first-look-api/connectors/registry.ts          | 41 +++++++++++++++-------
+ 2 files changed, 50 insertions(+), 13 deletions(-)
+diff --git a/backend/supabase/functions/first-look-api/connectors/registry.test.ts b/backend/supabase/functions/first-look-api/connectors/registry.test.ts
+index f732d42..37ff717 100644
+--- a/backend/supabase/functions/first-look-api/connectors/registry.test.ts
++++ b/backend/supabase/functions/first-look-api/connectors/registry.test.ts
+@@ -53,13 +53,33 @@ test('registers American Express watch and reconciliation groups', () => {
+ test('reports coverage only for implemented official connectors', () => {
+   assert.deepEqual(supportedOfficialConnectorIds(), [
+     'moodys-official-india',
+     'deshaw-official-india',
+     'citi-official-india',
+     'goldman-sachs-official-india',
+     'blackrock-official-india',
+     'barclays-official-india',
+     'razorpay-official-india',
+     'kpmg-official-india',
+-    'amex-official-india'
++    'amex-official-india',
++    'accenture-official-india',
++    'pwc-official-india',
++    'wells-fargo-official-india',
++    'deutsche-bank-official-india',
++    'bank-of-america-official-india',
++    'natwest-official-india',
++    'fidelity-official-india',
++    'ge-healthcare-official-india',
++    'diageo-official-india',
++    'sp-global-official-india',
++    'morningstar-official-india'
+   ]);
+ });
++
++test('registers Workday connectors for 11 companies', () => {
++  const connectors = createOfficialConnectorRegistry();
++  const workdayPrefixes = ['accenture', 'pwc', 'wells-fargo', 'deutsche-bank', 'bank-of-america', 'natwest', 'fidelity', 'ge-healthcare', 'diageo', 'sp-global', 'morningstar'];
++  for (const prefix of workdayPrefixes) {
++    const subset = connectors.filter((c) => c.connectorId === `${prefix}-official-india`);
++    assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-watch`, `${prefix}-reconcile`]);
++  }
++});
+diff --git a/backend/supabase/functions/first-look-api/connectors/registry.ts b/backend/supabase/functions/first-look-api/connectors/registry.ts
+index 8953a6a..ebda25e 100644
+--- a/backend/supabase/functions/first-look-api/connectors/registry.ts
++++ b/backend/supabase/functions/first-look-api/connectors/registry.ts
+@@ -1,46 +1,41 @@
+ import type { JobConnector } from '../types.ts';
+ import type { OfficialJobConnector } from './contract.ts';
+ import { createCitiConnector } from './citi.ts';
+ import { createDeshawConnector } from './deshaw.ts';
+ import { createGoldmanConnector } from './goldman.ts';
+ import { RAZORPAY_CONFIG, createGreenhouseConnector } from './greenhouse.ts';
+ import { createMoodysConnector, runMoodysConnector } from './moodys.ts';
+ import { BARCLAYS_CONFIG, BLACKROCK_CONFIG, createTalentBrewConnector } from './talentbrew.ts';
+ import { AMEX_CONFIG, KPMG_CONFIG, createOracleConnector } from './oracle.ts';
++import { 
++  ACCENTURE_CONFIG, PWC_CONFIG, WELLS_FARGO_CONFIG, DEUTSCHE_BANK_CONFIG, 
++  BANK_OF_AMERICA_CONFIG, NATWEST_CONFIG, FIDELITY_CONFIG, GE_HEALTHCARE_CONFIG, 
++  DIAGEO_CONFIG, SP_GLOBAL_CONFIG, MORNINGSTAR_CONFIG, createWorkdayConnector 
++} from './workday.ts';
++
+ 
+ const UNSUPPORTED_COMPANIES = [
+   'JPMorgan Chase',
+   'Deloitte',
+   'HSBC',
+   'D. E. Shaw',
+-  'Accenture',
+-  'PwC',
+-  'Wells Fargo',
+   'Citi',
+-  'Deutsche Bank',
+   'Morgan Stanley',
+-  'Bank of America',
+   'PayPal',
+-  'NatWest',
+-  'Piramal Finance',
+-  'Fidelity'
++  'Piramal Finance'
+   , 'Amazon'
+   , 'Microsoft'
+   , 'Shell'
+   , 'Siemens'
+-  , 'GE HealthCare'
+-  , 'Diageo'
+   , 'Razorpay'
+   , 'Pine Labs'
+-  , 'S&P Global'
+-  , 'Morningstar'
+   , 'ICRA'
+ ];
+ 
+ export function createConnectorRegistry(): JobConnector[] {
+   return [
+     { company: "Moody's", run: () => runMoodysConnector() },
+     ...UNSUPPORTED_COMPANIES.map(unsupportedConnector)
+   ];
+ }
+ 
+@@ -56,20 +51,42 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
+     createTalentBrewConnector(BLACKROCK_CONFIG, fetch, 'blackrock-watch'),
+     createTalentBrewConnector(BLACKROCK_CONFIG, fetch, 'blackrock-reconcile'),
+     createTalentBrewConnector(BARCLAYS_CONFIG, fetch, 'barclays-watch'),
+     createTalentBrewConnector(BARCLAYS_CONFIG, fetch, 'barclays-reconcile'),
+     createGreenhouseConnector(RAZORPAY_CONFIG, fetch, 'razorpay-watch'),
+     createGreenhouseConnector(RAZORPAY_CONFIG, fetch, 'razorpay-reconcile'),
+     createOracleConnector(KPMG_CONFIG, fetch, 'kpmg-watch'),
+     createOracleConnector(KPMG_CONFIG, fetch, 'kpmg-reconcile'),
+     createOracleConnector(AMEX_CONFIG, fetch, 'amex-watch'),
+     createOracleConnector(AMEX_CONFIG, fetch, 'amex-reconcile'),
++    createWorkdayConnector(ACCENTURE_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(ACCENTURE_CONFIG, fetch, 'reconcile'),
++    createWorkdayConnector(PWC_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(PWC_CONFIG, fetch, 'reconcile'),
++    createWorkdayConnector(WELLS_FARGO_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(WELLS_FARGO_CONFIG, fetch, 'reconcile'),
++    createWorkdayConnector(DEUTSCHE_BANK_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(DEUTSCHE_BANK_CONFIG, fetch, 'reconcile'),
++    createWorkdayConnector(BANK_OF_AMERICA_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(BANK_OF_AMERICA_CONFIG, fetch, 'reconcile'),
++    createWorkdayConnector(NATWEST_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(NATWEST_CONFIG, fetch, 'reconcile'),
++    createWorkdayConnector(FIDELITY_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(FIDELITY_CONFIG, fetch, 'reconcile'),
++    createWorkdayConnector(GE_HEALTHCARE_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(GE_HEALTHCARE_CONFIG, fetch, 'reconcile'),
++    createWorkdayConnector(DIAGEO_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(DIAGEO_CONFIG, fetch, 'reconcile'),
++    createWorkdayConnector(SP_GLOBAL_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(SP_GLOBAL_CONFIG, fetch, 'reconcile'),
++    createWorkdayConnector(MORNINGSTAR_CONFIG, fetch, 'watch'),
++    createWorkdayConnector(MORNINGSTAR_CONFIG, fetch, 'reconcile'),
+   ];
+ }
+ 
+ export function supportedOfficialConnectorIds(): string[] {
+   return [...new Set(createOfficialConnectorRegistry().map((connector) => connector.connectorId))];
+ }
+ 
+ function unsupportedConnector(company: string): JobConnector {
+   return {
+     company,
