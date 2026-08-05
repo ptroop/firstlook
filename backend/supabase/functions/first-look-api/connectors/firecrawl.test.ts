@@ -34,7 +34,7 @@ test('Firecrawl connector', async (t) => {
       const responseBody = {
         success: true,
         data: {
-          markdown: "# Software Engineer\n\nJob details here."
+          markdown: "# Software Engineer\n\nJob details here.\n\n[Apply now](https://example.com/job/123/apply)"
         }
       };
       return new Response(JSON.stringify(responseBody), { status: 200 });
@@ -57,7 +57,16 @@ test('Firecrawl connector', async (t) => {
     const result = await connector.hydrate(listing, dummyRequest);
     
     assert.strictEqual(result.title, 'Software Engineer');
-    assert.strictEqual(result.description, '# Software Engineer\n\nJob details here.');
+    assert.match(result.description, /Job details here/);
+    assert.strictEqual(result.applyUrl, 'https://example.com/job/123/apply');
+  });
+
+  await t.test('marks a successful scrape with no role links anomalous', async () => {
+    const mockFetcher = async () => new Response(JSON.stringify({ success: true, data: { markdown: '# Careers\n\nNo current roles.' } }), { status: 200 });
+    const connector = createFirecrawlConnector(AMAZON_CONFIG, 'dummy-key', 'watch', mockFetcher);
+    const result = await connector.enumerate(dummyRequest);
+    assert.equal(result.diagnostic.status, 'anomalous');
+    assert.match(result.diagnostic.errorSummaries[0], /no India job links/i);
   });
 
   await t.test('throws error on Firecrawl API failure', async () => {

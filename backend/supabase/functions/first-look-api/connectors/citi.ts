@@ -117,6 +117,7 @@ export function parseCitiResultsPage(html: string, baseUrl: string): InventoryLi
     const location = classText(card, 'sr-job-location') || null;
     const workMode = classText(card, 'sr-job-type') || null;
     if (!sourceExternalId || !title) continue;
+    if (title.trim().toLowerCase() === 'about the team') continue;
     listings.push({
       connectorId: 'citi-official-india',
       sourceExternalId,

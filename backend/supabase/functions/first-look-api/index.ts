@@ -12,6 +12,7 @@ import {
   type SourceRow,
 } from './presenters.ts';
 import { runSourceAwareScan } from './scan.ts';
+import { classifyFinance } from './classification/taxonomy.ts';
 
 Deno.serve(async (request) => {
   const origin = request.headers.get('Origin');
@@ -72,7 +73,8 @@ function corsHeaders(origin: string | null) {
 
 async function getJobs(headers: Record<string, string>) {
   const select = 'id,company,official_detail_url,official_apply_url,title,location,description,first_seen_at,last_seen_at,posted_at,match_tier,classification_method,location_status,finance_status,experience_status,minimum_years,maximum_years,classified_at';
-  const rows = (await supabaseClient().request(`/rest/v1/jobs?active=eq.true&match_tier=in.(exact,possible)&select=${select}&limit=200`)) as JobRow[];
+  const rows = ((await supabaseClient().request(`/rest/v1/jobs?active=eq.true&location_status=eq.india&finance_status=in.(exact,likely)&match_tier=in.(exact,possible)&select=${select}&limit=200`)) as JobRow[])
+    .filter((row) => classifyFinance({ title: row.title, jobCategory: '', description: row.description }).status !== 'unrelated');
   if (rows.length === 0) return json({ jobs: [] }, headers);
 
   const ids = rows.map((row) => encodeURIComponent(row.id)).join(',');

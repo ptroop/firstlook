@@ -1,115 +1,86 @@
-// backend/supabase/functions/first-look-api/connectors/workday.test.ts
 import assert from 'node:assert/strict';
-import { createWorkdayConnector } from './workday.ts';
-import type { InventoryListing } from '../types.ts';
+import test from 'node:test';
+import { createWorkdayConnector, MORNINGSTAR_CONFIG } from './workday.ts';
 
 const DUMMY_CONFIG = {
   companyName: 'Dummy Co',
   baseUrl: 'https://dummy.wd3.myworkdayjobs.com/Dummy_Careers',
+  tenant: 'dummy',
+  siteName: 'Dummy_Careers',
   connectorIdPrefix: 'dummy',
 };
 
-const SAMPLE_LIST = {
-  jobPostings: [
-    { title: 'Engineer', externalPath: '/job/123', locationsText: 'Bengaluru, India' },
-    { title: 'Manager', externalPath: '/job/456', locationsText: 'London, UK' }
-  ]
-};
-
-// node test runner doesn't use Deno.test. Since this file is run with tsx --test, it should use node:test
-import { test } from 'node:test';
-
-test('createWorkdayConnector - enumerate', async () => {
-  let callCount = 0;
-  const requests: any[] = [];
-  const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
-    requests.push({ input, init });
-    callCount++;
-    if (String(input).includes('search')) {
-      if (callCount === 1) {
-        // First page: return limit (20) items to trigger pagination
-        const postings = Array(20).fill({ title: 'Engineer', externalPath: '/job/123', locationsText: 'Bengaluru, India' });
-        return new Response(JSON.stringify({ jobPostings: postings, totalCount: 20 }), { status: 200 });
-      } else {
-        // Second page: return 0 items
-        return new Response(JSON.stringify({ jobPostings: [], totalCount: 20 }), { status: 200 });
-      }
-    }
-    return new Response('', { status: 404 });
-  };
-  const connector = createWorkdayConnector(DUMMY_CONFIG, fetcher as unknown as typeof fetch, 'watch');
-  const result = await connector.enumerate({ runType: 'watch', connectorId: 'dummy-official-india' });
-  
-  assert.equal(result.listings.length, 20);
-  assert.equal(result.listings[0].sourceExternalId, '/job/123');
-  assert.equal(result.diagnostic.status, 'complete');
-  assert.equal(callCount, 2);
-  
-  // Verify POST request body for first request
-  const body1 = JSON.parse(requests[0].init.body);
-  assert.equal(body1.limit, 20);
-  assert.equal(body1.offset, 0);
-
-  // Verify POST request body for second request
-  const body2 = JSON.parse(requests[1].init.body);
-  assert.equal(body2.limit, 20);
-  assert.equal(body2.offset, 20);
-});
-
-test('createWorkdayConnector - hydrate', async () => {
-  const fetcher = async (url: string) => {
-    if (url.includes('/job/123')) {
+test('enumerates the new Workday CXS jobs endpoint and filters India listings', async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const fetcher = async (input: string | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    const body = JSON.parse(String(init?.body));
+    if (body.offset === 0) {
       return new Response(JSON.stringify({
-        jobPostingInfo: {
-          jobDescription: 'Great job!',
-          reqId: 'REQ-123'
-        }
+        total: 2,
+        jobPostings: [
+          { title: 'Financial Analyst', externalPath: '/job/Mumbai/Financial-Analyst_REQ-123', locationsText: 'Mumbai, India', postedOn: 'Posted Today' },
+          { title: 'Engineer', externalPath: '/job/London/Engineer_REQ-456', locationsText: 'London, UK', postedOn: 'Posted Today' },
+        ],
       }), { status: 200 });
     }
-    return new Response('', { status: 404 });
+    return new Response(JSON.stringify({ total: 0, jobPostings: [] }), { status: 200 });
   };
-  const connector = createWorkdayConnector(DUMMY_CONFIG, fetcher as unknown as typeof fetch, 'watch');
-  const result = await connector.hydrate({
-    connectorId: 'dummy-official-india',
-    sourceExternalId: '/job/123',
-    company: 'Dummy Co',
-    title: 'Engineer',
-    location: 'Bengaluru, India',
-    category: null,
-    department: null,
-    detailUrl: 'https://dummy.wd3.myworkdayjobs.com/Dummy_Careers/job/123',
-    listingMetadataHash: 'hash',
-    rawMetadata: {}
-  });
 
-  assert.equal(result.title, 'Engineer');
-  assert.equal(result.employerJobId, 'REQ-123');
-  assert.equal(result.description, 'Great job!');
-  assert.equal(result.location, 'Bengaluru, India');
-  assert.equal(result.applyUrl, 'https://dummy.wd3.myworkdayjobs.com/Dummy_Careers/job/123/apply');
+  const connector = createWorkdayConnector(DUMMY_CONFIG, fetcher, 'watch');
+  const result = await connector.enumerate({ runType: 'watch', detailBatchSize: 10, now: new Date() });
+
+  assert.equal(result.listings.length, 1);
+  assert.equal(result.listings[0].sourceExternalId, '/job/Mumbai/Financial-Analyst_REQ-123');
+  assert.equal(result.listings[0].detailUrl, 'https://dummy.wd3.myworkdayjobs.com/Dummy_Careers/job/Mumbai/Financial-Analyst_REQ-123');
+  assert.equal(result.diagnostic.status, 'complete');
+  assert.equal(result.diagnostic.reportedTotal, 2);
+  assert.equal(requests[0].url, 'https://dummy.wd3.myworkdayjobs.com/wday/cxs/dummy/Dummy_Careers/jobs');
+  assert.equal(JSON.parse(String(requests[0].init?.body)).offset, 0);
 });
 
-test('createWorkdayConnector - hydrate handles missing fields safely', async () => {
+test('hydrates a Workday detail and preserves the role-level Apply URL', async () => {
   const fetcher = async (url: string) => {
-    return new Response(JSON.stringify({}), { status: 200 });
+    assert.equal(url, 'https://dummy.wd3.myworkdayjobs.com/wday/cxs/dummy/Dummy_Careers/job/Mumbai/Financial-Analyst_REQ-123');
+    return new Response(JSON.stringify({
+      jobPostingInfo: {
+        title: 'Financial Analyst',
+        jobDescription: '<p>0 to 2 years of experience in financial analysis.</p>',
+        jobReqId: 'REQ-123',
+        location: 'Mumbai, India',
+        startDate: '2026-08-05',
+        jobPostingId: 'Financial-Analyst_REQ-123',
+        jobPostingSiteId: 'Dummy_Careers',
+        canApply: true,
+      },
+    }), { status: 200 });
   };
-  const connector = createWorkdayConnector(DUMMY_CONFIG, fetcher as unknown as typeof fetch, 'watch');
+  const connector = createWorkdayConnector(DUMMY_CONFIG, fetcher, 'watch');
   const result = await connector.hydrate({
     connectorId: 'dummy-official-india',
-    sourceExternalId: '/job/456',
+    sourceExternalId: '/job/Mumbai/Financial-Analyst_REQ-123',
     company: 'Dummy Co',
-    title: 'Manager',
-    location: 'London, UK',
+    title: 'Financial Analyst',
+    location: 'Mumbai, India',
     category: null,
     department: null,
-    detailUrl: 'https://dummy.wd3.myworkdayjobs.com/Dummy_Careers/job/456',
+    detailUrl: 'https://dummy.wd3.myworkdayjobs.com/Dummy_Careers/job/Mumbai/Financial-Analyst_REQ-123',
     listingMetadataHash: 'hash',
-    rawMetadata: {}
+    rawMetadata: {},
   });
 
-  assert.equal(result.title, 'Manager');
-  assert.equal(result.employerJobId, '/job/456');
-  assert.equal(result.description, '');
-  assert.equal(result.location, 'London, UK');
-  assert.equal(result.applyUrl, 'https://dummy.wd3.myworkdayjobs.com/Dummy_Careers/job/456/apply');
+  assert.equal(result.connectorId, 'dummy-official-india');
+  assert.equal(result.sourceType, 'official_career');
+  assert.equal(result.employerJobId, 'REQ-123');
+  assert.equal(result.description, '<p>0 to 2 years of experience in financial analysis.</p>');
+  assert.match(result.experienceText, /0 to 2 years/i);
+  assert.equal(result.applyUrl, 'https://dummy.wd3.myworkdayjobs.com/Dummy_Careers/job/Mumbai/Financial-Analyst_REQ-123/apply');
+});
+
+test('turns Workday maintenance HTML into an actionable connector error', async () => {
+  const fetcher = async () => new Response('<html><body class="maintenance-page">Maintenance</body></html>', { status: 500, statusText: 'Internal Server Error' });
+  const connector = createWorkdayConnector(MORNINGSTAR_CONFIG, fetcher, 'watch');
+  const result = await connector.enumerate({ runType: 'watch', detailBatchSize: 10, now: new Date() });
+  assert.equal(result.diagnostic.status, 'failed');
+  assert.match(result.diagnostic.errorSummaries[0], /maintenance/i);
 });

@@ -10,11 +10,14 @@ import { AMEX_CONFIG, KPMG_CONFIG, createOracleConnector } from './oracle.ts';
 import { 
   ACCENTURE_CONFIG, PWC_CONFIG, WELLS_FARGO_CONFIG, DEUTSCHE_BANK_CONFIG, 
   BANK_OF_AMERICA_CONFIG, NATWEST_CONFIG, FIDELITY_CONFIG, GE_HEALTHCARE_CONFIG, 
-  DIAGEO_CONFIG, SP_GLOBAL_CONFIG, MORNINGSTAR_CONFIG,
-  JPMORGAN_CONFIG, MORGAN_STANLEY_CONFIG, PAYPAL_CONFIG, SHELL_CONFIG, SIEMENS_CONFIG, createWorkdayConnector 
+  DIAGEO_CONFIG, MORNINGSTAR_CONFIG,
+  JPMORGAN_CONFIG, MORGAN_STANLEY_CONFIG, PAYPAL_CONFIG, SHELL_CONFIG, createWorkdayConnector 
 } from './workday.ts';
+import { createSpGlobalConnector } from './spglobal.ts';
+import { createDeloitteConnector } from './deloitte.ts';
+import { createSiemensConnector } from './siemens.ts';
 import {
-  AMAZON_CONFIG, MICROSOFT_CONFIG, DELOITTE_CONFIG, HSBC_CONFIG,
+  AMAZON_CONFIG, MICROSOFT_CONFIG, HSBC_CONFIG,
   PIRAMAL_CONFIG, PINE_LABS_CONFIG, ICRA_CONFIG, createFirecrawlConnector
 } from './firecrawl.ts';
 
@@ -49,6 +52,12 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createOracleConnector(KPMG_CONFIG, fetch, 'kpmg-reconcile'),
     createOracleConnector(AMEX_CONFIG, fetch, 'amex-watch'),
     createOracleConnector(AMEX_CONFIG, fetch, 'amex-reconcile'),
+    createSpGlobalConnector(fetch, 'watch'),
+    createSpGlobalConnector(fetch, 'reconcile'),
+    createDeloitteConnector(fetch, 'watch'),
+    createDeloitteConnector(fetch, 'reconcile'),
+    createSiemensConnector(fetch, 'watch'),
+    createSiemensConnector(fetch, 'reconcile'),
     ...[
       ACCENTURE_CONFIG,
       PWC_CONFIG,
@@ -59,13 +68,11 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
       FIDELITY_CONFIG,
       GE_HEALTHCARE_CONFIG,
       DIAGEO_CONFIG,
-      SP_GLOBAL_CONFIG,
       MORNINGSTAR_CONFIG,
       JPMORGAN_CONFIG,
       MORGAN_STANLEY_CONFIG,
       PAYPAL_CONFIG,
-      SHELL_CONFIG,
-      SIEMENS_CONFIG
+      SHELL_CONFIG
     ].flatMap(config => [
       createWorkdayConnector(config, fetch, 'watch'),
       createWorkdayConnector(config, fetch, 'reconcile')
@@ -73,7 +80,6 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     ...[
       AMAZON_CONFIG,
       MICROSOFT_CONFIG,
-      DELOITTE_CONFIG,
       HSBC_CONFIG,
       PIRAMAL_CONFIG,
       PINE_LABS_CONFIG,

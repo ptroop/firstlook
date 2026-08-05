@@ -8,7 +8,7 @@ const FINANCE_METADATA = /\b(?:finance|financial|fp&a|financial planning|account
 const EARLY_CAREER_TITLE = /\b(?:graduate|trainee|intern(?:ship)?|apprentice|analyst|associate|officer|executive|coordinator|specialist|consultant|advisor|researcher)\b/i;
 const GENERIC_TITLE = /^(?:graduate|trainee|intern|apprentice|analyst|associate|officer|executive|coordinator|specialist|consultant|advisor|researcher)(?:\s+[ivx0-9]+)?$/i;
 const EDUCATION_SIGNAL = /\b(?:mba|pgdm|chartered accountant|\bca\b|cfa|commerce|economics|finance|accounting)\b/i;
-const STRONG_NON_FINANCE = /\b(?:software engineering|software development|software (?:engineer|developer)|java developer|python developer|data engineer|engineering|information technology|technology|cybersecurity|human resources|people operations|talent acquisition|marketing|communications|graphic design|product design|facilities|workplace services|customer service)\b/i;
+const STRONG_NON_FINANCE = /\b(?:software engineering|software development|software (?:engineer|developer)|java developer|python developer|data engineer|engineering|information technology|technology|cybersecurity|systems? analyst|human resources|people operations|talent acquisition|marketing|communications|graphic design|product design|facilities|workplace services|customer service)\b/i;
 const MAX_REASONS = 12;
 
 export interface CandidateContext {
@@ -24,6 +24,10 @@ export function selectCandidate(
   const rawMetadata = boundedJsonText(listing.rawMetadata);
   const titleIsStronglyNonFinance = STRONG_NON_FINANCE.test(listing.title);
 
+  if (titleIsStronglyNonFinance) {
+    return { status: 'defer', reasons: ['strong_non_finance_category'] };
+  }
+
   if (FINANCE_METADATA.test(metadata)) reasons.push('finance_metadata');
   if (EARLY_CAREER_TITLE.test(listing.title)) reasons.push('early_career_title');
   if (GENERIC_TITLE.test(listing.title.trim())) reasons.push('generic_title');
@@ -36,10 +40,6 @@ export function selectCandidate(
     if (!listing.category?.trim()) reasons.push('missing_category');
     if (!listing.department?.trim()) reasons.push('missing_department');
     return { status: 'hydrate', reasons: uniqueBounded(reasons) };
-  }
-
-  if (titleIsStronglyNonFinance) {
-    return { status: 'defer', reasons: ['strong_non_finance_category'] };
   }
 
   if (!listing.category?.trim()) reasons.push('missing_category');

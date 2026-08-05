@@ -144,10 +144,10 @@ export function parseTalentBrewResults(html: string, config: TalentBrewConfig): 
 }
 
 export function parseTalentBrewDetail(html: string, detailUrl: string, config: TalentBrewConfig) {
-  const title = firstText(html, ['section4__job-title', 'job-details--title']);
-  const location = firstText(html, ['section4__job-location', 'job-details--location']);
-  const description = htmlToText(classHtml(html, 'ats-description') || classHtml(html, 'job-description'));
-  const applyUrl = attribute(html, 'data-apply-url') || findApplyHref(html);
+  const title = firstText(html, ['section4__job-title', 'job-details--title', 'job-title']) || metaContent(html, 'og:title') || firstHeading(html);
+  const location = firstText(html, ['section4__job-location', 'job-details--location', 'job-location']) || jsonLdLocation(html);
+  const description = htmlToText(classHtml(html, 'ats-description') || classHtml(html, 'job-description') || jsonLdDescription(html) || classHtml(html, 'job-details--description'));
+  const applyUrl = attribute(html, 'data-apply-url') || metaContent(html, 'job-apply-url') || findApplyHref(html);
   const employerJobId = attribute(html, 'data-job-id') || detailUrl.match(/\/(\d+)\/?$/)?.[1] || '';
   const jobCategory = firstText(html, ['section4__job-category', 'job-details--category']);
   const experienceText = description.match(/[^.]*\b(?:\d+\s*(?:-|to)\s*\d+\s+years?|\d+\+?\s+years?|freshers?|no prior experience)[^.]*\.?/i)?.[0]?.trim() || '';
@@ -178,6 +178,41 @@ function firstText(html: string, classNames: string[]): string {
   for (const className of classNames) {
     const value = htmlToText(classHtml(html, className));
     if (value) return value;
+  }
+  return '';
+}
+
+function firstHeading(html: string): string {
+  return htmlToText(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || html.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1] || '');
+}
+
+function metaContent(html: string, name: string): string {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return decodeHtml(html.match(new RegExp(`<meta\\b[^>]*(?:name|property|itemprop)=["']${escaped}["'][^>]*content=["']([^"']+)["']`, 'i'))?.[1] || '');
+}
+
+function jsonLdDescription(html: string): string {
+  for (const block of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const parsed = JSON.parse(block[1]);
+      const candidates = Array.isArray(parsed) ? parsed : [parsed];
+      const value = candidates.find((item) => item && typeof item.description === 'string')?.description;
+      if (value) return value;
+    } catch { /* malformed JSON-LD is not fatal when visible markup is available */ }
+  }
+  return '';
+}
+
+function jsonLdLocation(html: string): string {
+  for (const block of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const parsed = JSON.parse(block[1]);
+      const candidates = Array.isArray(parsed) ? parsed : [parsed];
+      const location = candidates.find((item) => item?.jobLocation)?.jobLocation;
+      const values = Array.isArray(location) ? location : [location];
+      const text = values.map((item) => item?.address?.addressLocality || item?.address?.addressRegion || '').filter(Boolean).join(', ');
+      if (text) return text;
+    } catch { /* malformed JSON-LD is not fatal when visible markup is available */ }
   }
   return '';
 }

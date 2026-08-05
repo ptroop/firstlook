@@ -146,6 +146,47 @@ test('does not classify a software role as finance from generic bank boilerplate
   assert.equal(result.matchTier, 'not_targeted');
 });
 
+test('hard-excludes technical titles before reading finance boilerplate', () => {
+  const technicalTitles = [
+    'Technology Risk Analyst',
+    'Data Engineer - Financial Services',
+    'Software Developer - Banking Platform',
+    'Systems Analyst - Finance Technology',
+  ];
+
+  for (const title of technicalTitles) {
+    const result = classifyDeterministically({
+      title,
+      location: 'Bengaluru, India',
+      description: 'Build technology for a global financial services company.',
+      jobCategory: 'Technology',
+      experienceText: '0-2 years',
+    });
+
+    assert.equal(result.financeStatus, 'unrelated', title);
+    assert.equal(result.matchTier, 'not_targeted', title);
+  }
+});
+
+test('keeps finance and finance-context operations analysts eligible', () => {
+  const cases = [
+    { title: 'Finance Analyst', description: 'Prepare financial reporting and variance analysis.', jobCategory: 'Finance' },
+    { title: 'Operations Analyst', description: 'Support reconciliation and investment operations.', jobCategory: 'Operations' },
+    { title: 'Financial Data Analyst', description: 'Analyze credit and financial statements.', jobCategory: 'Credit Research' },
+  ];
+
+  for (const input of cases) {
+    const result = classifyDeterministically({
+      ...input,
+      location: 'Mumbai, India',
+      experienceText: '0-2 years',
+    });
+
+    assert.equal(result.financeStatus, 'exact', input.title);
+    assert.equal(result.matchTier, 'exact', input.title);
+  }
+});
+
 test('does not surface an exploratory talent-pool page as a live vacancy', () => {
   const result = classifyDeterministically({
     title: 'All positions in Financial Operations',

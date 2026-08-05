@@ -1,114 +1,200 @@
-// backend/supabase/functions/first-look-api/connectors/workday.ts
-import type { InventoryListing, JobConnectorResult, HydratedJob } from '../types.ts';
-import type { OfficialJobConnector } from './contract.ts';
+import type {
+  ConnectorRunRequest,
+  HydratedSourceObservation,
+  InventoryListing,
+  JobFetch,
+} from '../types.ts';
+import type { OfficialJobConnector, InventoryResult } from './contract.ts';
 
 export interface WorkdayConfig {
   companyName: string;
   baseUrl: string;
+  tenant: string;
+  siteName: string;
   connectorIdPrefix: string;
 }
 
-export const ACCENTURE_CONFIG: WorkdayConfig = { companyName: 'Accenture', baseUrl: 'https://accenture.wd3.myworkdayjobs.com/AccentureCareers', connectorIdPrefix: 'accenture' };
-export const PWC_CONFIG: WorkdayConfig = { companyName: 'PwC', baseUrl: 'https://pwc.wd3.myworkdayjobs.com/Global_Careers', connectorIdPrefix: 'pwc' };
-export const WELLS_FARGO_CONFIG: WorkdayConfig = { companyName: 'Wells Fargo', baseUrl: 'https://wellsfargo.wd3.myworkdayjobs.com/wellsfargo', connectorIdPrefix: 'wells-fargo' };
-export const DEUTSCHE_BANK_CONFIG: WorkdayConfig = { companyName: 'Deutsche Bank', baseUrl: 'https://db.wd3.myworkdayjobs.com/DBWebsite', connectorIdPrefix: 'deutsche-bank' };
-export const BANK_OF_AMERICA_CONFIG: WorkdayConfig = { companyName: 'Bank of America', baseUrl: 'https://bankofamerica.wd1.myworkdayjobs.com/campus', connectorIdPrefix: 'bank-of-america' };
-export const NATWEST_CONFIG: WorkdayConfig = { companyName: 'NatWest', baseUrl: 'https://natwestgroup.wd3.myworkdayjobs.com/NatWestGroupCareers', connectorIdPrefix: 'natwest' };
-export const FIDELITY_CONFIG: WorkdayConfig = { companyName: 'Fidelity', baseUrl: 'https://fmr.wd1.myworkdayjobs.com/careers', connectorIdPrefix: 'fidelity' };
-export const GE_HEALTHCARE_CONFIG: WorkdayConfig = { companyName: 'GE HealthCare', baseUrl: 'https://gehealthcare.wd1.myworkdayjobs.com/gehc-external-careers', connectorIdPrefix: 'ge-healthcare' };
-export const DIAGEO_CONFIG: WorkdayConfig = { companyName: 'Diageo', baseUrl: 'https://diageo.wd3.myworkdayjobs.com/Diageo_Careers', connectorIdPrefix: 'diageo' };
-export const SP_GLOBAL_CONFIG: WorkdayConfig = { companyName: 'S&P Global', baseUrl: 'https://spglobal.wd5.myworkdayjobs.com/SPGlobal_Careers', connectorIdPrefix: 'sp-global' };
-export const MORNINGSTAR_CONFIG: WorkdayConfig = { companyName: 'Morningstar', baseUrl: 'https://morningstar.wd5.myworkdayjobs.com/Morningstar_Careers', connectorIdPrefix: 'morningstar' };
-export const JPMORGAN_CONFIG: WorkdayConfig = { companyName: 'JPMorgan Chase', baseUrl: 'https://jpmorgan.wd5.myworkdayjobs.com/JPMorgan_Careers', connectorIdPrefix: 'jpmorgan' };
-export const MORGAN_STANLEY_CONFIG: WorkdayConfig = { companyName: 'Morgan Stanley', baseUrl: 'https://morganstanley.wd5.myworkdayjobs.com/Morgan_Stanley_Careers', connectorIdPrefix: 'morgan-stanley' };
-export const PAYPAL_CONFIG: WorkdayConfig = { companyName: 'PayPal', baseUrl: 'https://paypal.wd1.myworkdayjobs.com/PayPal', connectorIdPrefix: 'paypal' };
-export const SHELL_CONFIG: WorkdayConfig = { companyName: 'Shell', baseUrl: 'https://shell.wd3.myworkdayjobs.com/Shell', connectorIdPrefix: 'shell' };
-export const SIEMENS_CONFIG: WorkdayConfig = { companyName: 'Siemens', baseUrl: 'https://siemens.wd3.myworkdayjobs.com/External_Careers', connectorIdPrefix: 'siemens' };
+export const ACCENTURE_CONFIG: WorkdayConfig = { companyName: 'Accenture', baseUrl: 'https://accenture.wd3.myworkdayjobs.com/AccentureCareers', tenant: 'accenture', siteName: 'AccentureCareers', connectorIdPrefix: 'accenture' };
+export const PWC_CONFIG: WorkdayConfig = { companyName: 'PwC', baseUrl: 'https://pwc.wd3.myworkdayjobs.com/Global_Careers', tenant: 'pwc', siteName: 'Global_Careers', connectorIdPrefix: 'pwc' };
+export const WELLS_FARGO_CONFIG: WorkdayConfig = { companyName: 'Wells Fargo', baseUrl: 'https://wellsfargo.wd3.myworkdayjobs.com/wellsfargo', tenant: 'wellsfargo', siteName: 'wellsfargo', connectorIdPrefix: 'wells-fargo' };
+export const DEUTSCHE_BANK_CONFIG: WorkdayConfig = { companyName: 'Deutsche Bank', baseUrl: 'https://db.wd3.myworkdayjobs.com/DBWebsite', tenant: 'db', siteName: 'DBWebsite', connectorIdPrefix: 'deutsche-bank' };
+export const BANK_OF_AMERICA_CONFIG: WorkdayConfig = { companyName: 'Bank of America', baseUrl: 'https://bankofamerica.wd1.myworkdayjobs.com/campus', tenant: 'bankofamerica', siteName: 'campus', connectorIdPrefix: 'bank-of-america' };
+export const NATWEST_CONFIG: WorkdayConfig = { companyName: 'NatWest', baseUrl: 'https://natwestgroup.wd3.myworkdayjobs.com/NatWestGroupCareers', tenant: 'natwestgroup', siteName: 'NatWestGroupCareers', connectorIdPrefix: 'natwest' };
+export const FIDELITY_CONFIG: WorkdayConfig = { companyName: 'Fidelity', baseUrl: 'https://fmr.wd1.myworkdayjobs.com/FidelityCareers', tenant: 'fmr', siteName: 'FidelityCareers', connectorIdPrefix: 'fidelity' };
+export const GE_HEALTHCARE_CONFIG: WorkdayConfig = { companyName: 'GE HealthCare', baseUrl: 'https://gehealthcare.wd1.myworkdayjobs.com/gehc-external-careers', tenant: 'gehealthcare', siteName: 'gehc-external-careers', connectorIdPrefix: 'ge-healthcare' };
+export const DIAGEO_CONFIG: WorkdayConfig = { companyName: 'Diageo', baseUrl: 'https://diageo.wd3.myworkdayjobs.com/Diageo_Careers', tenant: 'diageo', siteName: 'Diageo_Careers', connectorIdPrefix: 'diageo' };
+export const SP_GLOBAL_CONFIG: WorkdayConfig = { companyName: 'S&P Global', baseUrl: 'https://spglobal.wd5.myworkdayjobs.com/SPGlobal_Careers', tenant: 'spglobal', siteName: 'SPGlobal_Careers', connectorIdPrefix: 'sp-global' };
+export const MORNINGSTAR_CONFIG: WorkdayConfig = { companyName: 'Morningstar', baseUrl: 'https://morningstar.wd5.myworkdayjobs.com/morningstar', tenant: 'morningstar', siteName: 'morningstar', connectorIdPrefix: 'morningstar' };
+export const JPMORGAN_CONFIG: WorkdayConfig = { companyName: 'JPMorgan Chase', baseUrl: 'https://jpmorgan.wd5.myworkdayjobs.com/JPMorgan_Careers', tenant: 'jpmorgan', siteName: 'JPMorgan_Careers', connectorIdPrefix: 'jpmorgan' };
+export const MORGAN_STANLEY_CONFIG: WorkdayConfig = { companyName: 'Morgan Stanley', baseUrl: 'https://morganstanley.wd5.myworkdayjobs.com/Morgan_Stanley_Careers', tenant: 'morganstanley', siteName: 'Morgan_Stanley_Careers', connectorIdPrefix: 'morgan-stanley' };
+export const PAYPAL_CONFIG: WorkdayConfig = { companyName: 'PayPal', baseUrl: 'https://paypal.wd1.myworkdayjobs.com/jobs', tenant: 'paypal', siteName: 'jobs', connectorIdPrefix: 'paypal' };
+export const SHELL_CONFIG: WorkdayConfig = { companyName: 'Shell', baseUrl: 'https://shell.wd3.myworkdayjobs.com/ShellCareers', tenant: 'shell', siteName: 'ShellCareers', connectorIdPrefix: 'shell' };
+export const SIEMENS_CONFIG: WorkdayConfig = { companyName: 'Siemens', baseUrl: 'https://siemens.wd3.myworkdayjobs.com/External_Careers', tenant: 'siemens', siteName: 'External_Careers', connectorIdPrefix: 'siemens' };
 
-const INDIA_LOCATIONS = /\b(?:india|bengaluru|bangalore|gurgaon|gurugram|mumbai|pune|hyderabad|delhi|noida|chennai)\b/i;
+const INDIA_LOCATIONS = /\b(?:india|bengaluru|bangalore|gurgaon|gurugram|mumbai|pune|hyderabad|delhi|noida|chennai|kolkata|coimbatore|ahmedabad|jaipur|thiruvananthapuram|kochi|chandigarh)\b/i;
+const REQUEST_TIMEOUT_MS = 20_000;
+const PAGE_SIZE = 20;
+const MAX_PAGES = 500;
 
 export function createWorkdayConnector(
   config: WorkdayConfig,
-  fetcher: typeof fetch,
-  runType: 'watch' | 'reconcile'
+  fetcher: JobFetch = fetch,
+  runType: 'watch' | 'reconcile',
 ): OfficialJobConnector {
   const connectorId = `${config.connectorIdPrefix}-official-india`;
   const scanGroup = `${config.connectorIdPrefix}-${runType}`;
 
   return {
     connectorId,
+    connectorVersion: 'workday-cxs-v2',
     scanGroup,
     company: config.companyName,
-    
-    enumerate: async () => {
-      const startedAt = new Date().toISOString();
-      let offset = 0;
-      const limit = 20;
-      const listings: InventoryListing[] = [];
-      let totalDiscovered = 0;
-
-      while (true) {
-        const body = JSON.stringify({ limit, offset, appliedFacets: {}, searchText: "" });
-        const res = await fetcher(`${config.baseUrl}/wday/cxs/client/customUI/v1.2/search`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body
-        });
-        if (!res.ok) throw new Error(`Workday fetch failed: ${res.status} ${res.statusText}`);
-        const data = await res.json();
-        const postings = data.jobPostings || [];
-        if (postings.length === 0) break;
-
-        for (const job of postings) {
-          totalDiscovered++;
-          if (INDIA_LOCATIONS.test(job.locationsText || '')) {
-            listings.push({
-              connectorId,
-              sourceExternalId: job.externalPath,
-              company: config.companyName,
-              title: job.title,
-              location: job.locationsText || 'India',
-              category: null,
-              department: null,
-              detailUrl: `${config.baseUrl}${job.externalPath}`,
-              listingMetadataHash: job.externalPath,
-              rawMetadata: job
-            });
-          }
-        }
-        
-        offset += limit;
-        if (postings.length < limit) break;
-      }
-
-      return {
-        listings,
-        diagnostic: {
-          company: config.companyName,
-          status: 'complete',
-          discoveredCount: totalDiscovered,
-          fetchedCount: Math.ceil(totalDiscovered / limit),
-          matchingCount: listings.length,
-          excluded: { 'Non-India Location': totalDiscovered - listings.length },
-          startedAt,
-          finishedAt: new Date().toISOString()
-        }
-      };
+    async enumerate(request) {
+      return enumerateWorkday(config, connectorId, fetcher, request);
     },
-
-    hydrate: async (listing) => {
-      const res = await fetcher(`${config.baseUrl}/wday/cxs/client/customUI/v1.2/jobPosting${listing.sourceExternalId}`);
-      if (!res.ok) throw new Error(`Failed to hydrate Workday job: ${res.status} ${res.statusText}`);
-      const data = await res.json();
-      
-      const description = data.jobPostingInfo?.jobDescription || '';
+    async hydrate(listing) {
+      const detailUrl = publicJobUrl(config, listing.sourceExternalId);
+      const data = await fetchJson(fetcher, `${apiBaseUrl(config)}${listing.sourceExternalId}`);
+      const info = isRecord(data.jobPostingInfo) ? data.jobPostingInfo : {};
+      const title = stringValue(info.title) || listing.title;
+      const location = stringValue(info.location) || listing.location || '';
+      const description = stringValue(info.jobDescription);
+      const employerJobId = stringValue(info.jobReqId) || stringValue(info.jobPostingId) || listing.sourceExternalId;
+      if (!title || !location || !description) {
+        throw new Error(`Missing required ${config.companyName} Workday job fields`);
+      }
+      const applyUrl = stringValue(info.externalUrl) ? `${detailUrl}/apply` : `${detailUrl}/apply`;
       return {
-        title: listing.title,
-        employerJobId: data.jobPostingInfo?.reqId || listing.sourceExternalId,
+        connectorId,
+        sourceType: 'official_career',
+        sourceName: `${config.companyName} Careers`,
+        sourceExternalId: listing.sourceExternalId,
+        company: config.companyName,
+        employerJobId,
+        listingUrl: detailUrl,
+        detailUrl,
+        applyUrl,
+        isOfficial: true,
+        title,
+        location,
         description,
-        location: listing.location,
-        applyUrl: `${config.baseUrl}${listing.sourceExternalId}/apply`
-      };
-    }
+        experienceText: extractExperience(description),
+        jobCategory: listing.category || '',
+        postedAt: parsePostedDate(stringValue(info.startDate) || stringValue(info.postedOn)),
+        listingMetadataHash: listing.listingMetadataHash,
+        contentHash: hashText(`${title}\u0000${location}\u0000${description}`),
+        rawMetadata: {
+          jobPostingId: stringValue(info.jobPostingId),
+          jobPostingSiteId: stringValue(info.jobPostingSiteId),
+          canApply: info.canApply === true,
+        },
+      } satisfies HydratedSourceObservation;
+    },
   };
 }
+
+async function enumerateWorkday(
+  config: WorkdayConfig,
+  connectorId: string,
+  fetcher: JobFetch,
+  request: ConnectorRunRequest,
+): Promise<InventoryResult> {
+  const listings: InventoryListing[] = [];
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  let total: number | null = null;
+  let offset = 0;
+  let pagesFetched = 0;
+
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const url = `${apiBaseUrl(config)}/jobs`;
+    try {
+      const data = await fetchJson(fetcher, url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ appliedFacets: {}, limit: PAGE_SIZE, offset, searchText: '' }),
+      });
+      const postings = Array.isArray(data.jobPostings) ? data.jobPostings : [];
+      const pageTotal = numberValue(data.total) ?? numberValue(data.totalCount);
+      if (pageTotal !== null && (total === null || pageTotal > 0)) total = pageTotal;
+      pagesFetched += 1;
+
+      for (const job of postings) {
+        const externalPath = stringValue(job.externalPath);
+        const title = stringValue(job.title);
+        const location = stringValue(job.locationsText);
+        if (!externalPath || !title || !location || !INDIA_LOCATIONS.test(location) || seen.has(externalPath)) continue;
+        seen.add(externalPath);
+        listings.push({
+          connectorId,
+          sourceExternalId: externalPath,
+          company: config.companyName,
+          title,
+          location,
+          category: null,
+          department: null,
+          detailUrl: publicJobUrl(config, externalPath),
+          listingMetadataHash: hashText([externalPath, title, location, stringValue(job.postedOn)].join('\u0000')),
+          rawMetadata: {},
+        });
+      }
+
+      offset += postings.length;
+      if (postings.length === 0 || (total !== null && offset >= total) || postings.length < PAGE_SIZE) break;
+    } catch (error) {
+      errors.push(errorSummary(url, error));
+      break;
+    }
+  }
+
+  const expectedPages = total === null ? null : Math.ceil(total / PAGE_SIZE);
+  const status = errors.length > 0 ? (pagesFetched > 0 ? 'partial' : 'failed') : 'complete';
+  if (total !== null && pagesFetched < expectedPages! && errors.length === 0) {
+    errors.push(`Fetched ${pagesFetched} of ${expectedPages} advertised Workday pages`);
+  }
+  return {
+    listings,
+    diagnostic: {
+      status,
+      reportedTotal: total,
+      pagesExpected: expectedPages,
+      pagesFetched,
+      errorSummaries: errors,
+    },
+  };
+}
+
+function apiBaseUrl(config: WorkdayConfig): string {
+  const origin = new URL(config.baseUrl).origin;
+  return `${origin}/wday/cxs/${encodeURIComponent(config.tenant)}/${encodeURIComponent(config.siteName)}`;
+}
+
+function publicJobUrl(config: WorkdayConfig, externalPath: string): string {
+  return `${config.baseUrl.replace(/\/$/, '')}/${externalPath.replace(/^\//, '')}`;
+}
+
+async function fetchJson(fetcher: JobFetch, url: string, init: RequestInit = {}): Promise<Record<string, any>> {
+  const response = await fetcher(url, { ...init, signal: init.signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { 'User-Agent': 'first-look-job-monitor/1.0 (+personal use)', ...(init.headers || {}) } });
+  const text = await response.text();
+  if (!response.ok) {
+    if (/maintenance-page|maintenance|temporarily unavailable/i.test(text)) throw new Error(`Workday maintenance page (${response.status})`);
+    throw new Error(`Workday fetch failed: ${response.status} ${response.statusText}`);
+  }
+  if (/^\s*</.test(text) || /maintenance-page|temporarily unavailable/i.test(text)) throw new Error('Workday returned a maintenance page instead of JSON');
+  try { return JSON.parse(text) as Record<string, any>; } catch { throw new Error('Workday returned invalid JSON'); }
+}
+
+function extractExperience(description: string): string {
+  return description.match(/[^.]*\b(?:\d+\s*(?:-|to)\s*\d+\s+years?|\d+\+?\s+years?|freshers?|no prior experience)[^.]*\.?/i)?.[0]?.trim() || '';
+}
+
+function parsePostedDate(value: string): string | null {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
+}
+
+function isRecord(value: unknown): value is Record<string, any> { return Boolean(value) && typeof value === 'object' && !Array.isArray(value); }
+function stringValue(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
+function numberValue(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) ? value : null; }
+function hashText(value: string): string { let hash = 2_166_136_261; for (let index = 0; index < value.length; index += 1) { hash ^= value.charCodeAt(index); hash = Math.imul(hash, 16_777_619); } return (hash >>> 0).toString(16).padStart(8, '0'); }
+function errorSummary(url: string, error: unknown): string { return `${url}: ${error instanceof Error ? error.message : 'request failed'}`.slice(0, 500); }

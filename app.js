@@ -1,42 +1,8 @@
-const companies = [
-  ['Goldman Sachs', 'https://www.goldmansachs.com/careers'],
-  ['JPMorgan Chase', 'https://careers.jpmorgan.com/global/en/home'],
-  ["Moody's", 'https://careers.moodys.com/en/location/india-jobs/49841/1269750/2/1'],
-  ['KPMG', 'https://kpmg.com/in/en/careers.html'],
-  ['Deloitte', 'https://southasiacareers.deloitte.com/'],
-  ['BlackRock', 'https://careers.blackrock.com/job/'],
-  ['HSBC', 'https://www.hsbc.com/careers/find-a-job'],
-  ['D. E. Shaw', 'https://www.deshawindia.com/careers/work-with-us'],
-  ['Accenture', 'https://www.accenture.com/in-en/careers/jobsearch'],
-  ['PwC', 'https://www.pwc.in/careers/job-search.html'],
-  ['Wells Fargo', 'https://www.wellsfargojobs.com/'],
-  ['Citi', 'https://jobs.citi.com/location/india-jobs/287/1269750/2/1'],
-  ['Barclays', 'https://search.jobs.barclays/'],
-  ['Deutsche Bank', 'https://careers.db.com/professionals/search-roles/index?language_id=1'],
-  ['Morgan Stanley', 'https://www.morganstanley.com/careers/career-opportunities-search/'],
-  ['Bank of America', 'https://careers.bankofamerica.com/en-us/job-search'],
-  ['American Express', 'https://www.americanexpress.com/en-us/careers/'],
-  ['PayPal', 'https://careers.pypl.com/'],
-  ['NatWest', 'https://jobs.natwestgroup.com/'],
-  ['Piramal Finance', 'https://www.piramalfinance.com/careers'],
-  ['Fidelity', 'https://jobs.fidelity.com/in/'],
-  ['Amazon', 'https://www.amazon.jobs/en/search?country=IND&loc_query=India'],
-  ['Microsoft', 'https://jobs.careers.microsoft.com/global/en/search?q=&lc=India'],
-  ['Shell', 'https://www.shell.com/careers/search-and-apply.html'],
-  ['Siemens', 'https://jobs.siemens.com/careers'],
-  ['GE HealthCare', 'https://jobs.gehealthcare.com/global/en'],
-  ['Diageo', 'https://www.diageo.com/en/careers'],
-  ['Razorpay', 'https://razorpay.com/careers/'],
-  ['Pine Labs', 'https://www.pinelabs.com/careers'],
-  ['S&P Global', 'https://careers.spglobal.com/jobs'],
-  ['Morningstar', 'https://www.morningstar.com/company/careers'],
-  ['ICRA', 'https://www.icra.in/careers'],
-];
-
 const fixture = {
   jobs: [
     {
       id: 'citi_123', company: 'Citi', title: 'Model Validation Analyst', location: 'Mumbai, India',
+      description: 'Requires strong skills in Python, SQL, and Financial Modeling.',
       applyUrl: 'https://citi.wd5.myworkdayjobs.com/job/123/apply', applySourceType: 'official_career',
       officialVerified: true, matchTier: 'exact', eligibilityNote: null,
       newestVerificationAt: new Date(Date.now() - 18 * 60 * 1000).toISOString(), sourceHealthState: 'complete',
@@ -47,6 +13,7 @@ const fixture = {
     },
     {
       id: 'portal_456', company: 'BlackRock', title: 'Financial Analyst', location: 'Gurugram, India',
+      description: 'Experience with Excel and Tableau is a must.',
       applyUrl: 'https://www.linkedin.com/jobs/view/456', applySourceType: 'linkedin', officialVerified: false,
       verificationNote: 'Official listing not yet verified', matchTier: 'exact', eligibilityNote: null,
       newestVerificationAt: new Date(Date.now() - 42 * 60 * 1000).toISOString(), sourceHealthState: 'unknown',
@@ -54,10 +21,19 @@ const fixture = {
     },
     {
       id: 'moodys_789', company: "Moody's", title: 'Senior Financial Data Analyst', location: 'Bengaluru, India',
+      description: 'Looking for experts in SQL, Excel, and VBA.',
       applyUrl: 'https://careers.moodys.com/en/job/789', applySourceType: 'official_career', officialVerified: true,
       matchTier: 'possible', eligibilityNote: 'Experience or relevance unconfirmed',
       newestVerificationAt: new Date(Date.now() - 75 * 60 * 1000).toISOString(), sourceHealthState: 'complete',
       sources: [{ type: 'official_career', name: "Moody's Careers", listingUrl: 'https://careers.moodys.com/en/job/789', official: true, verifiedAt: new Date().toISOString() }],
+    },
+    {
+      id: 'moodys_790', company: "Moody's", title: 'Senior Financial Data Analyst', location: 'Noida, India',
+      description: 'Looking for experts in SQL, Python.',
+      applyUrl: 'https://careers.moodys.com/en/job/790', applySourceType: 'official_career', officialVerified: true,
+      matchTier: 'possible', eligibilityNote: 'Experience or relevance unconfirmed',
+      newestVerificationAt: new Date(Date.now() - 75 * 60 * 1000).toISOString(), sourceHealthState: 'complete',
+      sources: [{ type: 'official_career', name: "Moody's Careers", listingUrl: 'https://careers.moodys.com/en/job/790', official: true, verifiedAt: new Date().toISOString() }],
     },
   ],
   coverage: {
@@ -69,7 +45,6 @@ const fixture = {
   },
 };
 
-const companyGrid = document.querySelector('#company-grid');
 const jobList = document.querySelector('#job-list');
 const matchesEmpty = document.querySelector('#matches-empty');
 const matchesMeta = document.querySelector('#matches-meta');
@@ -81,13 +56,23 @@ const VAPID_PUBLIC_KEY = window.JOB_MONITOR_VAPID_PUBLIC_KEY || '';
 const FIXTURE_MODE = new URLSearchParams(window.location.search).get('fixture') === '1';
 let toastTimer;
 
-function renderCompanies() {
-  companyGrid.innerHTML = companies.map(([name, url]) => `
-    <article class="company-item">
-      <h3>${escapeHtml(name)}</h3>
-      <a class="source-link" href="${safeUrl(url)}" target="_blank" rel="noreferrer">Career page</a>
-    </article>
-  `).join('');
+const SKILL_KEYWORDS = [
+  'Python', 'SQL', 'Excel', 'AWS', 'Financial Modeling', 'Tableau', 
+  'Power BI', 'Machine Learning', 'C++', 'Java', 'Bloomberg', 'R', 
+  'GCP', 'Azure', 'Snowflake', 'Looker', 'Alteryx', 'VBA'
+];
+
+function extractSkills(text) {
+  if (!text) return [];
+  const skills = [];
+  const lowerText = text.toLowerCase();
+  for (const kw of SKILL_KEYWORDS) {
+    const regex = new RegExp(`\\b${kw.replace(/[+]/g, '\\$&')}\\b`, 'i');
+    if (regex.test(lowerText)) {
+      skills.push(kw);
+    }
+  }
+  return skills.slice(0, 5);
 }
 
 function renderJobs(jobs) {
@@ -99,41 +84,80 @@ function renderJobs(jobs) {
   matchesEmpty.hidden = true;
   jobList.hidden = false;
   matchesMeta.textContent = `${jobs.length} ${jobs.length === 1 ? 'role' : 'roles'}`;
-  jobList.innerHTML = jobs.map((job) => {
-    const sources = Array.isArray(job.sources) ? job.sources : [];
-    const applyUrl = safeUrl(job.applyUrl);
-    const statusBadges = [
-      `<span class="badge badge-match">${job.matchTier === 'exact' ? 'Strong match' : 'Check match'}</span>`,
-      job.officialVerified
-        ? '<span class="badge">Official source</span>'
-        : '<span class="badge badge-warning">Official not verified</span>',
-      ...unique(sources.filter((source) => !source.official).map((source) => `<span class="badge">${escapeHtml(sourceLabel(source.type))}</span>`)),
-    ].join('');
-    const sourceLinks = sources.map((source) => {
-      const url = safeUrl(source.detailUrl || source.listingUrl || source.applyUrl);
-      if (!url) return '';
-      return `<a href="${url}" target="_blank" rel="noreferrer"><span>${escapeHtml(source.name || sourceLabel(source.type))}</span><small>${source.official ? 'Official' : 'Portal'} / ${escapeHtml(formatAge(source.verifiedAt))}</small></a>`;
+
+  const byCompany = {};
+  for (const job of jobs) {
+    if (!byCompany[job.company]) byCompany[job.company] = [];
+    byCompany[job.company].push(job);
+  }
+
+  const sortedCompanies = Object.keys(byCompany).sort((a, b) => a.localeCompare(b));
+
+  jobList.innerHTML = sortedCompanies.map(company => {
+    const companyJobs = byCompany[company];
+    const headerHtml = `
+      <div class="company-category-header" onclick="this.parentElement.classList.toggle('is-expanded')">
+        <div class="company-category-info">
+          <h3>${escapeHtml(company)}</h3>
+          <span class="vacancy-count">${companyJobs.length} ${companyJobs.length === 1 ? 'vacancy' : 'vacancies'}</span>
+        </div>
+        <div class="company-category-chevron">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+      </div>
+    `;
+
+    const jobsHtml = companyJobs.map(job => {
+      const sources = Array.isArray(job.sources) ? job.sources : [];
+      const applyUrl = safeUrl(job.applyUrl);
+      const statusBadges = [
+        `<span class="badge badge-match">${job.matchTier === 'exact' ? 'Strong match' : 'Check match'}</span>`,
+        job.officialVerified
+          ? '<span class="badge">Official source</span>'
+          : '<span class="badge badge-warning">Official not verified</span>',
+        ...unique(sources.filter((source) => !source.official).map((source) => `<span class="badge">${escapeHtml(sourceLabel(source.type))}</span>`)),
+      ].join('');
+
+      const extractedSkills = extractSkills(`${job.title} ${job.description || ''}`);
+      const skillsHtml = extractedSkills.length > 0 
+        ? `<div class="badge-row skills-row" style="margin-top: 14px;">${extractedSkills.map(s => `<span class="badge badge-skill">${escapeHtml(s)}</span>`).join('')}</div>`
+        : '';
+
+      const sourceLinks = sources.map((source) => {
+        const url = safeUrl(source.detailUrl || source.listingUrl || source.applyUrl);
+        if (!url) return '';
+        return `<a href="${url}" target="_blank" rel="noreferrer"><span>${escapeHtml(source.name || sourceLabel(source.type))}</span><small>${source.official ? 'Official' : 'Portal'} / ${escapeHtml(formatAge(source.verifiedAt))}</small></a>`;
+      }).join('');
+      const note = job.eligibilityNote || job.verificationNote;
+
+      return `
+        <article class="job-card">
+          <div class="job-main">
+            <h3>${escapeHtml(job.title)}</h3>
+            <p class="job-location">${escapeHtml(job.location || 'Location not listed')}</p>
+            <div class="badge-row">${statusBadges}</div>
+            ${skillsHtml}
+            ${note ? `<p class="job-note">${escapeHtml(note)}</p>` : ''}
+          </div>
+          <div class="job-actions">
+            <span class="verified-time">Checked ${escapeHtml(formatAge(job.newestVerificationAt))}</span>
+            ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">Apply</a>` : '<span class="apply-unavailable">Apply link pending</span>'}
+          </div>
+          <details class="source-details">
+            <summary>Sources (${sources.length})</summary>
+            <div class="source-list">${sourceLinks || '<span>No active source link</span>'}</div>
+          </details>
+        </article>
+      `;
     }).join('');
-    const note = job.eligibilityNote || job.verificationNote;
 
     return `
-      <article class="job-card">
-        <div class="job-main">
-          <p class="job-company">${escapeHtml(job.company)}</p>
-          <h3>${escapeHtml(job.title)}</h3>
-          <p class="job-location">${escapeHtml(job.location || 'Location not listed')}</p>
-          <div class="badge-row">${statusBadges}</div>
-          ${note ? `<p class="job-note">${escapeHtml(note)}</p>` : ''}
+      <div class="company-category">
+        ${headerHtml}
+        <div class="company-jobs-list">
+          ${jobsHtml}
         </div>
-        <div class="job-actions">
-          <span class="verified-time">Checked ${escapeHtml(formatAge(job.newestVerificationAt))}</span>
-          ${applyUrl ? `<a class="button button-dark" href="${applyUrl}" target="_blank" rel="noreferrer">Apply</a>` : '<span class="apply-unavailable">Apply link pending</span>'}
-        </div>
-        <details class="source-details">
-          <summary>Sources (${sources.length})</summary>
-          <div class="source-list">${sourceLinks || '<span>No active source link</span>'}</div>
-        </details>
-      </article>
+      </div>
     `;
   }).join('');
 }
@@ -148,7 +172,14 @@ function renderCoverage(payload) {
     return;
   }
 
-  coverageMeta.textContent = `${sources.length} verified ${sources.length === 1 ? 'connector' : 'connectors'}`;
+  const hasErrors = sources.some(s => s.status === 'failed' || s.status === 'anomalous');
+  const hasBacklog = sources.some(s => s.backlog > 0);
+  const healthDot = document.getElementById('health-dot');
+  if (healthDot) {
+    healthDot.className = 'health-dot ' + (hasErrors ? 'error' : (hasBacklog ? 'warning' : 'success'));
+  }
+
+  coverageMeta.textContent = `${sources.length} verified ${sources.length === 1 ? 'source' : 'sources'}`;
   coverageList.innerHTML = sources.map((source) => {
     const status = source.latestStatus || 'unknown';
     const progress = source.reconcile || source.watch;
@@ -181,6 +212,8 @@ function showFeedState(title, message, meta) {
 }
 
 function showCoverageError() {
+  const healthDot = document.getElementById('health-dot');
+  if (healthDot) healthDot.className = 'health-dot error';
   coverageMeta.textContent = 'Connection error';
   coverageList.innerHTML = '<p class="coverage-empty">Source health is temporarily unavailable. Existing job cards are unchanged.</p>';
 }
@@ -308,6 +341,5 @@ document.addEventListener('click', async (event) => {
 });
 
 window.FirstLookUI = { renderJobs, renderCoverage, safeUrl };
-renderCompanies();
 loadData();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});

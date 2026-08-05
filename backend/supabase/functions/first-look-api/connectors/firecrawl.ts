@@ -62,17 +62,18 @@ export function createFirecrawlConnector(
     company: config.companyName,
     scanGroup,
     async enumerate(_request: ConnectorRunRequest) {
+      if (!firecrawlApiKey.trim()) throw new Error(`${config.companyName} Firecrawl connector is not configured`);
       const markdown = await scrapeUrl(config.careerSearchUrl, firecrawlApiKey, fetcher);
       const listings = extractListingsFromMarkdown(markdown, config, connectorId);
       
       return {
         listings,
         diagnostic: {
-          status: 'complete',
+          status: listings.length > 0 ? 'complete' : 'anomalous',
           reportedTotal: listings.length,
           pagesExpected: 1,
           pagesFetched: 1,
-          errorSummaries: [],
+          errorSummaries: listings.length > 0 ? [] : [`${config.companyName}: Firecrawl returned no India job links from the configured career page`],
         },
       } satisfies InventoryResult;
     },
@@ -83,6 +84,8 @@ export function createFirecrawlConnector(
       
       const markdown = await scrapeUrl(listing.detailUrl, firecrawlApiKey, fetcher);
       
+      const applyUrl = extractApplyUrl(markdown, listing.detailUrl);
+      if (!applyUrl) throw new Error(`${config.companyName}: role page did not expose a direct Apply URL`);
       return {
         connectorId,
         sourceType: 'official_career',
@@ -92,7 +95,7 @@ export function createFirecrawlConnector(
         employerJobId: listing.sourceExternalId,
         listingUrl: listing.detailUrl,
         detailUrl: listing.detailUrl,
-        applyUrl: listing.detailUrl,
+        applyUrl,
         isOfficial: true,
         title: listing.title,
         location: listing.location || 'India',
@@ -139,20 +142,21 @@ async function scrapeUrl(url: string, apiKey: string, fetcher: JobFetch): Promis
 }
 
 function extractListingsFromMarkdown(markdown: string, config: FirecrawlConfig, connectorId: string): InventoryListing[] {
-  const lines = markdown.split('\n');
-  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/;
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
   const locationRegex = /\b(?:india|bengaluru|bangalore|gurgaon|gurugram|mumbai|pune|hyderabad|delhi|noida|chennai)\b/i;
   
   const listings: InventoryListing[] = [];
   const seenUrls = new Set<string>();
 
-  for (const line of lines) {
-    const match = line.match(linkRegex);
-    if (match) {
+  for (const match of markdown.matchAll(linkRegex)) {
       const title = match[1].trim();
       const url = match[2].trim();
-      
-      if (locationRegex.test(line)) {
+      const start = match.index ?? 0;
+      const lineStart = markdown.lastIndexOf('\n', start) + 1;
+      const lineEnd = markdown.indexOf('\n', start);
+      const nextLineEnd = lineEnd < 0 ? markdown.length : (markdown.indexOf('\n', lineEnd + 1) < 0 ? markdown.length : markdown.indexOf('\n', lineEnd + 1));
+      const context = markdown.slice(lineStart, nextLineEnd);
+      if (locationRegex.test(context) && !/^(?:home|careers?|search|learn more|view all|apply now)$/i.test(title)) {
         if (!seenUrls.has(url)) {
           seenUrls.add(url);
           
@@ -171,7 +175,7 @@ function extractListingsFromMarkdown(markdown: string, config: FirecrawlConfig, 
             // ignore
           }
 
-          const locationMatches = line.match(locationRegex);
+          const locationMatches = context.match(locationRegex);
           const location = locationMatches ? locationMatches[0] : 'India';
 
           listings.push({
@@ -188,10 +192,18 @@ function extractListingsFromMarkdown(markdown: string, config: FirecrawlConfig, 
           });
         }
       }
-    }
   }
   
   return listings;
+}
+
+function extractApplyUrl(markdown: string, detailUrl: string): string | null {
+  const links = [...markdown.matchAll(/\[([^\]]*)\]\(([^)]+)\)/g)];
+  const candidate = links
+    .map((match) => ({ label: match[1].trim(), href: match[2].trim() }))
+    .find(({ label, href }) => /\bapply(?: now)?\b/i.test(label) || /\/apply(?:[/?#]|$)/i.test(href));
+  if (candidate) return new URL(candidate.href, detailUrl).href;
+  return /\/apply(?:[/?#]|$)/i.test(detailUrl) ? detailUrl : null;
 }
 
 function hashText(value: string): string {

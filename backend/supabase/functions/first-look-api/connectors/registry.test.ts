@@ -61,6 +61,9 @@ test('reports coverage only for implemented official connectors', () => {
     'razorpay-official-india',
     'kpmg-official-india',
     'amex-official-india',
+    'sp-global-official-india',
+    'deloitte-firecrawl-india',
+    'siemens-official-india',
     'accenture-official-india',
     'pwc-official-india',
     'wells-fargo-official-india',
@@ -70,16 +73,13 @@ test('reports coverage only for implemented official connectors', () => {
     'fidelity-official-india',
     'ge-healthcare-official-india',
     'diageo-official-india',
-    'sp-global-official-india',
     'morningstar-official-india',
     'jpmorgan-official-india',
     'morgan-stanley-official-india',
     'paypal-official-india',
     'shell-official-india',
-    'siemens-official-india',
     'amazon-firecrawl-india',
     'microsoft-firecrawl-india',
-    'deloitte-firecrawl-india',
     'hsbc-firecrawl-india',
     'piramal-firecrawl-india',
     'pine-labs-firecrawl-india',
@@ -87,18 +87,18 @@ test('reports coverage only for implemented official connectors', () => {
   ]);
 });
 
-test('registers Workday connectors for 16 companies', () => {
+test('registers Workday connectors for 14 companies', () => {
   const connectors = createOfficialConnectorRegistry();
-  const workdayPrefixes = ['accenture', 'pwc', 'wells-fargo', 'deutsche-bank', 'bank-of-america', 'natwest', 'fidelity', 'ge-healthcare', 'diageo', 'sp-global', 'morningstar', 'jpmorgan', 'morgan-stanley', 'paypal', 'shell', 'siemens'];
+  const workdayPrefixes = ['accenture', 'pwc', 'wells-fargo', 'deutsche-bank', 'bank-of-america', 'natwest', 'fidelity', 'ge-healthcare', 'diageo', 'morningstar', 'jpmorgan', 'morgan-stanley', 'paypal', 'shell'];
   for (const prefix of workdayPrefixes) {
     const subset = connectors.filter((c) => c.connectorId === `${prefix}-official-india`);
     assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-watch`, `${prefix}-reconcile`]);
   }
 });
 
-test('registers Firecrawl connectors for 7 companies', () => {
+test('registers Firecrawl connectors for 6 companies', () => {
   const connectors = createOfficialConnectorRegistry();
-  const firecrawlPrefixes = ['amazon', 'microsoft', 'deloitte', 'hsbc', 'piramal', 'pine-labs', 'icra'];
+  const firecrawlPrefixes = ['amazon', 'microsoft', 'hsbc', 'piramal', 'pine-labs', 'icra'];
   for (const prefix of firecrawlPrefixes) {
     const subset = connectors.filter((c) => c.connectorId === `${prefix}-firecrawl-india`);
     assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-firecrawl-india-watch`, `${prefix}-firecrawl-india-reconcile`]);

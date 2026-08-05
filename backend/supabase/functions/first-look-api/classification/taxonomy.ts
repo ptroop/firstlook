@@ -15,7 +15,8 @@ const EXACT_FINANCE_CONCEPTS = [
   /\b(?:transaction services|financial due diligence|restructuring|deals?|corporate development|financial advisory)\b/i,
 ];
 const LIKELY_FINANCE = /\b(?:banking|investments?|markets?|portfolio|risk|regulatory|credit|economics|commerce|cfa|chartered accountant|\bca\b|mba|pgdm)\b/i;
-const STRONG_NON_FINANCE_TITLE = /\b(?:software|java|python|full[ -]?stack|developer|dev|engineer(?:ing)?|cloud|cybersecurity|ui|ux|it quality|travel manager)\b/i;
+const STRONG_NON_FINANCE_TITLE = /\b(?:software|java|python|javascript|typescript|golang|full[ -]?stack|developer|dev|programmer|engineer(?:ing)?|cloud|devops|cybersecurity|information technology|technology|technical support|network(?:ing)?|database administrator|data scientist|machine learning|artificial intelligence|ui|ux|frontend|backend|it quality|quality engineering|application development|systems? analyst|travel manager)\b/i;
+const STRONG_NON_FINANCE_CATEGORY = /\b(?:technology|information technology|it|engineering|software development|application development|cybersecurity|quality engineering|data science)\b/i;
 const GENERAL_APPLICATION = /\b(?:general,? exploratory application|without specifying a role|all positions in)\b/i;
 const GENERIC_EMPLOYER_FINANCE = /\b(?:financial services?(?: industry)?|banking industry)\b/gi;
 
@@ -34,8 +35,9 @@ export function classifyFinance(input: { title: string; jobCategory: string; des
   const metadataEvidence = EXACT_FINANCE_CONCEPTS
     .map((pattern) => metadata.match(pattern)?.[0])
     .filter((match): match is string => Boolean(match));
-  if (metadataEvidence.length > 0) return { status: 'exact', evidence: [...new Set(metadataEvidence)] };
   if (STRONG_NON_FINANCE_TITLE.test(input.title)) return { status: 'unrelated', evidence: [] };
+  if (metadataEvidence.length > 0) return { status: 'exact', evidence: [...new Set(metadataEvidence)] };
+  if (STRONG_NON_FINANCE_CATEGORY.test(input.jobCategory)) return { status: 'unrelated', evidence: [] };
 
   const description = input.description.replace(GENERIC_EMPLOYER_FINANCE, '');
   const descriptionEvidence = EXACT_FINANCE_CONCEPTS
@@ -45,4 +47,8 @@ export function classifyFinance(input: { title: string; jobCategory: string; des
   const likely = `${metadata} ${description}`.match(LIKELY_FINANCE)?.[0];
   if (likely) return { status: 'likely', evidence: [likely] };
   return { status: 'unrelated', evidence: [] };
+}
+
+export function isStronglyNonFinanceTitle(title: string): boolean {
+  return STRONG_NON_FINANCE_TITLE.test(title);
 }

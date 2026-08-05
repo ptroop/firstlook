@@ -7,7 +7,7 @@ const baseListing = {
   connectorId: 'citi-official-india',
   sourceExternalId: '123',
   company: 'Citi',
-  title: 'Senior Software Engineer',
+  title: 'Senior Finance Analyst',
   location: 'Pune, India',
   category: 'Technology',
   department: 'Engineering',
@@ -65,6 +65,17 @@ test('defers a strongly structured software title even when the board omits cate
   assert.deepEqual(decision, { status: 'defer', reasons: ['strong_non_finance_category'] });
 });
 
+test('defers technical analyst titles before hydration', () => {
+  const decision = selectCandidate({
+    ...baseListing,
+    title: 'Technology Risk Analyst',
+    category: 'Technology',
+    department: 'Engineering',
+  });
+
+  assert.deepEqual(decision, { status: 'defer', reasons: ['strong_non_finance_category'] });
+});
+
 test('hydrates related education metadata and portal-corroborated listings', () => {
   const educationDecision = selectCandidate({
     ...baseListing,
@@ -79,7 +90,12 @@ test('hydrates related education metadata and portal-corroborated listings', () 
 });
 
 test('defers only strongly categorized non-finance listings without another signal', () => {
-  assert.deepEqual(selectCandidate(baseListing), {
+  assert.deepEqual(selectCandidate({
+    ...baseListing,
+    title: 'Platform Architect',
+    category: 'Technology',
+    department: 'Engineering',
+  }), {
     status: 'defer',
     reasons: ['strong_non_finance_category'],
   });
@@ -116,6 +132,9 @@ test('returns bounded, unique machine-readable reasons', () => {
 test('selects a deterministic bounded daily audit from deferred listings', () => {
   const listings = Array.from({ length: 20 }, (_, index) => ({
     ...baseListing,
+    title: 'Platform Architect',
+    category: 'Technology',
+    department: 'Engineering',
     sourceExternalId: String(index + 1),
   }));
 
