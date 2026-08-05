@@ -64,13 +64,27 @@ export function presentJob(row: JobRow, sourceRows: SourceRow[] = [], healthRows
     }));
   const officialSource = sources.find((source) => source.official);
   const fallbackSource = sources.find((source) => source.applyUrl || source.detailUrl || source.listingUrl);
-  const applyUrl = row.official_apply_url
-    || officialSource?.applyUrl
-    || officialSource?.detailUrl
-    || fallbackSource?.applyUrl
-    || fallbackSource?.detailUrl
-    || fallbackSource?.listingUrl
-    || null;
+  
+  const isGenericCareerUrl = (url: string | null) => {
+    if (!url) return true;
+    return /\/(?:careers|jobs|work-with-us|search|index\.html)\/?$/i.test(url) || url.endsWith('.myworkdayjobs.com/careers');
+  };
+
+  let applyUrl: string | null = null;
+  if (row.company === 'D. E. Shaw' && row.official_detail_url) {
+    applyUrl = row.official_detail_url;
+  } else {
+    const candidateUrls = [
+      row.official_apply_url,
+      officialSource?.applyUrl,
+      row.official_detail_url,
+      officialSource?.detailUrl,
+      fallbackSource?.applyUrl,
+      fallbackSource?.detailUrl,
+      fallbackSource?.listingUrl,
+    ];
+    applyUrl = candidateUrls.find((url) => Boolean(url) && !isGenericCareerUrl(url)) || row.official_detail_url || fallbackSource?.listingUrl || null;
+  }
   const applySourceType = row.official_apply_url || officialSource ? 'official_career' : fallbackSource?.type ?? null;
   const connectorIds = new Set(sourceRows.filter((source) => source.job_id === row.id).map((source) => source.connector_id));
   const relevantHealth = healthRows.filter((health) => connectorIds.has(health.connector_id));

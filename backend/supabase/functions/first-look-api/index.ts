@@ -75,7 +75,7 @@ function corsHeaders(origin: string | null) {
 }
 
 const SENIOR_TITLE_EXCLUSION = /\b(?:vice president|vp|avp|svp|assistant vice president|senior vice president|managing director|executive director|associate director|director|asst dir|head of|chief [a-z]+ officer|partner|principal|senior manager|lead manager|group manager)\b/i;
-const NON_FINANCE_TITLE_EXCLUSION = /\b(?:software|developer|dev|programmer|engineer|cloud|devops|cybersecurity|technology|data scientist|machine learning|ui|ux|frontend|backend|human resources|\bhr\b|recruiter|talent acquisition|marketing|public relations|communications|legal|counsel|facilities|real estate|event manager|supply chain|logistics|procurement|nurse|security guard)\b/i;
+const NON_FINANCE_TITLE_EXCLUSION = /\b(?:software|developer|dev|programmer|engineer|cloud|devops|cybersecurity|technology|data scientist|machine learning|ui|ux|frontend|backend|human resources|\bhr\b|recruiter|talent acquisition|marketing|public relations|communications|legal|counsel|facilities|real estate|event manager|supply chain|logistics|procurement|nurse|security guard|product manager|program manager|project manager|area manager|store manager|cyber|sailpoint|salesforce|sap|kinaxis|scrum master|agile|solutions architect|graphic designer)\b/i;
 
 function isSeniorOrNonFinanceTitle(title: string): boolean {
   return SENIOR_TITLE_EXCLUSION.test(title) || NON_FINANCE_TITLE_EXCLUSION.test(title);
