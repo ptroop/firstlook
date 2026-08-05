@@ -1,5 +1,5 @@
 const CACHE = 'first-look-v6';
-const ASSETS = ['./', './index.html', './styles.css?v=5', './company-catalog.js?v=1', './cv-evaluator.js?v=1', './app.js?v=6', './manifest.webmanifest', './icon.svg'];
+const ASSETS = ['./', './index.html', './styles.css?v=5', './company-catalog.js?v=1', './cv-evaluator.js?v=1', './app.js?v=7', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));

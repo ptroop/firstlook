@@ -66,23 +66,11 @@ const VAPID_PUBLIC_KEY = window.JOB_MONITOR_VAPID_PUBLIC_KEY || '';
 const FIXTURE_MODE = new URLSearchParams(window.location.search).get('fixture') === '1';
 let toastTimer;
 let currentJobs = [];
+let latestCoverage = [];
 let refreshInFlight = false;
 const CV_STORAGE_KEY = 'first-look-master-profile-v1';
 const COVER_LETTER_STORAGE_KEY = 'first-look-cover-letter-drafts-v1';
 const PORTAL_STORAGE_KEY = 'first-look-portal-listings-v1';
-const REGISTERED_COMPANIES = new Set([
-  'Moody\'s', 'D. E. Shaw', 'Citi', 'Goldman Sachs', 'BlackRock', 'Barclays', 'Razorpay',
-  'Groww', 'PhonePe', 'JPMorgan', 'Morgan Stanley', 'Bank of America', 'Deutsche Bank',
-  'HSBC', 'NatWest', 'Wells Fargo', 'American Express', 'S&P Global', 'Morningstar', 'ICRA',
-  'Deloitte USI', 'KPMG India', 'PwC SDC', 'Pine Labs', 'Microsoft',
-  'BCG', 'BCG Expand', 'McKinsey', 'Bain / Capability Network', 'Kearney', 'Alvarez & Marsal', 'ZS',
-  'State Street', 'Northern Trust', 'BNY', 'Mastercard', 'Visa', 'MSCI', 'FactSet', 'CRISIL',
-  'CARE Ratings', 'Bloomberg', 'TresVista', 'The Smart Cube', 'Evalueserve', 'Acuity Knowledge Partners',
-  'SG Analytics', 'EY GDS', 'GT Bharat', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak', 'IDFC First',
-  'Bajaj Finserv', 'Tata Capital', 'Paytm', 'CRED', 'HDFC AMC', 'ICICI Pru AMC', 'Motilal Oswal',
-  'Edelweiss', 'Zerodha',
-]);
-
 const SKILL_KEYWORDS = [
   'Python', 'SQL', 'Excel', 'AWS', 'Financial Modeling', 'Tableau', 
   'Power BI', 'Machine Learning', 'C++', 'Java', 'Bloomberg', 'R', 
@@ -104,6 +92,7 @@ function extractSkills(text) {
 
 function renderJobs(jobs) {
   currentJobs = Array.isArray(jobs) ? jobs : [];
+  renderCompanyDirectory();
   renderCvMatches();
   if (!jobs.length) {
     showFeedState('No matching roles yet', 'Prior listings are kept when a career-page scan is incomplete.', '0 current matches');
@@ -247,7 +236,7 @@ function isLikelyPortalFinanceRole(listing) {
   const title = String(listing?.title || '');
   const location = String(listing?.location || '');
   if (!/\b(?:india|bengaluru|bangalore|mumbai|pune|hyderabad|gurugram|gurgaon|delhi|noida|chennai|kolkata|ahmedabad|jaipur)\b/i.test(location)) return false;
-  if (/\b(?:software|developer|engineer|engineering|cloud|devops|cyber|data scientist|machine learning|frontend|backend|product manager|project manager|marketing|sales|business development|customer success|recruit|human resources|legal|designer|support|operations manager)\b/i.test(title)) return false;
+  if (/\b(?:software|developer|engineer|engineering|cloud|devops|cyber|data scientist|machine learning|frontend|backend|ui|ux|designer|design|creative|brand|visual|product manager|project manager|marketing|sales|business development|customer success|recruit|human resources|legal|support|operations manager)\b/i.test(title)) return false;
   const specificFinance = /\b(?:finance|financial|account(?:ing)?|audit|credit|risk|investment|investments|research|portfolio|treasury|tax|valuation|fund|banking|capital markets|reconciliation|compliance|aml|kyc|fp&a|controller)\b/i.test(title);
   const financeAnalyst = /\b(?:financial|finance|credit|risk|investment|research|portfolio|fund|treasury|tax|valuation|equity|banking)\b[\w /&-]{0,30}\banalyst\b/i.test(title);
   return specificFinance || financeAnalyst;
@@ -383,14 +372,16 @@ function renderCoverage(payload) {
   const sources = Array.isArray(payload?.sources)
     ? payload.sources.filter((source) => source?.latestStatus !== 'unsupported')
     : [];
+  latestCoverage = sources;
+  renderCompanyDirectory();
   if (!sources.length) {
     coverageMeta.textContent = 'No scan history';
     coverageList.innerHTML = '<p class="coverage-empty">Coverage will appear after the first source scan.</p>';
     return;
   }
 
-  const hasErrors = sources.some(s => s.status === 'failed' || s.status === 'anomalous');
-  const hasBacklog = sources.some(s => s.backlog > 0);
+  const hasErrors = sources.some(s => s.latestStatus === 'failed' || s.latestStatus === 'anomalous');
+  const hasBacklog = sources.some(s => Number(s.candidateBacklog || 0) > 0);
   const healthDot = document.getElementById('health-dot');
   if (healthDot) {
     healthDot.className = 'health-dot ' + (hasErrors ? 'error' : (hasBacklog ? 'warning' : 'success'));
@@ -428,23 +419,56 @@ function renderCompanyDirectory() {
     result[company.segment].push(company);
     return result;
   }, {});
-  const registeredCount = catalog.filter((company) => REGISTERED_COMPANIES.has(company.name)).length;
-  companiesMeta.textContent = `${catalog.length} employers · ${registeredCount} source candidates registered`;
+  const liveRoleCount = catalog.filter((company) => currentJobs.some((job) => sameCompany(job.company, company.name))).length;
+  companiesMeta.textContent = `${catalog.length} employers · ${liveRoleCount} with matching roles in the current snapshot`;
   companyDirectory.innerHTML = Object.entries(groups).map(([segment, companies]) => `
     <section class="company-group">
       <div class="company-group-heading"><h3>${escapeHtml(segment)}</h3><span>${companies.length}</span></div>
       <div class="company-directory-grid">
         ${companies.map((company) => {
           const url = safeUrl(company.url);
-          const registered = REGISTERED_COMPANIES.has(company.name);
+          const source = latestCoverage.find((candidate) => sameCompany(candidate.company, company.name));
+          const roles = currentJobs.filter((job) => sameCompany(job.company, company.name)).length;
+          const sourceStatus = source?.latestStatus || '';
+          const sourceLabel = sourceStatus === 'complete'
+            ? 'Verified source'
+            : sourceStatus === 'failed'
+              ? 'Source unavailable'
+              : sourceStatus === 'partial' || sourceStatus === 'anomalous'
+                ? `Source ${sourceStatus}`
+                : source
+                  ? 'Source not checked'
+                  : 'No verified scan yet';
+          const roleLabel = roles > 0
+            ? `${roles} matching role${roles === 1 ? '' : 's'}`
+            : 'No matching role in snapshot';
           return `<article class="company-directory-card">
-            <div><h4>${escapeHtml(company.name)}</h4><span class="company-source-status ${registered ? 'is-registered' : ''}">${registered ? 'Source candidate registered' : 'Connector pending'}</span></div>
+            <div><h4>${escapeHtml(company.name)}</h4><span class="company-source-status ${sourceStatus === 'complete' ? 'is-registered' : ''}">${escapeHtml(sourceLabel)} · ${escapeHtml(roleLabel)}</span></div>
             ${url ? `<a class="text-button" href="${url}" target="_blank" rel="noreferrer">Career page</a>` : ''}
           </article>`;
         }).join('')}
       </div>
     </section>
   `).join('');
+}
+
+function companyKey(value) {
+  const normalized = String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const aliases = {
+    jpmorgan: 'jpmorgan',
+    jpmorganchase: 'jpmorgan',
+    deloitteusi: 'deloitte',
+    deloitte: 'deloitte',
+    pwc: 'pwc',
+    pwcsdc: 'pwc',
+    spglobal: 'spglobal',
+    moodys: 'moodys',
+  };
+  return aliases[normalized] || normalized;
+}
+
+function sameCompany(left, right) {
+  return companyKey(left) === companyKey(right);
 }
 
 function showFeedState(title, message, meta) {
@@ -456,6 +480,8 @@ function showFeedState(title, message, meta) {
 }
 
 function showCoverageError() {
+  latestCoverage = [];
+  renderCompanyDirectory();
   const healthDot = document.getElementById('health-dot');
   if (healthDot) healthDot.className = 'health-dot error';
   coverageMeta.textContent = 'Connection error';
@@ -546,7 +572,10 @@ function isGenericCareerUrl(value) {
   try {
     const url = new URL(String(value));
     return /\/(?:careers|jobs|work-with-us|search|index\.html)\/?$/i.test(url.pathname)
-      || /\.myworkdayjobs\.com\/careers\/?$/i.test(url.pathname);
+      || /\.myworkdayjobs\.com\/careers\/?$/i.test(url.pathname)
+      || (url.hostname.replace(/^www\./i, '').toLowerCase() === 'apply.deshawindia.com'
+        && url.pathname.toLowerCase() === '/applicationpage1.html'
+        && url.searchParams.get('entity')?.toUpperCase() === 'DESIS');
   } catch (_error) {
     return true;
   }
