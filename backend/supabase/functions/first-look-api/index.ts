@@ -60,11 +60,14 @@ Deno.serve(async (request) => {
 });
 
 function corsHeaders(origin: string | null) {
-  const allowedOrigin = Deno.env.get('ALLOWED_ORIGIN') || '*';
+  const allowedOrigins = [
+    'https://ptroop.github.io',
+    ...(Deno.env.get('ALLOWED_ORIGIN') ? [Deno.env.get('ALLOWED_ORIGIN')!] : []),
+  ];
   const isLocalhost = origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-  const allowValue = (origin && (origin === allowedOrigin || isLocalhost)) ? origin : allowedOrigin;
+  const isAllowed = origin && (allowedOrigins.includes(origin) || isLocalhost);
   return {
-    'Access-Control-Allow-Origin': allowValue,
+    'Access-Control-Allow-Origin': isAllowed ? origin : (allowedOrigins[0] || '*'),
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Content-Type': 'application/json',
