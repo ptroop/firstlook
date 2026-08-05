@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { RAZORPAY_CONFIG, createGreenhouseConnector, parseGreenhouseJob } from './greenhouse.ts';
+import { GROWW_CONFIG, PHONEPE_CONFIG, RAZORPAY_CONFIG, createGreenhouseConnector, parseGreenhouseJob } from './greenhouse.ts';
 
 const job = {
   id: 4718601005,
@@ -50,4 +50,14 @@ test('hydrates from the stable job ID after compact inventory persistence', asyn
   }, { runType: 'reconcile', now: '2026-08-03T00:00:00Z' });
   assert.equal(result.employerJobId, '14542');
   assert.equal(result.applyUrl, job.absolute_url);
+});
+
+test('defines the verified PDF gap additions on their official Greenhouse boards', () => {
+  assert.deepEqual(
+    [GROWW_CONFIG, PHONEPE_CONFIG].map(({ company, boardSlug, connectorId }) => ({ company, boardSlug, connectorId })),
+    [
+      { company: 'Groww', boardSlug: 'groww', connectorId: 'groww-official-india' },
+      { company: 'PhonePe', boardSlug: 'phonepe', connectorId: 'phonepe-official-india' },
+    ],
+  );
 });

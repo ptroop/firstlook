@@ -59,6 +59,9 @@ test('reports coverage only for implemented official connectors', () => {
     'blackrock-official-india',
     'barclays-official-india',
     'razorpay-official-india',
+    'groww-official-india',
+    'phonepe-official-india',
+    'paytm-official-india',
     'kpmg-official-india',
     'amex-official-india',
     'sp-global-official-india',
@@ -79,21 +82,63 @@ test('reports coverage only for implemented official connectors', () => {
     'morgan-stanley-official-india',
     'paypal-official-india',
     'shell-official-india',
+    'state-street-official-india',
+    'northern-trust-official-india',
+    'mastercard-official-india',
+    'visa-official-india',
+    'factset-official-india',
+    'bloomberg-official-india',
     'microsoft-firecrawl-india',
     'hsbc-firecrawl-india',
     'piramal-firecrawl-india',
     'pine-labs-firecrawl-india',
-    'icra-firecrawl-india'
+    'icra-firecrawl-india',
+    'bcg-firecrawl-india',
+    'bcg-expand-firecrawl-india',
+    'mckinsey-firecrawl-india',
+    'bain-capability-network-firecrawl-india',
+    'kearney-firecrawl-india',
+    'alvarez-marsal-firecrawl-india',
+    'zs-firecrawl-india',
+    'bny-firecrawl-india',
+    'msci-firecrawl-india',
+    'crisil-firecrawl-india',
+    'care-ratings-firecrawl-india',
+    'tresvista-firecrawl-india',
+    'smart-cube-firecrawl-india',
+    'evalueserve-firecrawl-india',
+    'acuity-knowledge-partners-firecrawl-india',
+    'sg-analytics-firecrawl-india',
+    'ey-gds-firecrawl-india',
+    'gt-bharat-firecrawl-india',
+    'hdfc-bank-firecrawl-india',
+    'icici-bank-firecrawl-india',
+    'axis-bank-firecrawl-india',
+    'kotak-firecrawl-india',
+    'idfc-first-firecrawl-india',
+    'bajaj-finserv-firecrawl-india',
+    'tata-capital-firecrawl-india',
+    'cred-firecrawl-india',
+    'hdfc-amc-firecrawl-india',
+    'icici-pru-amc-firecrawl-india',
+    'motilal-oswal-firecrawl-india',
+    'edelweiss-firecrawl-india',
+    'zerodha-firecrawl-india'
   ]);
 });
 
-test('registers Workday connectors for 14 companies', () => {
+test('registers Workday connectors for the original and RCV companies', () => {
   const connectors = createOfficialConnectorRegistry();
-  const workdayPrefixes = ['accenture', 'pwc', 'wells-fargo', 'deutsche-bank', 'bank-of-america', 'natwest', 'fidelity', 'ge-healthcare', 'diageo', 'morningstar', 'jpmorgan', 'morgan-stanley', 'paypal', 'shell'];
+  const workdayPrefixes = ['accenture', 'pwc', 'wells-fargo', 'deutsche-bank', 'bank-of-america', 'natwest', 'fidelity', 'ge-healthcare', 'diageo', 'morningstar', 'jpmorgan', 'morgan-stanley', 'paypal', 'shell', 'state-street', 'northern-trust', 'mastercard', 'visa', 'factset', 'bloomberg'];
   for (const prefix of workdayPrefixes) {
     const subset = connectors.filter((c) => c.connectorId === `${prefix}-official-india`);
     assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-watch`, `${prefix}-reconcile`]);
   }
+});
+
+test('registers Paytm through the public Lever postings feed', () => {
+  const connectors = createOfficialConnectorRegistry().filter((c) => c.connectorId === 'paytm-official-india');
+  assert.deepEqual(connectors.map((c) => c.scanGroup), ['paytm-watch', 'paytm-reconcile']);
 });
 
 test('registers Firecrawl connectors for 5 companies', () => {

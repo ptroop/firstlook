@@ -44,6 +44,47 @@ export const ICRA_CONFIG: FirecrawlConfig = {
   careerSearchUrl: 'https://www.icra.in/Home/Careers',
 };
 
+const RCV_FIRECRAWL_CONFIGS: FirecrawlConfig[] = [
+  { companyName: 'BCG', connectorIdPrefix: 'bcg', careerSearchUrl: 'https://careers.bcg.com/' },
+  { companyName: 'BCG Expand', connectorIdPrefix: 'bcg-expand', careerSearchUrl: 'https://careers.bcg.com/global/en/teams/expand' },
+  { companyName: 'McKinsey', connectorIdPrefix: 'mckinsey', careerSearchUrl: 'https://www.mckinsey.com/careers/search-jobs' },
+  { companyName: 'Bain / Capability Network', connectorIdPrefix: 'bain-capability-network', careerSearchUrl: 'https://www.bain.com/careers/' },
+  { companyName: 'Kearney', connectorIdPrefix: 'kearney', careerSearchUrl: 'https://www.kearney.com/careers' },
+  { companyName: 'Alvarez & Marsal', connectorIdPrefix: 'alvarez-marsal', careerSearchUrl: 'https://www.alvarezandmarsal.com/careers' },
+  { companyName: 'ZS', connectorIdPrefix: 'zs', careerSearchUrl: 'https://www.zs.com/careers' },
+  { companyName: 'BNY', connectorIdPrefix: 'bny', careerSearchUrl: 'https://www.bny.com/corporate/global/en/careers.html' },
+  { companyName: 'MSCI', connectorIdPrefix: 'msci', careerSearchUrl: 'https://www.msci.com/careers' },
+  { companyName: 'CRISIL', connectorIdPrefix: 'crisil', careerSearchUrl: 'https://www.crisil.com/en/home/careers.html' },
+  { companyName: 'CARE Ratings', connectorIdPrefix: 'care-ratings', careerSearchUrl: 'https://www.careratings.com/careers' },
+  { companyName: 'TresVista', connectorIdPrefix: 'tresvista', careerSearchUrl: 'https://www.tresvista.com/careers/' },
+  { companyName: 'The Smart Cube', connectorIdPrefix: 'smart-cube', careerSearchUrl: 'https://www.thesmartcube.com/careers' },
+  { companyName: 'Evalueserve', connectorIdPrefix: 'evalueserve', careerSearchUrl: 'https://www.evalueserve.com/careers/' },
+  { companyName: 'Acuity Knowledge Partners', connectorIdPrefix: 'acuity-knowledge-partners', careerSearchUrl: 'https://www.acuitykp.com/careers/' },
+  { companyName: 'SG Analytics', connectorIdPrefix: 'sg-analytics', careerSearchUrl: 'https://www.sganalytics.com/careers/' },
+  { companyName: 'EY GDS', connectorIdPrefix: 'ey-gds', careerSearchUrl: 'https://www.ey.com/en_in/careers' },
+  { companyName: 'GT Bharat', connectorIdPrefix: 'gt-bharat', careerSearchUrl: 'https://www.grantthornton.in/careers/' },
+  { companyName: 'HDFC Bank', connectorIdPrefix: 'hdfc-bank', careerSearchUrl: 'https://www.hdfcbank.com/personal/about-us/careers' },
+  { companyName: 'ICICI Bank', connectorIdPrefix: 'icici-bank', careerSearchUrl: 'https://www.icicicareers.com/' },
+  { companyName: 'Axis Bank', connectorIdPrefix: 'axis-bank', careerSearchUrl: 'https://www.axisbank.com/careers' },
+  { companyName: 'Kotak', connectorIdPrefix: 'kotak', careerSearchUrl: 'https://www.kotak.com/en/about-us/careers.html' },
+  { companyName: 'IDFC First', connectorIdPrefix: 'idfc-first', careerSearchUrl: 'https://www.idfcfirstbank.com/about-us/careers' },
+  { companyName: 'Bajaj Finserv', connectorIdPrefix: 'bajaj-finserv', careerSearchUrl: 'https://www.bajajfinserv.in/careers' },
+  { companyName: 'Tata Capital', connectorIdPrefix: 'tata-capital', careerSearchUrl: 'https://www.tatacapital.com/careers.html' },
+  { companyName: 'CRED', connectorIdPrefix: 'cred', careerSearchUrl: 'https://careers.cred.club/' },
+  { companyName: 'HDFC AMC', connectorIdPrefix: 'hdfc-amc', careerSearchUrl: 'https://www.hdfcfund.com/about-us/careers' },
+  { companyName: 'ICICI Pru AMC', connectorIdPrefix: 'icici-pru-amc', careerSearchUrl: 'https://www.icicipruamc.com/careers' },
+  { companyName: 'Motilal Oswal', connectorIdPrefix: 'motilal-oswal', careerSearchUrl: 'https://www.motilaloswalgroup.com/careers' },
+  { companyName: 'Edelweiss', connectorIdPrefix: 'edelweiss', careerSearchUrl: 'https://www.edelweissfin.com/careers' },
+  { companyName: 'Zerodha', connectorIdPrefix: 'zerodha', careerSearchUrl: 'https://zerodha.com/careers/' },
+];
+
+export const RCV_FIRECRAWL_WAVES: FirecrawlConfig[][] = [
+  RCV_FIRECRAWL_CONFIGS.slice(0, 10),
+  RCV_FIRECRAWL_CONFIGS.slice(10, 20),
+  RCV_FIRECRAWL_CONFIGS.slice(20, 30),
+  RCV_FIRECRAWL_CONFIGS.slice(30),
+];
+
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_BODY_BYTES = 8_000_000;
 
@@ -51,10 +92,10 @@ export function createFirecrawlConnector(
   config: FirecrawlConfig,
   firecrawlApiKey: string,
   runType: 'watch' | 'reconcile',
-  fetcher: JobFetch = fetch
+  fetcher: JobFetch = fetch,
+  scanGroup = `${config.connectorIdPrefix}-firecrawl-india-${runType}`,
 ): OfficialJobConnector {
   const connectorId = `${config.connectorIdPrefix}-firecrawl-india`;
-  const scanGroup = `${connectorId}-${runType}`;
 
   return {
     connectorId,

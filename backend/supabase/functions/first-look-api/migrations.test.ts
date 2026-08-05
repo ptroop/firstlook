@@ -38,6 +38,22 @@ const firecrawlSchedule = readFileSync(
   new URL('../../migrations/20260804000003_add_firecrawl_schedules.sql', import.meta.url),
   'utf8',
 );
+const greenhousePhase2Schedule = readFileSync(
+  new URL('../../migrations/20260805000000_add_greenhouse_phase2_schedules.sql', import.meta.url),
+  'utf8',
+);
+const rcvFirecrawlSchedule = readFileSync(
+  new URL('../../migrations/20260806000000_add_rcv_firecrawl_waves.sql', import.meta.url),
+  'utf8',
+);
+const rcvAtsSchedule = readFileSync(
+  new URL('../../migrations/20260806000001_add_rcv_ats_schedules.sql', import.meta.url),
+  'utf8',
+);
+const firecrawlQuotaGuard = readFileSync(
+  new URL('../../migrations/20260806000002_disable_firecrawl_cron_by_default.sql', import.meta.url),
+  'utf8',
+);
 
 test('rotates hydration by never-checked then oldest-checked inventory', () => {
   assert.match(migration, /add column if not exists last_hydrated_at timestamptz/);
@@ -141,4 +157,46 @@ test('adds Firecrawl schedules for 7 companies', () => {
   }
   assert.match(firecrawlSchedule, /cron\.unschedule\(j\)/);
   assert.doesNotMatch(firecrawlSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});
+
+test('adds Groww and PhonePe Greenhouse schedules behind the private scan helper', () => {
+  for (const group of ['groww-watch', 'groww-reconcile', 'phonepe-watch', 'phonepe-reconcile']) {
+    assert.match(greenhousePhase2Schedule, new RegExp(`'${group}'`));
+  }
+  assert.match(greenhousePhase2Schedule, /invoke_first_look_greenhouse_scan/);
+  assert.match(greenhousePhase2Schedule, /recover_stale_first_look_greenhouse_scans/);
+  assert.match(greenhousePhase2Schedule, /first-look-groww-reconcile[\s\S]*'9 \*\/2 \* \* \*'/);
+  assert.match(greenhousePhase2Schedule, /first-look-phonepe-reconcile[\s\S]*'11 \*\/2 \* \* \*'/);
+  assert.doesNotMatch(greenhousePhase2Schedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});
+
+test('adds four bounded RCV Firecrawl waves behind the private scan helper', () => {
+  for (const group of [
+    'rcv-firecrawl-wave-1-watch', 'rcv-firecrawl-wave-2-watch',
+    'rcv-firecrawl-wave-3-watch', 'rcv-firecrawl-wave-4-watch',
+    'rcv-firecrawl-wave-1-reconcile', 'rcv-firecrawl-wave-2-reconcile',
+    'rcv-firecrawl-wave-3-reconcile', 'rcv-firecrawl-wave-4-reconcile',
+  ]) {
+    assert.match(rcvFirecrawlSchedule, new RegExp(`'${group}'`));
+  }
+  assert.match(rcvFirecrawlSchedule, /invoke_first_look_rcv_firecrawl_scan/);
+  assert.doesNotMatch(rcvFirecrawlSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});
+
+test('adds structured RCV ATS schedules before the Firecrawl fallback', () => {
+  for (const group of [
+    'state-street-watch', 'northern-trust-reconcile', 'mastercard-watch',
+    'visa-reconcile', 'factset-watch', 'bloomberg-reconcile',
+    'paytm-watch', 'paytm-reconcile',
+  ]) {
+    assert.match(rcvAtsSchedule, new RegExp(`'${group}'`));
+  }
+  assert.match(rcvAtsSchedule, /invoke_first_look_rcv_ats_scan/);
+  assert.match(rcvAtsSchedule, /cron\.unschedule\(j\)/);
+  assert.doesNotMatch(rcvAtsSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});
+
+test('disables unattended Firecrawl cron jobs by default', () => {
+  assert.match(firecrawlQuotaGuard, /jobname like 'first-look-%firecrawl-%'/i);
+  assert.match(firecrawlQuotaGuard, /cron\.unschedule\(j\)/i);
 });

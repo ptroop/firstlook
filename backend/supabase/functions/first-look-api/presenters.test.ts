@@ -72,6 +72,42 @@ test('labels portal-only jobs unverified and uses their active destination only 
   assert.equal(payload.applySourceType, 'linkedin');
 });
 
+test('does not expose a generic employer career page as an Apply URL', () => {
+  const careerPage = 'https://example.com/careers';
+  const payload = presentJob({
+    ...job,
+    id: 'generic-career-page',
+    official_detail_url: careerPage,
+    official_apply_url: null,
+  }, [{
+    ...sources[0],
+    job_id: 'generic-career-page',
+    listing_url: careerPage,
+    detail_url: careerPage,
+    apply_url: careerPage,
+  }], health);
+  assert.equal(payload.applyUrl, null);
+  assert.equal(payload.officialApplyUrl, null);
+});
+
+test('does not expose D. E. Shaw shared application bundle as Apply URL', () => {
+  const payload = presentJob({
+    ...job,
+    id: 'deshaw-shared-application',
+    company: 'D. E. Shaw',
+    official_detail_url: 'https://www.deshawindia.com/careers/analyst-financial-operations-7074',
+    official_apply_url: 'https://www.apply.deshawindia.com/ApplicationPage1.html?entity=DESIS',
+  }, [{
+    ...sources[0],
+    job_id: 'deshaw-shared-application',
+    connector_id: 'deshaw-official-india',
+    listing_url: 'https://www.deshawindia.com/careers/analyst-financial-operations-7074',
+    detail_url: 'https://www.deshawindia.com/careers/analyst-financial-operations-7074',
+    apply_url: 'https://www.apply.deshawindia.com/ApplicationPage1.html?entity=DESIS',
+  }], health);
+  assert.equal(payload.applyUrl, null);
+});
+
 test('sorts exact before possible, then newest first', () => {
   const possible = presentJob(job, sources, health);
   const olderExact = presentJob({ ...job, id: 'exact-old', match_tier: 'exact', first_seen_at: '2026-07-01T00:00:00Z' }, sources, health);

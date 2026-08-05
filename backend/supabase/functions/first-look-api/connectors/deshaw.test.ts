@@ -103,6 +103,17 @@ test('preserves a role-specific official recruit redirect when the detail expose
   );
 });
 
+test('prefers a role-specific recruit URL over the shared application bundle', () => {
+  const roleSpecific = detailHtml.replace(
+    'https://www.apply.deshawindia.com/ApplicationPage1.html?entity=DESIS',
+    'https://www.deshawindia.com/recruit/jobs/Ads/Link/ContVDAug26',
+  );
+  assert.equal(
+    parseDeshawJob(roleSpecific, 'https://www.deshawindia.com/careers/contractor-visual-designer-design-and-user-experience-7199').applyUrl,
+    'https://www.deshawindia.com/recruit/jobs/Ads/Link/ContVDAug26',
+  );
+});
+
 test('hydrates the exploratory application template from JobPosting JSON-LD', () => {
   const exploratory = `
     <a href="https://www.apply.deshawindia.com/ApplicationPage1.html?entity=DESIS">Apply Now</a>

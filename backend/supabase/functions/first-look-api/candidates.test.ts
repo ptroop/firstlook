@@ -101,6 +101,21 @@ test('defers only strongly categorized non-finance listings without another sign
   });
 });
 
+test('defers design titles before hydration even when the employer is a finance company', () => {
+  const decision = selectCandidate({
+    ...baseListing,
+    company: 'D. E. Shaw',
+    title: 'Contractor - Visual Designer (Design and User Experience)',
+    category: 'Design',
+    department: 'Design and User Experience',
+  });
+
+  assert.deepEqual(decision, {
+    status: 'defer',
+    reasons: ['strong_non_finance_category'],
+  });
+});
+
 test('hydrates D. E. Shaw generic analyst titles despite sparse category labels', () => {
   const decision = selectCandidate({
     ...baseListing,

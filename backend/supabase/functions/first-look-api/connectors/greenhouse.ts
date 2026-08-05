@@ -34,6 +34,20 @@ export const RAZORPAY_CONFIG: GreenhouseConfig = {
   boardSlug: 'razorpaysoftwareprivatelimited',
 };
 
+export const GROWW_CONFIG: GreenhouseConfig = {
+  connectorId: 'groww-official-india',
+  company: 'Groww',
+  sourceName: 'Groww Careers',
+  boardSlug: 'groww',
+};
+
+export const PHONEPE_CONFIG: GreenhouseConfig = {
+  connectorId: 'phonepe-official-india',
+  company: 'PhonePe',
+  sourceName: 'PhonePe Careers',
+  boardSlug: 'phonepe',
+};
+
 export function createGreenhouseConnector(
   config: GreenhouseConfig,
   fetcher: JobFetch = fetch,

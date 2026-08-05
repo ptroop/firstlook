@@ -114,12 +114,20 @@ export function parseDeshawJob(html: string, detailUrl: string) {
     .map((match) => htmlToText(match[1]));
   const description = sections.join(' ').trim() || structured.description;
   const experienceText = description.match(/[^.]*\b(?:\d+\s*(?:-|to)\s*\d+\s+years?|\d+\+?\s+years?|freshers?|no prior experience)[^.]*\.?/i)?.[0]?.trim() || '';
-  const applyUrl = decodeHtml(html.match(/href=["']([^"']*(?:apply\.deshawindia\.com|\/recruit\/jobs\/)[^"']*)["']/i)?.[1] || '') || structured.applyUrl;
+  const roleSpecificApply = html.match(/href=["']([^"']*\/recruit\/jobs\/(?:Ads|Adv)\/[^"']+)["']/i)?.[1] || '';
+  const sharedApply = html.match(/href=["']([^"']*apply\.deshawindia\.com\/ApplicationPage1\.html[^"']*)["']/i)?.[1] || '';
+  const applyUrl = normalizeDeshawUrl(roleSpecificApply || structured.applyUrl || sharedApply);
 
   if (!employerJobId || !title || !location || !description || !applyUrl) {
     throw new Error('Missing required D. E. Shaw job fields');
   }
   return { employerJobId, title, location, description, experienceText, jobCategory, applyUrl };
+}
+
+function normalizeDeshawUrl(value: string): string {
+  const decoded = decodeHtml(value);
+  if (!decoded) return '';
+  try { return new URL(decoded, 'https://www.deshawindia.com').href; } catch { return decoded; }
 }
 
 function parseDeshawJobPosting(html: string): {

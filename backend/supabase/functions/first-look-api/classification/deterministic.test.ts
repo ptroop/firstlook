@@ -187,6 +187,47 @@ test('keeps finance and finance-context operations analysts eligible', () => {
   }
 });
 
+test('excludes generic compliance and customer-facing fintech roles without finance evidence', () => {
+  const cases = [
+    { title: 'Compliance Analyst', description: 'Maintain policy registers and coordinate internal training.', jobCategory: 'Corporate Compliance' },
+    { title: 'Product Manager - Payments', description: 'Own product discovery, roadmaps, and user growth for a payments app.', jobCategory: 'Product Management' },
+    { title: 'Sales Operations Analyst', description: 'Improve sales reporting and pipeline conversion for merchant accounts.', jobCategory: 'Sales' },
+  ];
+
+  for (const input of cases) {
+    const result = classifyDeterministically({ ...input, location: 'Bengaluru, India', experienceText: '0-2 years' });
+    assert.equal(result.financeStatus, 'unrelated', input.title);
+    assert.equal(result.matchTier, 'not_targeted', input.title);
+  }
+});
+
+test('excludes design, UX, and creative roles even when the employer is financial', () => {
+  const cases = [
+    { title: 'Contractor - Visual Designer (Design and User Experience)', jobCategory: 'Design', description: 'Create visual experiences for a financial services employer.' },
+    { title: 'Customer Strategy & Design Consultant', jobCategory: 'Customer Strategy', description: 'Lead design thinking and customer experience work.' },
+    { title: 'UX Researcher', jobCategory: 'User Experience', description: 'Research user journeys for a banking product.' },
+  ];
+
+  for (const input of cases) {
+    const result = classifyDeterministically({ ...input, location: 'Bengaluru, India', experienceText: '0-2 years' });
+    assert.equal(result.financeStatus, 'unrelated', input.title);
+    assert.equal(result.matchTier, 'not_targeted', input.title);
+  }
+});
+
+test('keeps regulated finance controls and compliance roles eligible', () => {
+  const result = classifyDeterministically({
+    title: 'Analyst - Financial Compliance',
+    location: 'Mumbai, India',
+    description: 'Review AML alerts, sanctions screening, and regulatory controls.',
+    jobCategory: 'Compliance',
+    experienceText: '0-2 years',
+  });
+
+  assert.equal(result.financeStatus, 'exact');
+  assert.equal(result.matchTier, 'exact');
+});
+
 test('does not surface an exploratory talent-pool page as a live vacancy', () => {
   const result = classifyDeterministically({
     title: 'All positions in Financial Operations',

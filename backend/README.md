@@ -13,10 +13,16 @@ Supabase hosts the database, source scanner, and read API. GitHub Pages hosts on
 | BlackRock official India careers | Reconcile the public paginated India catalog | Hydrate high-recall candidates in bounded batches | Watch every 30 minutes; reconcile every 2 hours |
 | Barclays official India careers | Reconcile the public paginated India catalog | Hydrate high-recall candidates in bounded batches | Watch every 30 minutes; reconcile every 2 hours |
 | Razorpay official Greenhouse board | Reconcile the public Greenhouse India catalog | Hydrate high-recall candidates in bounded batches | Watch every 30 minutes; reconcile every 2 hours |
+| Groww official Greenhouse board | Reconcile the public Greenhouse India catalog | Hydrate high-recall candidates in bounded batches | Watch every 30 minutes; reconcile every 2 hours |
+| PhonePe official Greenhouse board | Reconcile the public Greenhouse India catalog | Hydrate high-recall candidates in bounded batches | Watch every 30 minutes; reconcile every 2 hours |
+| Paytm official Lever postings feed | Reconcile the public India postings JSON feed | Hydrate by stable Lever posting ID | Watch every 2 hours; reconcile every 6 hours |
+| State Street, Northern Trust, Mastercard, Visa, FactSet and Bloomberg official Workday feeds | Reconcile public Workday CXS India catalogs | Hydrate by stable Workday external path | Watch every 2 hours; reconcile every 6 hours |
 
 The source inventory is deliberately broader than the visible job feed. Deterministic rules select likely India finance roles, and only ambiguous candidates may be sent to OpenRouter. A failed model call leaves the role visible as `possible`; it never silently deletes it.
 
-The other employers in the frontend directory are not yet claimed as monitored. Each needs a verified connector for its actual ATS or official search API; a directory link alone is never treated as coverage.
+Official observations must expose a role-specific Apply URL before they are counted as resolved. The frontend labels a missing direct Apply URL as pending and does not turn a generic employer career page into an Apply button.
+
+The other employers in the frontend directory are not yet claimed as monitored. Each needs a verified connector for its actual ATS or official search API; a directory link alone is never treated as coverage. Groww, PhonePe, Paytm and the six Workday employers above are registered candidates but remain subject to the same live inventory/detail reconciliation gate. Firecrawl is reserved for the remaining employers without a verified structured feed and is opt-in rather than unattended.
 
 The implementation order and completeness contract are in [`../docs/official-coverage-rollout.md`](../docs/official-coverage-rollout.md). `unsupported` is not exposed as a product state; Source health contains verified connectors only.
 
@@ -87,7 +93,13 @@ select vault.create_secret(
 select vault.create_secret('YOUR-LONG-RANDOM-SCAN-TOKEN', 'first_look_scan_token');
 ```
 
-The Vault token must exactly match the `SCAN_TOKEN` Edge Function secret. Then apply `007_source_scan_schedules.sql`, `010_goldman_scan_schedule.sql`, `20260803171004_add_blackrock_barclays_schedules.sql`, and `20260803180128_add_razorpay_schedule.sql`. These create staggered jobs for the seven verified connectors. Each invocation also drains a bounded portion of the candidate-detail backlog, with never-hydrated and oldest-hydrated inventory first.
+The Vault token must exactly match the `SCAN_TOKEN` Edge Function secret. Then apply `007_source_scan_schedules.sql`, `010_goldman_scan_schedule.sql`, `20260803171004_add_blackrock_barclays_schedules.sql`, `20260803180128_add_razorpay_schedule.sql`, `20260805000000_add_greenhouse_phase2_schedules.sql`, `20260806000000_add_rcv_firecrawl_waves.sql`, `20260806000001_add_rcv_ats_schedules.sql`, and `20260806000002_disable_firecrawl_cron_by_default.sql`. These create staggered jobs for structured ATS connectors and remove unattended Firecrawl polling. Each invocation also drains a bounded portion of the candidate-detail backlog, with never-hydrated and oldest-hydrated inventory first.
+
+`FIRECRAWL_API_KEY` is only needed for the fallback wave connectors. The six RCV Workday candidates and Paytm Lever candidate use public structured feeds and do not consume Firecrawl quota. To run a fallback deliberately, invoke one group after reviewing quota, for example:
+
+```sql
+select public.invoke_first_look_rcv_firecrawl_scan('rcv-firecrawl-wave-1-watch', 'watch', 120000);
+```
 
 Migration `009_scan_watchdog.sql` adds a ten-minute self-healing check. It retries 30-minute groups only after 50 minutes without a new run, and retries Citi reconciliation only after 150 minutes. An advisory transaction lock prevents overlapping watchdog executions.
 
@@ -133,4 +145,4 @@ order by connector_id, candidate_status;
 
 Treat `partial`, `failed`, and `anomalous` runs as coverage failures, not zero-job results. Complete reconciliation uses two consecutive complete misses before closing inventory, sources, or jobs. This prevents a transient ATS failure from erasing live roles.
 
-The public routes are `/health`, `/jobs`, and `/coverage`. `/scan` requires the bearer token. Browser push delivery, portal connectors, and CV generation are separate future slices; this release does not pretend they are active.
+The public routes are `/health`, `/jobs`, and `/coverage`. `/scan` requires the bearer token. CV matching, evidence-only cover-letter drafting, and the optional review-first form-fill helper are frontend/local-browser features; no profile data, credentials, cookies, or submitted application data is sent to this backend.

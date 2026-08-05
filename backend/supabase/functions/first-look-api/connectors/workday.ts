@@ -30,6 +30,15 @@ export const MORGAN_STANLEY_CONFIG: WorkdayConfig = { companyName: 'Morgan Stanl
 export const PAYPAL_CONFIG: WorkdayConfig = { companyName: 'PayPal', baseUrl: 'https://paypal.wd1.myworkdayjobs.com/jobs', tenant: 'paypal', siteName: 'jobs', connectorIdPrefix: 'paypal' };
 export const SHELL_CONFIG: WorkdayConfig = { companyName: 'Shell', baseUrl: 'https://shell.wd3.myworkdayjobs.com/ShellCareers', tenant: 'shell', siteName: 'ShellCareers', connectorIdPrefix: 'shell' };
 export const SIEMENS_CONFIG: WorkdayConfig = { companyName: 'Siemens', baseUrl: 'https://siemens.wd3.myworkdayjobs.com/External_Careers', tenant: 'siemens', siteName: 'External_Careers', connectorIdPrefix: 'siemens' };
+// These RCV employers expose public Workday job pages. Keep them on the
+// structured CXS connector so Firecrawl remains a fallback for employers
+// without a stable public feed.
+export const STATE_STREET_CONFIG: WorkdayConfig = { companyName: 'State Street', baseUrl: 'https://statestreet.wd1.myworkdayjobs.com/Global', tenant: 'statestreet', siteName: 'Global', connectorIdPrefix: 'state-street' };
+export const NORTHERN_TRUST_CONFIG: WorkdayConfig = { companyName: 'Northern Trust', baseUrl: 'https://ntrs.wd1.myworkdayjobs.com/en-US/northerntrust', tenant: 'ntrs', siteName: 'northerntrust', connectorIdPrefix: 'northern-trust' };
+export const MASTERCARD_CONFIG: WorkdayConfig = { companyName: 'Mastercard', baseUrl: 'https://mastercard.wd1.myworkdayjobs.com/en-US/CorporateCareers', tenant: 'mastercard', siteName: 'CorporateCareers', connectorIdPrefix: 'mastercard' };
+export const VISA_CONFIG: WorkdayConfig = { companyName: 'Visa', baseUrl: 'https://visa.wd5.myworkdayjobs.com/en-US/Visa', tenant: 'visa', siteName: 'Visa', connectorIdPrefix: 'visa' };
+export const FACTSET_CONFIG: WorkdayConfig = { companyName: 'FactSet', baseUrl: 'https://factset.wd108.myworkdayjobs.com/en-US/FactSetCareers', tenant: 'factset', siteName: 'FactSetCareers', connectorIdPrefix: 'factset' };
+export const BLOOMBERG_CONFIG: WorkdayConfig = { companyName: 'Bloomberg', baseUrl: 'https://bloomberg.wd1.myworkdayjobs.com/en-US/Bloombergindustrygroup_External_Career_Site', tenant: 'bloomberg', siteName: 'Bloombergindustrygroup_External_Career_Site', connectorIdPrefix: 'bloomberg' };
 
 const INDIA_LOCATIONS = /\b(?:india|bengaluru|bangalore|gurgaon|gurugram|mumbai|pune|hyderabad|delhi|noida|chennai|kolkata|coimbatore|ahmedabad|jaipur|thiruvananthapuram|kochi|chandigarh)\b/i;
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -149,10 +158,10 @@ async function enumerateWorkday(
   }
 
   const expectedPages = total === null ? null : Math.ceil(total / PAGE_SIZE);
-  const status = errors.length > 0 ? (pagesFetched > 0 ? 'partial' : 'failed') : 'complete';
   if (total !== null && pagesFetched < expectedPages! && errors.length === 0) {
     errors.push(`Fetched ${pagesFetched} of ${expectedPages} advertised Workday pages`);
   }
+  const status = errors.length > 0 ? (pagesFetched > 0 ? 'partial' : 'failed') : 'complete';
   return {
     listings,
     diagnostic: {

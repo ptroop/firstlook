@@ -84,3 +84,24 @@ test('turns Workday maintenance HTML into an actionable connector error', async 
   assert.equal(result.diagnostic.status, 'failed');
   assert.match(result.diagnostic.errorSummaries[0], /maintenance/i);
 });
+
+test('marks a truncated advertised Workday catalog partial', async () => {
+  const fetcher = async (_url: string, init?: RequestInit) => {
+    const offset = JSON.parse(String(init?.body)).offset;
+    const count = offset === 0 ? 20 : offset === 20 ? 10 : 0;
+    const jobPostings = Array.from({ length: count }, (_, index) => ({
+      title: `Financial Analyst ${offset + index}`,
+      externalPath: `/job/Mumbai/Financial-Analyst_REQ-${offset + index}`,
+      locationsText: 'Mumbai, India',
+    }));
+    return new Response(JSON.stringify({ total: 60, jobPostings }), { status: 200 });
+  };
+
+  const connector = createWorkdayConnector(DUMMY_CONFIG, fetcher, 'reconcile');
+  const result = await connector.enumerate({ runType: 'reconcile', detailBatchSize: 10, now: new Date() });
+
+  assert.equal(result.diagnostic.status, 'partial');
+  assert.equal(result.diagnostic.pagesExpected, 3);
+  assert.equal(result.diagnostic.pagesFetched, 2);
+  assert.match(result.diagnostic.errorSummaries[0], /Fetched 2 of 3/i);
+});
