@@ -83,13 +83,13 @@ function isSeniorOrNonFinanceTitle(title: string): boolean {
 
 async function getJobs(headers: Record<string, string>) {
   const select = 'id,company,official_detail_url,official_apply_url,title,location,description,first_seen_at,last_seen_at,posted_at,match_tier,classification_method,location_status,finance_status,experience_status,minimum_years,maximum_years,classified_at';
-  const rows = ((await supabaseClient().request(`/rest/v1/jobs?active=eq.true&location_status=eq.india&finance_status=in.(exact,likely)&match_tier=in.(exact,possible)&select=${select}&limit=200`)) as JobRow[])
+  const rows = ((await supabaseClient().request(`/rest/v1/jobs?active=eq.true&location_status=eq.india&finance_status=in.(exact,likely)&match_tier=in.(exact,possible)&select=${select}&limit=2000`)) as JobRow[])
     .filter((row) => !isSeniorOrNonFinanceTitle(row.title) && classifyFinance({ title: row.title, jobCategory: '', description: row.description }).status !== 'unrelated');
   if (rows.length === 0) return json({ jobs: [] }, headers);
 
   const ids = rows.map((row) => encodeURIComponent(row.id)).join(',');
   const sourceSelect = 'id,job_id,connector_id,source_type,source_name,source_external_id,listing_url,detail_url,apply_url,is_official,last_verified_at,active,hydration_status';
-  const sources = (await supabaseClient().request(`/rest/v1/job_sources?job_id=in.(${ids})&active=eq.true&select=${sourceSelect}&limit=1000`)) as SourceRow[];
+  const sources = (await supabaseClient().request(`/rest/v1/job_sources?job_id=in.(${ids})&active=eq.true&select=${sourceSelect}&limit=5000`)) as SourceRow[];
   const connectorIds = [...new Set(sources.map((source) => source.connector_id))];
   const health = connectorIds.length > 0
     ? (await supabaseClient().request(`/rest/v1/source_scan_runs?connector_id=in.(${connectorIds.map(encodeURIComponent).join(',')})&select=connector_id,run_type,status,finished_at&order=finished_at.desc&limit=200`)) as HealthRow[]
