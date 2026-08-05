@@ -54,7 +54,8 @@ export function createWorkdayConnector(
     },
     async hydrate(listing) {
       const detailUrl = publicJobUrl(config, listing.sourceExternalId);
-      const data = await fetchJson(fetcher, `${apiBaseUrl(config)}${listing.sourceExternalId}`);
+      const detailPath = listing.sourceExternalId.startsWith('/') ? listing.sourceExternalId : `/${listing.sourceExternalId}`;
+      const data = await fetchJson(fetcher, `${apiBaseUrl(config)}${detailPath}`);
       const info = isRecord(data.jobPostingInfo) ? data.jobPostingInfo : {};
       const title = stringValue(info.title) || listing.title;
       const location = stringValue(info.location) || listing.location || '';
