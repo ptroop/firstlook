@@ -51,10 +51,37 @@ const matchesMeta = document.querySelector('#matches-meta');
 const coverageList = document.querySelector('#coverage-list');
 const coverageMeta = document.querySelector('#coverage-meta');
 const toast = document.querySelector('#toast');
+const refreshButton = document.querySelector('#refresh-feed');
+const cvProfile = document.querySelector('#cv-profile');
+const cvFile = document.querySelector('#cv-file');
+const cvResults = document.querySelector('#cv-results');
+const cvResultsMeta = document.querySelector('#cv-results-meta');
+const cvMeta = document.querySelector('#cv-meta');
+const cvQualityMeta = document.querySelector('#cv-quality-meta');
+const cvQualityList = document.querySelector('#cv-quality-list');
+const companyDirectory = document.querySelector('#company-directory');
+const companiesMeta = document.querySelector('#companies-meta');
 const API_BASE = window.JOB_MONITOR_API || '';
 const VAPID_PUBLIC_KEY = window.JOB_MONITOR_VAPID_PUBLIC_KEY || '';
 const FIXTURE_MODE = new URLSearchParams(window.location.search).get('fixture') === '1';
 let toastTimer;
+let currentJobs = [];
+let refreshInFlight = false;
+const CV_STORAGE_KEY = 'first-look-master-profile-v1';
+const COVER_LETTER_STORAGE_KEY = 'first-look-cover-letter-drafts-v1';
+const PORTAL_STORAGE_KEY = 'first-look-portal-listings-v1';
+const REGISTERED_COMPANIES = new Set([
+  'Moody\'s', 'D. E. Shaw', 'Citi', 'Goldman Sachs', 'BlackRock', 'Barclays', 'Razorpay',
+  'Groww', 'PhonePe', 'JPMorgan', 'Morgan Stanley', 'Bank of America', 'Deutsche Bank',
+  'HSBC', 'NatWest', 'Wells Fargo', 'American Express', 'S&P Global', 'Morningstar', 'ICRA',
+  'Deloitte USI', 'KPMG India', 'PwC SDC', 'Pine Labs', 'Microsoft',
+  'BCG', 'BCG Expand', 'McKinsey', 'Bain / Capability Network', 'Kearney', 'Alvarez & Marsal', 'ZS',
+  'State Street', 'Northern Trust', 'BNY', 'Mastercard', 'Visa', 'MSCI', 'FactSet', 'CRISIL',
+  'CARE Ratings', 'Bloomberg', 'TresVista', 'The Smart Cube', 'Evalueserve', 'Acuity Knowledge Partners',
+  'SG Analytics', 'EY GDS', 'GT Bharat', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak', 'IDFC First',
+  'Bajaj Finserv', 'Tata Capital', 'Paytm', 'CRED', 'HDFC AMC', 'ICICI Pru AMC', 'Motilal Oswal',
+  'Edelweiss', 'Zerodha',
+]);
 
 const SKILL_KEYWORDS = [
   'Python', 'SQL', 'Excel', 'AWS', 'Financial Modeling', 'Tableau', 
@@ -76,6 +103,8 @@ function extractSkills(text) {
 }
 
 function renderJobs(jobs) {
+  currentJobs = Array.isArray(jobs) ? jobs : [];
+  renderCvMatches();
   if (!jobs.length) {
     showFeedState('No matching roles yet', 'Prior listings are kept when a career-page scan is incomplete.', '0 current matches');
     return;
@@ -109,7 +138,9 @@ function renderJobs(jobs) {
 
     const jobsHtml = companyJobs.map(job => {
       const sources = Array.isArray(job.sources) ? job.sources : [];
-      const applyUrl = safeUrl(job.applyUrl);
+      const applyUrl = directApplyUrl(job);
+      const roleUrl = roleReviewUrl(job);
+      const applyLabel = job.officialApplyUrl ? 'Apply direct' : 'Open role';
       const statusBadges = [
         `<span class="badge badge-match">${job.matchTier === 'exact' ? 'Strong match' : 'Check match'}</span>`,
         job.officialVerified
@@ -141,7 +172,8 @@ function renderJobs(jobs) {
           </div>
           <div class="job-actions">
             <span class="verified-time">Checked ${escapeHtml(formatAge(job.newestVerificationAt))}</span>
-            ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">Apply</a>` : '<span class="apply-unavailable">Apply link pending</span>'}
+            ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${applyLabel}</a>` : '<span class="apply-unavailable">Direct Apply link pending</span>'}
+            ${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}
           </div>
           <details class="source-details">
             <summary>Sources (${sources.length})</summary>
@@ -160,6 +192,191 @@ function renderJobs(jobs) {
       </div>
     `;
   }).join('');
+}
+
+function profileText() {
+  return cvProfile?.value.trim() || '';
+}
+
+function cvEngine() {
+  return window.FirstLookCv || null;
+}
+
+function renderCvQuality() {
+  if (!cvQualityMeta || !cvQualityList) return;
+  const engine = cvEngine();
+  const profile = profileText();
+  if (!engine || !profile) {
+    cvQualityMeta.textContent = 'Paste a profile to score';
+    cvQualityList.innerHTML = '<p class="cv-quality-empty">This is a local text-readiness check, not an employer ATS score.</p>';
+    return;
+  }
+  const result = engine.scoreResume(profile);
+  cvQualityMeta.textContent = result.score === null ? 'Not scoreable' : `${result.score}/100 · ${result.label}`;
+  const checks = result.checks.map((check) => `<div class="cv-quality-row"><span>${escapeHtml(check.label)}</span><strong class="is-${escapeAttribute(check.tone)}">${escapeHtml(check.value)}</strong></div>`).join('');
+  const gaps = result.gaps.length ? `<div class="cv-quality-gaps"><strong>Review points</strong><ul>${result.gaps.map((gap) => `<li>${escapeHtml(gap)}</li>`).join('')}</ul></div>` : '<p class="cv-quality-good">No basic structure gaps detected.</p>';
+  cvQualityList.innerHTML = `${checks}${gaps}<p class="cv-quality-note">${escapeHtml(result.note)}</p>`;
+}
+
+function jobIdentity(job) {
+  return String(job?.id || `${job?.company || ''}|${job?.title || ''}|${job?.location || ''}`);
+}
+
+function loadCoverLetterDrafts() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(COVER_LETTER_STORAGE_KEY) || '{}');
+    return stored && typeof stored === 'object' ? stored : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+let coverLetterDrafts = loadCoverLetterDrafts();
+let portalListings = loadPortalListings();
+
+function loadPortalListings() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PORTAL_STORAGE_KEY) || '[]');
+    return Array.isArray(stored) ? stored : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+function isLikelyPortalFinanceRole(listing) {
+  const title = String(listing?.title || '');
+  const location = String(listing?.location || '');
+  if (!/\b(?:india|bengaluru|bangalore|mumbai|pune|hyderabad|gurugram|gurgaon|delhi|noida|chennai|kolkata|ahmedabad|jaipur)\b/i.test(location)) return false;
+  if (/\b(?:software|developer|engineer|engineering|cloud|devops|cyber|data scientist|machine learning|frontend|backend|product manager|project manager|marketing|sales|business development|customer success|recruit|human resources|legal|designer|support|operations manager)\b/i.test(title)) return false;
+  const specificFinance = /\b(?:finance|financial|account(?:ing)?|audit|credit|risk|investment|investments|research|portfolio|treasury|tax|valuation|fund|banking|capital markets|reconciliation|compliance|aml|kyc|fp&a|controller)\b/i.test(title);
+  const financeAnalyst = /\b(?:financial|finance|credit|risk|investment|research|portfolio|fund|treasury|tax|valuation|equity|banking)\b[\w /&-]{0,30}\banalyst\b/i.test(title);
+  return specificFinance || financeAnalyst;
+}
+
+function normalizePortalListing(value) {
+  if (!value || typeof value !== 'object' || !value.title || !value.listingUrl || !isLikelyPortalFinanceRole(value)) return null;
+  const sourceType = ['linkedin', 'naukri', 'iimjobs', 'indeed', 'other'].includes(value.sourceType) ? value.sourceType : 'other';
+  const listingUrl = safeUrl(value.listingUrl);
+  if (!listingUrl) return null;
+  const applyUrl = safeUrl(value.applyUrl || '');
+  const id = `portal_${simpleHash(`${sourceType}|${listingUrl}`)}`;
+  return {
+    id,
+    company: String(value.company || 'Company not identified').trim().slice(0, 120),
+    title: String(value.title).trim().slice(0, 180),
+    location: String(value.location).trim().slice(0, 120),
+    description: '',
+    applyUrl: applyUrl || listingUrl,
+    officialApplyUrl: '',
+    officialDetailUrl: '',
+    officialVerified: false,
+    verificationNote: 'Portal discovery only; official employer listing not verified',
+    matchTier: 'possible',
+    newestVerificationAt: String(value.capturedAt || new Date().toISOString()),
+    sourceHealthState: 'unknown',
+    sources: [{ type: sourceType, name: String(value.sourceName || sourceType), listingUrl, detailUrl: listingUrl, applyUrl: applyUrl || listingUrl, official: false, verifiedAt: String(value.capturedAt || new Date().toISOString()) }],
+  };
+}
+
+function simpleHash(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) { hash ^= value.charCodeAt(index); hash = Math.imul(hash, 16777619); }
+  return (hash >>> 0).toString(16);
+}
+
+function savePortalListings() {
+  try { localStorage.setItem(PORTAL_STORAGE_KEY, JSON.stringify(portalListings)); } catch (_error) { showToast('This browser blocked local portal storage.'); }
+}
+
+function saveCoverLetterDraft(jobId, value) {
+  coverLetterDrafts[jobId] = value;
+  try {
+    localStorage.setItem(COVER_LETTER_STORAGE_KEY, JSON.stringify(coverLetterDrafts));
+    showToast('Cover-letter draft saved on this device.');
+  } catch (_error) {
+    showToast('This browser blocked local draft storage.');
+  }
+}
+
+function buildCvBrief(job, result) {
+  const evidence = result.evidence.length
+    ? `<ul>${result.evidence.map(({ term, excerpt }) => `<li><strong>${escapeHtml(term)}</strong> — “${escapeHtml(excerpt)}”</li>`).join('')}</ul>`
+    : '<p>No matching evidence line was found in the saved profile.</p>';
+  const requirements = result.requirements.length
+    ? `<details class="cv-requirements"><summary>Requirement evidence (${result.requirements.length})</summary><ul>${result.requirements.map((item) => { const statusLabel = item.status === 'supported' ? 'Supported' : item.status === 'context' ? 'Context' : 'Gap'; return `<li class="requirement-${item.status}"><strong>${statusLabel}</strong> ${escapeHtml(item.label)}${item.excerpt ? `<small>Evidence: ${escapeHtml(item.excerpt)}</small>` : ''}</li>`; }).join('')}</ul></details>`
+    : '<p>Role requirements are not scoreable from the available posting text.</p>';
+  const reviewPoints = result.missing.length
+    ? `<p class="cv-brief-warning">Hard gaps to review: ${escapeHtml(result.missing.join(', '))}. Add nothing unless your existing experience, coursework or project work supports it.</p>`
+    : '<p>No hard evidence gaps were detected in the available requirements.</p>';
+  const score = result.score === null ? 'Not scoreable' : `${result.score}/100 evidence match`;
+  const eligibility = job.matchTier ? `<p>Monitor eligibility: <strong>${escapeHtml(job.matchTier)}</strong>${job.eligibilityNote ? ` — ${escapeHtml(job.eligibilityNote)}` : ''}</p>` : '';
+  return `<p><strong>${escapeHtml(score)}</strong> · confidence: ${escapeHtml(result.confidence)}. This is evidence matching, not a hiring prediction.</p>${eligibility}<p>Use only evidence already present in your profile for <strong>${escapeHtml(job.title)}</strong>.</p>${evidence}${requirements}${reviewPoints}`;
+}
+
+function renderCvMatches() {
+  if (!cvResults || !cvResultsMeta) return;
+  const profile = profileText();
+  renderCvQuality();
+  if (!profile) {
+    cvResultsMeta.textContent = 'Add your profile to begin';
+    cvResults.innerHTML = '<div class="cv-empty"><h3>Your profile stays yours.</h3><p>Save a profile to see which current roles fit it best.</p></div>';
+    return;
+  }
+  if (!currentJobs.length) {
+    cvResultsMeta.textContent = 'No open roles yet';
+    cvResults.innerHTML = '<div class="cv-empty"><h3>Waiting for roles.</h3><p>Your profile is saved. Matches will appear when the career-page feed returns roles.</p></div>';
+    return;
+  }
+  const engine = cvEngine();
+  if (!engine) {
+    cvResultsMeta.textContent = 'CV evaluator unavailable';
+    cvResults.innerHTML = '<div class="cv-empty"><h3>Evaluation is unavailable.</h3><p>Reload the page so the local evaluator can load.</p></div>';
+    return;
+  }
+  const ranked = currentJobs.map((job) => ({ job, result: engine.matchJob(job, profile) }))
+    .sort((left, right) => (right.result.score ?? -1) - (left.result.score ?? -1))
+    .slice(0, 10);
+  cvResultsMeta.textContent = `Top ${ranked.length} of ${currentJobs.length} roles`;
+  cvResults.innerHTML = ranked.map(({ job, result }) => {
+    const applyUrl = directApplyUrl(job);
+    const roleUrl = roleReviewUrl(job);
+    const jobId = jobIdentity(job);
+    const canDraftCoverLetter = ['required', 'mentioned', 'optional'].includes(result.coverLetter.status);
+    const draft = canDraftCoverLetter ? (coverLetterDrafts[jobId] || engine.buildCoverLetter(job, result, profile)) : '';
+    const coverLetterPanel = canDraftCoverLetter && draft
+      ? `<div class="cover-letter-panel" id="cover-letter-panel-${escapeAttribute(jobId)}" hidden>
+          <p class="cover-status"><strong>Cover letter: ${escapeHtml(result.coverLetter.label)}</strong>${result.coverLetter.evidence ? ` — ${escapeHtml(result.coverLetter.evidence)}` : ''}</p>
+          <label class="field-label" for="cover-letter-${escapeAttribute(jobId)}">Conservative evidence-backed draft</label>
+          <textarea class="cover-letter-textarea" id="cover-letter-${escapeAttribute(jobId)}" rows="13">${escapeHtml(draft)}</textarea>
+          <div class="cv-controls"><button class="button button-dark cover-letter-save" type="button" data-cover-job-id="${escapeAttribute(jobId)}">Save draft</button><button class="text-button cover-letter-copy" type="button" data-cover-job-id="${escapeAttribute(jobId)}">Copy draft</button></div>
+          <p class="privacy-note">Local draft only. Review every line; unmatched requirements are not filled in and no metrics or experience were invented.</p>
+        </div>`
+      : `<div class="cover-letter-panel" hidden><p class="cover-letter-empty">${result.coverLetter.status === 'not_mentioned' ? 'Cover letter is not mentioned in this posting; no draft was generated.' : result.coverLetter.status === 'unknown' ? 'The posting text is unavailable, so the cover-letter requirement cannot be determined.' : 'No evidence-backed draft is available until at least two profile lines support the role.'}</p></div>`;
+    const coverButton = canDraftCoverLetter && draft ? `<button class="text-button cover-letter-toggle" type="button" data-cover-job-id="${escapeAttribute(jobId)}">Review cover letter (${escapeHtml(result.coverLetter.label)})</button>` : '';
+    const score = result.score === null ? 'Not scoreable' : `${result.score}/100 evidence match`;
+    return `<article class="cv-result">
+      <div class="cv-result-top"><div><h4>${escapeHtml(job.title)}</h4><p class="cv-result-company">${escapeHtml(job.company || '')}</p><p class="cv-result-location">${escapeHtml(job.location || 'Location not listed')}</p></div><span class="cv-score">${escapeHtml(score)}</span></div>
+      <div class="cv-result-tags">${result.evidence.slice(0, 5).map(({ term }) => `<span class="badge">Supported: ${escapeHtml(term)}</span>`).join('')}${result.missing.slice(0, 5).map((term) => `<span class="badge badge-missing">Gap: ${escapeHtml(term)}</span>`).join('')}<span class="badge">Cover: ${escapeHtml(result.coverLetter.label)}</span></div>
+      <div class="cv-result-actions">${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${job.officialApplyUrl ? 'Apply direct' : 'Open role'}</a>` : ''}${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}<button class="text-button cv-brief-toggle" type="button" data-cv-job-id="${escapeAttribute(jobId)}">Show evidence brief</button>${coverButton}</div>
+      <div class="cv-brief" id="cv-brief-${escapeAttribute(jobId)}" hidden>${buildCvBrief(job, result)}</div>
+      ${coverLetterPanel}
+    </article>`;
+  }).join('');
+}
+
+function loadStoredProfile() {
+  if (!cvProfile) return;
+  try { cvProfile.value = localStorage.getItem(CV_STORAGE_KEY) || ''; } catch (_error) { /* private mode */ }
+  renderCvMatches();
+}
+
+function saveProfile() {
+  if (!cvProfile) return;
+  const value = profileText();
+  try { localStorage.setItem(CV_STORAGE_KEY, value); } catch (_error) { showToast('This browser blocked local profile storage.'); return; }
+  cvMeta.textContent = value ? 'Saved on this device' : 'Private on this device';
+  renderCvMatches();
+  showToast(value ? 'Profile saved on this device.' : 'Profile cleared.');
 }
 
 function renderCoverage(payload) {
@@ -203,6 +420,33 @@ function renderCoverage(payload) {
   }).join('');
 }
 
+function renderCompanyDirectory() {
+  if (!companyDirectory || !companiesMeta) return;
+  const catalog = Array.isArray(window.COMPANY_CATALOG) ? window.COMPANY_CATALOG : [];
+  const groups = catalog.reduce((result, company) => {
+    if (!result[company.segment]) result[company.segment] = [];
+    result[company.segment].push(company);
+    return result;
+  }, {});
+  const registeredCount = catalog.filter((company) => REGISTERED_COMPANIES.has(company.name)).length;
+  companiesMeta.textContent = `${catalog.length} employers · ${registeredCount} source candidates registered`;
+  companyDirectory.innerHTML = Object.entries(groups).map(([segment, companies]) => `
+    <section class="company-group">
+      <div class="company-group-heading"><h3>${escapeHtml(segment)}</h3><span>${companies.length}</span></div>
+      <div class="company-directory-grid">
+        ${companies.map((company) => {
+          const url = safeUrl(company.url);
+          const registered = REGISTERED_COMPANIES.has(company.name);
+          return `<article class="company-directory-card">
+            <div><h4>${escapeHtml(company.name)}</h4><span class="company-source-status ${registered ? 'is-registered' : ''}">${registered ? 'Source candidate registered' : 'Connector pending'}</span></div>
+            ${url ? `<a class="text-button" href="${url}" target="_blank" rel="noreferrer">Career page</a>` : ''}
+          </article>`;
+        }).join('')}
+      </div>
+    </section>
+  `).join('');
+}
+
 function showFeedState(title, message, meta) {
   matchesEmpty.querySelector('h3').textContent = title;
   matchesEmpty.querySelector('p').textContent = message;
@@ -231,27 +475,41 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 3400);
 }
 
-async function loadData() {
-  if (FIXTURE_MODE) {
-    renderJobs(fixture.jobs);
-    renderCoverage(fixture.coverage);
-    return;
+async function loadData({ manual = false } = {}) {
+  if (manual) {
+    if (refreshInFlight) return;
+    refreshInFlight = true;
+    if (refreshButton) { refreshButton.disabled = true; refreshButton.textContent = 'Refreshing…'; }
   }
-  if (!API_BASE) {
-    showFeedState('Job feed not connected', 'Add the Supabase Edge Function URL to load current roles.', 'Not connected');
-    showCoverageError();
-    return;
-  }
+  try {
+    if (FIXTURE_MODE) {
+      renderJobs([...fixture.jobs, ...portalListings]);
+      renderCoverage(fixture.coverage);
+      return;
+    }
+    if (!API_BASE) {
+      showFeedState('Job feed not connected', 'Add the Supabase Edge Function URL to load current roles.', 'Not connected');
+      showCoverageError();
+      return;
+    }
 
-  const base = API_BASE.replace(/\/$/, '');
-  const [jobsResult, coverageResult] = await Promise.allSettled([
-    fetch(`${base}/jobs`).then(requireJson),
-    fetch(`${base}/coverage`).then(requireJson),
-  ]);
-  if (jobsResult.status === 'fulfilled') renderJobs(Array.isArray(jobsResult.value.jobs) ? jobsResult.value.jobs : []);
-  else showFeedState('Job feed unavailable', 'The monitor could not be reached. Try again shortly.', 'Connection error');
-  if (coverageResult.status === 'fulfilled') renderCoverage(coverageResult.value);
-  else showCoverageError();
+    const base = API_BASE.replace(/\/$/, '');
+    const cacheBust = manual ? `?refresh=${Date.now()}` : '';
+    const [jobsResult, coverageResult] = await Promise.allSettled([
+      fetch(`${base}/jobs${cacheBust}`).then(requireJson),
+      fetch(`${base}/coverage${cacheBust}`).then(requireJson),
+    ]);
+    if (jobsResult.status === 'fulfilled') renderJobs([...(Array.isArray(jobsResult.value.jobs) ? jobsResult.value.jobs : []), ...portalListings]);
+    else showFeedState('Job feed unavailable', 'The monitor could not be reached. Try again shortly.', 'Connection error');
+    if (coverageResult.status === 'fulfilled') renderCoverage(coverageResult.value);
+    else showCoverageError();
+    if (manual) showToast(jobsResult.status === 'fulfilled' || coverageResult.status === 'fulfilled' ? 'Fetched the latest published monitor snapshot.' : 'Refresh failed; existing data was kept.');
+  } finally {
+    if (manual) {
+      refreshInFlight = false;
+      if (refreshButton) { refreshButton.disabled = false; refreshButton.textContent = 'Refresh now'; }
+    }
+  }
 }
 
 async function requireJson(response) {
@@ -284,6 +542,28 @@ function safeUrl(value) {
   }
 }
 
+function isGenericCareerUrl(value) {
+  try {
+    const url = new URL(String(value));
+    return /\/(?:careers|jobs|work-with-us|search|index\.html)\/?$/i.test(url.pathname)
+      || /\.myworkdayjobs\.com\/careers\/?$/i.test(url.pathname);
+  } catch (_error) {
+    return true;
+  }
+}
+
+function directApplyUrl(job) {
+  const candidate = job?.officialApplyUrl || (job?.officialVerified ? job?.applyUrl : '');
+  if (!candidate || isGenericCareerUrl(candidate)) return '';
+  return safeUrl(candidate);
+}
+
+function roleReviewUrl(job) {
+  const candidate = job?.officialDetailUrl || job?.applyUrl;
+  if (!candidate || isGenericCareerUrl(candidate)) return '';
+  return safeUrl(candidate);
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 }
@@ -306,6 +586,48 @@ function urlBase64ToUint8Array(value) {
 document.addEventListener('click', async (event) => {
   const viewTrigger = event.target.closest('[data-view]');
   if (viewTrigger) navigate(viewTrigger.dataset.view);
+
+  const briefToggle = event.target.closest('.cv-brief-toggle');
+  if (briefToggle) {
+    const brief = document.querySelector(`#cv-brief-${CSS.escape(briefToggle.dataset.cvJobId || '')}`);
+    if (brief) {
+      brief.hidden = !brief.hidden;
+      briefToggle.textContent = brief.hidden ? 'Show tailoring brief' : 'Hide tailoring brief';
+    }
+    return;
+  }
+
+  const coverToggle = event.target.closest('.cover-letter-toggle');
+  if (coverToggle) {
+    const panel = document.querySelector(`#cover-letter-panel-${CSS.escape(coverToggle.dataset.coverJobId || '')}`);
+    if (panel) {
+      panel.hidden = !panel.hidden;
+      coverToggle.textContent = panel.hidden ? 'Draft cover letter' : 'Hide cover letter';
+    }
+    return;
+  }
+
+  const coverSave = event.target.closest('.cover-letter-save');
+  if (coverSave) {
+    const jobId = coverSave.dataset.coverJobId || '';
+    const textarea = document.querySelector(`#cover-letter-${CSS.escape(jobId)}`);
+    if (textarea) saveCoverLetterDraft(jobId, textarea.value);
+    return;
+  }
+
+  const coverCopy = event.target.closest('.cover-letter-copy');
+  if (coverCopy) {
+    const textarea = document.querySelector(`#cover-letter-${CSS.escape(coverCopy.dataset.coverJobId || '')}`);
+    if (!textarea) return;
+    try {
+      await navigator.clipboard.writeText(textarea.value);
+      showToast('Cover-letter draft copied.');
+    } catch (_error) {
+      textarea.select();
+      showToast('Copy was blocked. The draft is selected for manual copy.');
+    }
+    return;
+  }
 
   const alertsButton = event.target.closest('#alerts-button');
   if (!alertsButton) return;
@@ -340,6 +662,56 @@ document.addEventListener('click', async (event) => {
   }
 });
 
+document.querySelector('#save-profile')?.addEventListener('click', saveProfile);
+document.querySelector('#clear-profile')?.addEventListener('click', () => {
+  if (cvProfile) cvProfile.value = '';
+  saveProfile();
+});
+refreshButton?.addEventListener('click', () => loadData({ manual: true }));
+document.querySelector('#portal-file')?.addEventListener('change', async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const values = Array.isArray(parsed) ? parsed : [parsed];
+    const imported = values.map(normalizePortalListing).filter(Boolean);
+    const byId = new Map(portalListings.map((listing) => [listing.id, listing]));
+    imported.forEach((listing) => byId.set(listing.id, listing));
+    portalListings = [...byId.values()];
+    savePortalListings();
+    renderJobs([...currentJobs.filter((job) => !String(job.id || '').startsWith('portal_')), ...portalListings]);
+    showToast(imported.length ? `Imported ${imported.length} finance-relevant portal listing${imported.length === 1 ? '' : 's'} locally.` : 'No India finance listing passed the local noise filter.');
+  } catch (_error) {
+    showToast('That portal JSON could not be read.');
+  }
+  event.target.value = '';
+});
+document.querySelector('#clear-portal-listings')?.addEventListener('click', () => {
+  portalListings = [];
+  savePortalListings();
+  renderJobs(currentJobs.filter((job) => !String(job.id || '').startsWith('portal_')));
+  showToast('Imported portal listings cleared from this device.');
+});
+cvProfile?.addEventListener('input', () => {
+  if (cvMeta) cvMeta.textContent = 'Unsaved changes';
+  renderCvQuality();
+});
+cvFile?.addEventListener('change', async () => {
+  const file = cvFile.files?.[0];
+  if (!file || !cvProfile) return;
+  const raw = await file.text();
+  if (file.name.toLowerCase().endsWith('.html')) {
+    const parsed = new DOMParser().parseFromString(raw, 'text/html');
+    cvProfile.value = parsed.body?.innerText || raw;
+  } else {
+    cvProfile.value = raw;
+  }
+  cvMeta.textContent = 'Imported — save to keep it';
+  renderCvMatches();
+});
+
 window.FirstLookUI = { renderJobs, renderCoverage, safeUrl };
+renderCompanyDirectory();
+loadStoredProfile();
 loadData();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});

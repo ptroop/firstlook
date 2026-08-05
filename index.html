@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>First Look - finance roles</title>
-    <link rel="stylesheet" href="./styles.css?v=3" />
+    <link rel="stylesheet" href="./styles.css?v=4" />
   </head>
   <body>
     <div class="app-shell">
@@ -16,7 +16,9 @@
         <a class="wordmark" href="#overview" aria-label="First Look home">first look<span>.</span></a>
         <nav class="topnav" aria-label="Primary navigation">
           <button class="nav-link is-active" data-view="overview">Overview</button>
+          <button class="nav-link" data-view="companies">Companies</button>
           <button class="nav-link" data-view="matches">Open roles</button>
+          <button class="nav-link" data-view="cv">CV match</button>
         </nav>
         <button class="button button-dark" id="alerts-button">Turn on alerts</button>
       </header>
@@ -37,12 +39,32 @@
           </dl>
         </section>
 
+        <section class="content-section companies-section" id="companies" data-section="companies">
+          <div class="section-heading">
+            <h2>Company directory</h2>
+            <span class="section-meta" id="companies-meta">Loading</span>
+          </div>
+          <p class="section-intro">Every company from the RCV planning registry is listed here. A directory entry is not a claim that its live feed is connected; roles appear only after an official source passes reconciliation and the finance-first filter.</p>
+          <div class="company-directory" id="company-directory" aria-live="polite"></div>
+        </section>
+
         <section class="content-section" id="matches" data-section="matches">
           <div class="section-heading">
             <h2>Open roles</h2>
-            <span class="section-meta" id="matches-meta">Loading</span>
+            <div class="section-heading-actions"><span class="section-meta" id="matches-meta">Loading</span><button class="text-button" id="refresh-feed" type="button">Refresh now</button></div>
           </div>
-
+          <p class="section-intro refresh-note">Refresh now fetches the latest published snapshot from the monitor. It does not bypass connector schedules or make an unauthenticated crawl.</p>
+          <div class="portal-intake">
+            <div>
+              <strong>Portal discovery</strong>
+              <p>Import a listing captured from a public portal for local review. Official employer links remain primary and portal-only roles stay marked unverified.</p>
+            </div>
+            <div class="cv-controls">
+              <label class="button" for="portal-file">Import portal JSON</label>
+              <input id="portal-file" type="file" accept="application/json,.json" hidden />
+              <button class="text-button" id="clear-portal-listings" type="button">Clear imported listings</button>
+            </div>
+          </div>
 
 
           <div class="empty-state" id="matches-empty" aria-live="polite">
@@ -52,6 +74,46 @@
             </div>
           </div>
           <div class="job-list" id="job-list" hidden></div>
+        </section>
+
+        <section class="content-section cv-section" id="cv" data-section="cv">
+          <div class="section-heading">
+            <h2>CV match</h2>
+            <span class="section-meta" id="cv-meta">Private on this device</span>
+          </div>
+          <p class="section-intro">Keep one truthful master profile, then check it against the roles found by First Look. Each brief points back to text already in your profile; review points are not instructions to add unsupported claims. Evidence-backed cover-letter drafts stay local and remain yours to review.</p>
+          <div class="cv-workspace">
+            <div class="cv-editor">
+              <label class="field-label" for="cv-profile">Master profile</label>
+              <p class="field-help">Paste your CV or a structured profile with education, experience, projects, achievements and skills.</p>
+              <textarea id="cv-profile" class="cv-textarea" rows="16" placeholder="Example:\nMBA, Finance — 2026\n\nExperience\n• Built a financial model...\n\nSkills\nExcel, SQL, Power BI"></textarea>
+              <div class="cv-controls">
+                <label class="button" for="cv-file">Import .txt, .md or .html</label>
+                <input id="cv-file" type="file" accept=".txt,.md,.html,text/plain,text/html" hidden />
+                <button class="button button-dark" id="save-profile">Save profile</button>
+                <button class="text-button" id="clear-profile" type="button">Clear</button>
+              </div>
+              <p class="privacy-note">Stored locally on this device. No automatic rewriting, fabrication or application submission.</p>
+              <aside class="cv-quality-panel" aria-live="polite">
+                <div class="cv-quality-heading"><h3>Resume readiness</h3><span id="cv-quality-meta">Paste a profile to score</span></div>
+                <div id="cv-quality-list"><p class="cv-quality-empty">This local check looks for readable structure, evidence and contact text. It is not an employer ATS score.</p></div>
+              </aside>
+              <aside class="helper-callout">
+                <h3>Review-first form fill</h3>
+                <p>Use the optional local browser helper to save your contact fields once, open a direct role, and fill supported application fields for review. It never fills passwords, uploads files or submits forms.</p>
+                <a class="text-button" href="./browser-extension/README.md" target="_blank" rel="noreferrer">Set up the local form-fill helper</a>
+              </aside>
+            </div>
+            <div class="cv-results-panel">
+              <div class="cv-results-heading">
+                <h3>Best matches</h3>
+                <span class="section-meta" id="cv-results-meta">Add your profile to begin</span>
+              </div>
+              <div id="cv-results" class="cv-results" aria-live="polite">
+                <div class="cv-empty"><h3>Your profile stays yours.</h3><p>Save a profile to see which current roles fit it best.</p></div>
+              </div>
+            </div>
+          </div>
         </section>
       </main>
 
@@ -72,6 +134,8 @@
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script>window.JOB_MONITOR_API = 'https://xbckwzodpwfpvvkujbgp.supabase.co/functions/v1/first-look-api'; window.JOB_MONITOR_VAPID_PUBLIC_KEY = '';</script>
-    <script src="./app.js?v=3"></script>
+    <script src="./company-catalog.js?v=1"></script>
+    <script src="./cv-evaluator.js?v=1"></script>
+    <script src="./app.js?v=6"></script>
   </body>
 </html>
