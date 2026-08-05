@@ -15,9 +15,10 @@ import {
 } from './workday.ts';
 import { createSpGlobalConnector } from './spglobal.ts';
 import { createDeloitteConnector } from './deloitte.ts';
+import { createAmazonConnector } from './amazon.ts';
 import { createSiemensConnector } from './siemens.ts';
 import {
-  AMAZON_CONFIG, MICROSOFT_CONFIG, HSBC_CONFIG,
+  MICROSOFT_CONFIG, HSBC_CONFIG,
   PIRAMAL_CONFIG, PINE_LABS_CONFIG, ICRA_CONFIG, createFirecrawlConnector
 } from './firecrawl.ts';
 
@@ -56,6 +57,8 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createSpGlobalConnector(fetch, 'reconcile'),
     createDeloitteConnector(fetch, 'watch'),
     createDeloitteConnector(fetch, 'reconcile'),
+    createAmazonConnector(fetch, 'watch'),
+    createAmazonConnector(fetch, 'reconcile'),
     createSiemensConnector(fetch, 'watch'),
     createSiemensConnector(fetch, 'reconcile'),
     ...[
@@ -78,7 +81,6 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
       createWorkdayConnector(config, fetch, 'reconcile')
     ]),
     ...[
-      AMAZON_CONFIG,
       MICROSOFT_CONFIG,
       HSBC_CONFIG,
       PIRAMAL_CONFIG,

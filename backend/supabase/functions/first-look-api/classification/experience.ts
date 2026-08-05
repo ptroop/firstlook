@@ -7,11 +7,21 @@ export interface ExperienceResult {
   evidence: string[];
 }
 
-type Bound = { minimum: number | null; maximum: number | null; evidence: string };
+const SENIOR_EXECUTIVE_TITLE = /\b(?:vice president|vp|avp|svp|assistant vice president|senior vice president|managing director|executive director|director|associate director|head of|chief [a-z]+ officer|partner|principal|senior manager)\b/i;
 
 export function parseExperience(input: string): ExperienceResult {
   const text = normalizeExperienceText(input);
   if (!text) return ambiguous([]);
+
+  const seniorMatch = text.match(SENIOR_EXECUTIVE_TITLE)?.[0];
+  if (seniorMatch) {
+    return {
+      status: 'over_two',
+      minimumYears: 5,
+      maximumYears: null,
+      evidence: [seniorMatch],
+    };
+  }
 
   const preferred = findPreferredOnly(text);
   const requiredText = text.replace(/[^.!?;\n]*\b(?:preferred|desirable|nice to have)\b[^.!?;\n]*/g, ' ');

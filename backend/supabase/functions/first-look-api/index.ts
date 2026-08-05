@@ -74,10 +74,17 @@ function corsHeaders(origin: string | null) {
   };
 }
 
+const SENIOR_TITLE_EXCLUSION = /\b(?:vice president|vp|avp|svp|assistant vice president|senior vice president|managing director|executive director|associate director|director|asst dir|head of|chief [a-z]+ officer|partner|principal|senior manager|lead manager|group manager)\b/i;
+const NON_FINANCE_TITLE_EXCLUSION = /\b(?:software|developer|dev|programmer|engineer|cloud|devops|cybersecurity|technology|data scientist|machine learning|ui|ux|frontend|backend|human resources|\bhr\b|recruiter|talent acquisition|marketing|public relations|communications|legal|counsel|facilities|real estate|event manager|supply chain|logistics|procurement|nurse|security guard)\b/i;
+
+function isSeniorOrNonFinanceTitle(title: string): boolean {
+  return SENIOR_TITLE_EXCLUSION.test(title) || NON_FINANCE_TITLE_EXCLUSION.test(title);
+}
+
 async function getJobs(headers: Record<string, string>) {
   const select = 'id,company,official_detail_url,official_apply_url,title,location,description,first_seen_at,last_seen_at,posted_at,match_tier,classification_method,location_status,finance_status,experience_status,minimum_years,maximum_years,classified_at';
   const rows = ((await supabaseClient().request(`/rest/v1/jobs?active=eq.true&location_status=eq.india&finance_status=in.(exact,likely)&match_tier=in.(exact,possible)&select=${select}&limit=200`)) as JobRow[])
-    .filter((row) => classifyFinance({ title: row.title, jobCategory: '', description: row.description }).status !== 'unrelated');
+    .filter((row) => !isSeniorOrNonFinanceTitle(row.title) && classifyFinance({ title: row.title, jobCategory: '', description: row.description }).status !== 'unrelated');
   if (rows.length === 0) return json({ jobs: [] }, headers);
 
   const ids = rows.map((row) => encodeURIComponent(row.id)).join(',');

@@ -9,6 +9,7 @@ const EARLY_CAREER_TITLE = /\b(?:graduate|trainee|intern(?:ship)?|apprentice|ana
 const GENERIC_TITLE = /^(?:graduate|trainee|intern|apprentice|analyst|associate|officer|executive|coordinator|specialist|consultant|advisor|researcher)(?:\s+[ivx0-9]+)?$/i;
 const EDUCATION_SIGNAL = /\b(?:mba|pgdm|chartered accountant|\bca\b|cfa|commerce|economics|finance|accounting)\b/i;
 const STRONG_NON_FINANCE = /\b(?:software engineering|software development|software (?:engineer|developer)|java developer|python developer|data engineer|engineering|information technology|technology|cybersecurity|systems? analyst|human resources|people operations|talent acquisition|marketing|communications|graphic design|product design|facilities|workplace services|customer service)\b/i;
+const SENIOR_TITLE = /\b(?:vice president|vp|avp|svp|assistant vice president|senior vice president|managing director|executive director|director|associate director|head of|chief [a-z]+ officer|partner|principal)\b/i;
 const MAX_REASONS = 12;
 
 export interface CandidateContext {
@@ -24,7 +25,7 @@ export function selectCandidate(
   const rawMetadata = boundedJsonText(listing.rawMetadata);
   const titleIsStronglyNonFinance = STRONG_NON_FINANCE.test(listing.title);
 
-  if (titleIsStronglyNonFinance) {
+  if (titleIsStronglyNonFinance || SENIOR_TITLE.test(listing.title)) {
     return { status: 'defer', reasons: ['strong_non_finance_category'] };
   }
 

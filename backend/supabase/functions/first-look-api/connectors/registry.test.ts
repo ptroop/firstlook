@@ -78,7 +78,7 @@ test('reports coverage only for implemented official connectors', () => {
     'morgan-stanley-official-india',
     'paypal-official-india',
     'shell-official-india',
-    'amazon-firecrawl-india',
+    'amazon-official-india',
     'microsoft-firecrawl-india',
     'hsbc-firecrawl-india',
     'piramal-firecrawl-india',
@@ -96,9 +96,9 @@ test('registers Workday connectors for 14 companies', () => {
   }
 });
 
-test('registers Firecrawl connectors for 6 companies', () => {
+test('registers Firecrawl connectors for 5 companies', () => {
   const connectors = createOfficialConnectorRegistry();
-  const firecrawlPrefixes = ['amazon', 'microsoft', 'hsbc', 'piramal', 'pine-labs', 'icra'];
+  const firecrawlPrefixes = ['microsoft', 'hsbc', 'piramal', 'pine-labs', 'icra'];
   for (const prefix of firecrawlPrefixes) {
     const subset = connectors.filter((c) => c.connectorId === `${prefix}-firecrawl-india`);
     assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-firecrawl-india-watch`, `${prefix}-firecrawl-india-reconcile`]);
