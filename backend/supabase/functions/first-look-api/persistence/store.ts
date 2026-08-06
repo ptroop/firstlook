@@ -106,6 +106,7 @@ export interface SourceAwareStore {
   findCanonicalCandidates(company: string): Promise<CanonicalCandidate[]>;
   getCachedClassification?(jobId: string, descriptionHash: string, version: string): Promise<OpenRouterClassification | null>;
   upsertCanonicalJob(jobId: string, job: CanonicalJobInput, classification: DeterministicClassification, seenAt: string): Promise<void>;
+  enqueueNotification?(jobId: string, title: string, company: string, payload: Record<string, unknown>): Promise<void>;
   linkObservation(sourceId: number, jobId: string | null, status: 'linked' | 'pending' | 'conflict'): Promise<void>;
   saveClassification(jobId: string, record: Record<string, unknown>): Promise<void>;
   finishRun(runId: number, diagnostic: SourceConnectorDiagnostic): Promise<void>;
@@ -297,6 +298,14 @@ export function createSourceAwareStore(client: RestClient): SourceAwareStore {
           consecutive_complete_misses: 0,
           closed_at: null,
         }),
+      });
+    },
+
+    async enqueueNotification(jobId, title, company, payload) {
+      await client.request('/rest/v1/notification_outbox?on_conflict=job_id', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates' },
+        body: JSON.stringify({ job_id: jobId, title, company, payload, status: 'pending' }),
       });
     },
 

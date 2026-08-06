@@ -205,6 +205,27 @@ export async function runSourceAwareScan(
             ? request.openRouter.promptVersion
             : 'deterministic-v1';
           await store.upsertCanonicalJob(jobId, merged, classification, startedAt);
+          // New exact-match (India / finance / 0-2 year) vacancies enter the
+          // push outbox in the same flow that saves the canonical job. The
+          // upsert is idempotent per job, so a later run cannot double-notify.
+          // The insert is best-effort: a failing outbox write must not abort
+          // the scan that already saved the vacancy.
+          if (!existing && classification.matchTier === 'exact' && store.enqueueNotification) {
+            try {
+              await store.enqueueNotification(jobId, merged.title, merged.company, {
+                jobId,
+                title: merged.title,
+                company: merged.company,
+                body: merged.location || 'New matching finance role',
+                url: merged.officialApplyUrl || merged.officialDetailUrl || '',
+                matchTier: classification.matchTier,
+                discoverySource: 'official_scan',
+              });
+            } catch (_error) {
+              // Notifications are additive; a failure here must not roll back
+              // the canonical job save or fail the scan run.
+            }
+          }
           await store.linkObservation(sourceId, jobId, 'linked');
           await store.saveClassification(jobId, {
             description_hash: observation.contentHash,

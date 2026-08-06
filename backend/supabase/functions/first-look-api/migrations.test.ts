@@ -54,6 +54,10 @@ const firecrawlQuotaGuard = readFileSync(
   new URL('../../migrations/20260806000002_disable_firecrawl_cron_by_default.sql', import.meta.url),
   'utf8',
 );
+const pushOutbox = readFileSync(
+  new URL('../../migrations/20260806000003_push_notification_outbox.sql', import.meta.url),
+  'utf8',
+);
 
 test('rotates hydration by never-checked then oldest-checked inventory', () => {
   assert.match(migration, /add column if not exists last_hydrated_at timestamptz/);
@@ -199,4 +203,14 @@ test('adds structured RCV ATS schedules before the Firecrawl fallback', () => {
 test('disables unattended Firecrawl cron jobs by default', () => {
   assert.match(firecrawlQuotaGuard, /jobname like 'first-look-%firecrawl-%'/i);
   assert.match(firecrawlQuotaGuard, /cron\.unschedule\(j\)/i);
+});
+
+test('push worker stores credentials in the RLS-locked secrets table, not Vault', () => {
+  assert.match(pushOutbox, /create table if not exists public\.first_look_secrets/);
+  assert.match(pushOutbox, /from public\.first_look_secrets/);
+  assert.match(pushOutbox, /alter table public\.first_look_secrets enable row level security/);
+  assert.doesNotMatch(pushOutbox, /vault\.decrypted_secrets|vault\.create_secret/i);
+  assert.match(pushOutbox, /'first-look-push-worker'[\s\S]*'\*\/2 \* \* \* \*'/);
+  assert.match(pushOutbox, /notification_outbox_job_id_unique/);
+  assert.doesNotMatch(pushOutbox, /OPENROUTER_API_KEY\s*=|sk-or-/i);
 });

@@ -146,8 +146,10 @@ function ambiguousSourceConnector() {
     ...observation,
     sourceExternalId: listing.sourceExternalId,
     employerJobId: listing.sourceExternalId,
-    experienceText: '0 to 2 yrs',
-    description: 'Credit risk and financial model analysis. Candidates should have 0 to 2 yrs of relevant experience.',
+    // An open-ended floor is a genuine "possible" case: it is not a confirmed
+    // 0-2 cap, so the strict parser keeps it ambiguous and it must not notify.
+    experienceText: '2+ years',
+    description: 'Credit risk and financial model analysis. Candidates should have 2+ years of relevant experience.',
     detailUrl: listing.detailUrl,
     listingUrl: listing.detailUrl,
   });
@@ -177,6 +179,7 @@ function sourceStore(due = [inventoryListing]) {
       canonicalClassifications.push(classification);
       calls.push('canonical');
     },
+    enqueueNotification: async (_jobId: string, _title: string, _company: string) => { calls.push('notify'); },
     linkObservation: async () => { calls.push('link'); },
     saveClassification: async (_jobId: string, record: any) => {
       classificationRecords.push(record);
@@ -196,11 +199,25 @@ test('persists inventory then observation before classification and finalizes a 
   });
 
   assert.deepEqual(fakeStore.calls, [
-    'start', 'inventory:123', 'observation', 'hydrated', 'canonical', 'link', 'classification', 'finish', 'finalize',
+    'start', 'inventory:123', 'observation', 'hydrated', 'canonical', 'notify', 'link', 'classification', 'finish', 'finalize',
   ]);
   assert.equal(summary.jobsFound, 1);
   assert.equal(fakeStore.diagnostics[0].status, 'complete');
   assert.equal(fakeStore.diagnostics[0].hydrationStatus, 'complete');
+});
+
+test('enqueues a push notification only for new exact-match canonical jobs', async () => {
+  const exact = sourceStore();
+  await runSourceAwareScan([sourceConnector()], exact, {
+    runType: 'reconcile', detailBatchSize: 10, now: new Date('2026-08-03T00:00:00.000Z'),
+  });
+  assert.ok(exact.calls.includes('notify'), 'new exact match should be enqueued');
+
+  const ambiguous = sourceStore();
+  await runSourceAwareScan([ambiguousSourceConnector()], ambiguous, {
+    runType: 'reconcile', detailBatchSize: 10, now: new Date('2026-08-03T00:00:00.000Z'),
+  });
+  assert.equal(ambiguous.calls.includes('notify'), false, 'possible-tier job should not be enqueued');
 });
 
 test('uses OpenRouter only for an ambiguous job and persists the actual response model', async () => {
@@ -224,7 +241,7 @@ test('uses OpenRouter only for an ambiguous job and persists the actual response
           locationStatus: 'india', financeStatus: 'exact', experienceStatus: 'zero_to_two',
           minimumYears: 0, maximumYears: 2, confidence: 0.93,
           evidence: {
-            location: ['Mumbai, India'], finance: ['Credit risk'], experience: ['0 to 2 yrs'],
+            location: ['Mumbai, India'], finance: ['Credit risk'], experience: ['2+ years'],
           },
         }) } }],
       }), { status: 200 });
