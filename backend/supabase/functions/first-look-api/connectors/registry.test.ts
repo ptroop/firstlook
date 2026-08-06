@@ -64,6 +64,7 @@ test('reports coverage only for implemented official connectors', () => {
     'paytm-official-india',
     'kpmg-official-india',
     'amex-official-india',
+    'jpmorgan-official-india',
     'sp-global-official-india',
     'deloitte-firecrawl-india',
     'amazon-official-india',
@@ -78,7 +79,6 @@ test('reports coverage only for implemented official connectors', () => {
     'ge-healthcare-official-india',
     'diageo-official-india',
     'morningstar-official-india',
-    'jpmorgan-official-india',
     'morgan-stanley-official-india',
     'paypal-official-india',
     'shell-official-india',
@@ -129,11 +129,19 @@ test('reports coverage only for implemented official connectors', () => {
 
 test('registers Workday connectors for the original and RCV companies', () => {
   const connectors = createOfficialConnectorRegistry();
-  const workdayPrefixes = ['accenture', 'pwc', 'wells-fargo', 'deutsche-bank', 'bank-of-america', 'natwest', 'fidelity', 'ge-healthcare', 'diageo', 'morningstar', 'jpmorgan', 'morgan-stanley', 'paypal', 'shell', 'state-street', 'northern-trust', 'mastercard', 'visa', 'factset', 'bloomberg'];
+  // JPMorgan is deliberately absent: it moved to the Oracle Recruiting Cloud
+  // adapter and is covered by the Oracle-specific test below.
+  const workdayPrefixes = ['accenture', 'pwc', 'wells-fargo', 'deutsche-bank', 'bank-of-america', 'natwest', 'fidelity', 'ge-healthcare', 'diageo', 'morningstar', 'morgan-stanley', 'paypal', 'shell', 'state-street', 'northern-trust', 'mastercard', 'visa', 'factset', 'bloomberg'];
   for (const prefix of workdayPrefixes) {
     const subset = connectors.filter((c) => c.connectorId === `${prefix}-official-india`);
     assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-watch`, `${prefix}-reconcile`]);
   }
+});
+
+test('registers JPMorgan through the Oracle Recruiting Cloud adapter', () => {
+  const connectors = createOfficialConnectorRegistry();
+  const jpmorgan = connectors.filter((c) => c.connectorId === 'jpmorgan-official-india');
+  assert.deepEqual(jpmorgan.map(c => c.scanGroup), ['jpmorgan-watch', 'jpmorgan-reconcile']);
 });
 
 test('registers Paytm through the public Lever postings feed', () => {

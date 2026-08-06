@@ -14,19 +14,21 @@ export interface WorkdayConfig {
   connectorIdPrefix: string;
 }
 
-export const ACCENTURE_CONFIG: WorkdayConfig = { companyName: 'Accenture', baseUrl: 'https://accenture.wd3.myworkdayjobs.com/AccentureCareers', tenant: 'accenture', siteName: 'AccentureCareers', connectorIdPrefix: 'accenture' };
-export const PWC_CONFIG: WorkdayConfig = { companyName: 'PwC', baseUrl: 'https://pwc.wd3.myworkdayjobs.com/Global_Careers', tenant: 'pwc', siteName: 'Global_Careers', connectorIdPrefix: 'pwc' };
-export const WELLS_FARGO_CONFIG: WorkdayConfig = { companyName: 'Wells Fargo', baseUrl: 'https://wellsfargo.wd3.myworkdayjobs.com/wellsfargo', tenant: 'wellsfargo', siteName: 'wellsfargo', connectorIdPrefix: 'wells-fargo' };
+// Verified live 2026-08-06 against the public CXS endpoints: each of these
+// returns HTTP 200 with { total, jobPostings }. The earlier tenant/site values
+// returned 404/422 and were silently dropping whole companies from the feed.
+export const ACCENTURE_CONFIG: WorkdayConfig = { companyName: 'Accenture', baseUrl: 'https://accenture.wd103.myworkdayjobs.com/AccentureCareers', tenant: 'accenture', siteName: 'AccentureCareers', connectorIdPrefix: 'accenture' };
+export const PWC_CONFIG: WorkdayConfig = { companyName: 'PwC', baseUrl: 'https://pwc.wd3.myworkdayjobs.com/Global_Experienced_Careers', tenant: 'pwc', siteName: 'Global_Experienced_Careers', connectorIdPrefix: 'pwc' };
+export const WELLS_FARGO_CONFIG: WorkdayConfig = { companyName: 'Wells Fargo', baseUrl: 'https://wf.wd1.myworkdayjobs.com/WellsFargoJobs', tenant: 'wf', siteName: 'WellsFargoJobs', connectorIdPrefix: 'wells-fargo' };
 export const DEUTSCHE_BANK_CONFIG: WorkdayConfig = { companyName: 'Deutsche Bank', baseUrl: 'https://db.wd3.myworkdayjobs.com/DBWebsite', tenant: 'db', siteName: 'DBWebsite', connectorIdPrefix: 'deutsche-bank' };
-export const BANK_OF_AMERICA_CONFIG: WorkdayConfig = { companyName: 'Bank of America', baseUrl: 'https://bankofamerica.wd1.myworkdayjobs.com/campus', tenant: 'bankofamerica', siteName: 'campus', connectorIdPrefix: 'bank-of-america' };
-export const NATWEST_CONFIG: WorkdayConfig = { companyName: 'NatWest', baseUrl: 'https://natwestgroup.wd3.myworkdayjobs.com/NatWestGroupCareers', tenant: 'natwestgroup', siteName: 'NatWestGroupCareers', connectorIdPrefix: 'natwest' };
+export const BANK_OF_AMERICA_CONFIG: WorkdayConfig = { companyName: 'Bank of America', baseUrl: 'https://ghr.wd1.myworkdayjobs.com/lateral-ba_continuum', tenant: 'ghr', siteName: 'lateral-ba_continuum', connectorIdPrefix: 'bank-of-america' };
+export const NATWEST_CONFIG: WorkdayConfig = { companyName: 'NatWest', baseUrl: 'https://rbs.wd3.myworkdayjobs.com/RBS', tenant: 'rbs', siteName: 'RBS', connectorIdPrefix: 'natwest' };
 export const FIDELITY_CONFIG: WorkdayConfig = { companyName: 'Fidelity', baseUrl: 'https://fmr.wd1.myworkdayjobs.com/FidelityCareers', tenant: 'fmr', siteName: 'FidelityCareers', connectorIdPrefix: 'fidelity' };
-export const GE_HEALTHCARE_CONFIG: WorkdayConfig = { companyName: 'GE HealthCare', baseUrl: 'https://gehealthcare.wd1.myworkdayjobs.com/gehc-external-careers', tenant: 'gehealthcare', siteName: 'gehc-external-careers', connectorIdPrefix: 'ge-healthcare' };
+export const GE_HEALTHCARE_CONFIG: WorkdayConfig = { companyName: 'GE HealthCare', baseUrl: 'https://gehc.wd5.myworkdayjobs.com/GEHC_ExternalSite', tenant: 'gehc', siteName: 'GEHC_ExternalSite', connectorIdPrefix: 'ge-healthcare' };
 export const DIAGEO_CONFIG: WorkdayConfig = { companyName: 'Diageo', baseUrl: 'https://diageo.wd3.myworkdayjobs.com/Diageo_Careers', tenant: 'diageo', siteName: 'Diageo_Careers', connectorIdPrefix: 'diageo' };
 export const SP_GLOBAL_CONFIG: WorkdayConfig = { companyName: 'S&P Global', baseUrl: 'https://spglobal.wd5.myworkdayjobs.com/SPGlobal_Careers', tenant: 'spglobal', siteName: 'SPGlobal_Careers', connectorIdPrefix: 'sp-global' };
 export const MORNINGSTAR_CONFIG: WorkdayConfig = { companyName: 'Morningstar', baseUrl: 'https://morningstar.wd5.myworkdayjobs.com/morningstar', tenant: 'morningstar', siteName: 'morningstar', connectorIdPrefix: 'morningstar' };
-export const JPMORGAN_CONFIG: WorkdayConfig = { companyName: 'JPMorgan Chase', baseUrl: 'https://jpmorgan.wd5.myworkdayjobs.com/JPMorgan_Careers', tenant: 'jpmorgan', siteName: 'JPMorgan_Careers', connectorIdPrefix: 'jpmorgan' };
-export const MORGAN_STANLEY_CONFIG: WorkdayConfig = { companyName: 'Morgan Stanley', baseUrl: 'https://morganstanley.wd5.myworkdayjobs.com/Morgan_Stanley_Careers', tenant: 'morganstanley', siteName: 'Morgan_Stanley_Careers', connectorIdPrefix: 'morgan-stanley' };
+export const MORGAN_STANLEY_CONFIG: WorkdayConfig = { companyName: 'Morgan Stanley', baseUrl: 'https://ms.wd5.myworkdayjobs.com/External', tenant: 'ms', siteName: 'External', connectorIdPrefix: 'morgan-stanley' };
 export const PAYPAL_CONFIG: WorkdayConfig = { companyName: 'PayPal', baseUrl: 'https://paypal.wd1.myworkdayjobs.com/jobs', tenant: 'paypal', siteName: 'jobs', connectorIdPrefix: 'paypal' };
 export const SHELL_CONFIG: WorkdayConfig = { companyName: 'Shell', baseUrl: 'https://shell.wd3.myworkdayjobs.com/ShellCareers', tenant: 'shell', siteName: 'ShellCareers', connectorIdPrefix: 'shell' };
 export const SIEMENS_CONFIG: WorkdayConfig = { companyName: 'Siemens', baseUrl: 'https://siemens.wd3.myworkdayjobs.com/External_Careers', tenant: 'siemens', siteName: 'External_Careers', connectorIdPrefix: 'siemens' };

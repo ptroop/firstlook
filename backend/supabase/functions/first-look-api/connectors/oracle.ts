@@ -28,6 +28,18 @@ export const AMEX_CONFIG: OracleConfig = {
   watchPages: 5,
 };
 
+// JPMorgan Chase careers is Oracle Recruiting Cloud, not Workday. Verified live
+// 2026-08-06: the CX_1002 site returns a nested items[0].requisitionList with
+// PrimaryLocationCountry 'IN' entries and hydrates via recruitingCEJobRequisitionDetails.
+export const JPMORGAN_CONFIG: OracleConfig = {
+  connectorId: 'jpmorgan-official-india',
+  company: 'JPMorgan Chase',
+  sourceName: 'JPMorgan Chase Careers',
+  baseUrl: 'https://jpmc.fa.oraclecloud.com',
+  siteId: 'CX_1002',
+  watchPages: 5,
+};
+
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_BODY_BYTES = 8_000_000;
 
@@ -93,17 +105,22 @@ async function enumerateOracle(config: OracleConfig, fetcher: JobFetch, maxPages
     
     try {
       const data = await fetchJson(fetcher, url);
-      const items = Array.isArray(data?.items) ? data.items : [];
+      const items = readOracleRequisitions(data);
       pagesFetched += 1;
 
       for (const item of items) {
         const sourceExternalId = item.Id;
         const title = item.Title || '';
-        const location = item.PrimaryLocation || '';
+        // Some sites (e.g. JPMorgan) expose only the country code at listing
+        // level; the detail endpoint still returns the full city.
+        const location = item.PrimaryLocation || (item.PrimaryLocationCountry === 'IN' ? 'India' : '');
         const category = item.Category || null;
-        
-        // India filter regex
-        if (!sourceExternalId || !title || !location || !/\b(?:india|bengaluru|bangalore|gurgaon|gurugram|mumbai|pune|hyderabad|delhi|noida|chennai)\b/i.test(location)) {
+        const countryCode = String(item.PrimaryLocationCountry || '').toUpperCase();
+
+        // India filter regex, plus country-code fallback for ORC sites that
+        // do not publish a city on the listing response.
+        if (!sourceExternalId || !title || !location
+          || (!/\b(?:india|bengaluru|bangalore|gurgaon|gurugram|mumbai|pune|hyderabad|delhi|noida|chennai)\b/i.test(location) && countryCode !== 'IN')) {
           continue;
         }
 
@@ -194,6 +211,16 @@ function decodeHtml(value: string): string {
   return value.replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&nbsp;|&#160;/gi, ' ')
     .replace(/&#x([0-9a-f]+);/gi, (_m, h) => String.fromCodePoint(Number.parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_m, d) => String.fromCodePoint(Number.parseInt(d, 10)));
+}
+
+function readOracleRequisitions(data: any): any[] {
+  // JPMorgan CX_1002 wraps the list in items[0].requisitionList; KPMG/Amex
+  // return a flat items array.
+  const flat = Array.isArray(data?.items) ? data.items : [];
+  if (flat.length === 1 && Array.isArray(flat[0]?.requisitionList)) {
+    return flat[0].requisitionList;
+  }
+  return flat;
 }
 
 function uniqueBy<T>(values: T[], identity: (value: T) => string): T[] {

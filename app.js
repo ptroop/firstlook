@@ -78,6 +78,8 @@ let latestCoverage = [];
 let latestSnapshotAt = null;
 let refreshInFlight = false;
 const CV_STORAGE_KEY = 'first-look-master-profile-v1';
+const CV_VERSIONS_STORAGE_KEY = 'first-look-profile-versions-v1';
+const CV_REVIEW_STORAGE_KEY = 'first-look-review-gate-v1';
 const COVER_LETTER_STORAGE_KEY = 'first-look-cover-letter-drafts-v1';
 const PORTAL_STORAGE_KEY = 'first-look-portal-listings-v1';
 const JOB_STATUS_STORAGE_KEY = 'first-look-job-status-v1';
@@ -238,6 +240,67 @@ function loadCoverLetterDrafts() {
 let coverLetterDrafts = loadCoverLetterDrafts();
 let portalListings = loadPortalListings();
 
+function loadReviewedDrafts() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CV_REVIEW_STORAGE_KEY) || '{}');
+    return stored && typeof stored === 'object' ? stored : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+let reviewedDrafts = loadReviewedDrafts();
+
+function isDraftReviewed(jobId) {
+  return Boolean(reviewedDrafts[jobId]);
+}
+
+function setDraftReviewed(jobId, reviewed) {
+  if (reviewed) reviewedDrafts[jobId] = { at: new Date().toISOString() };
+  else delete reviewedDrafts[jobId];
+  try { localStorage.setItem(CV_REVIEW_STORAGE_KEY, JSON.stringify(reviewedDrafts)); } catch (_error) { /* private mode */ }
+}
+
+function loadProfileVersions() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CV_VERSIONS_STORAGE_KEY) || '[]');
+    return Array.isArray(stored) ? stored : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+let profileVersions = loadProfileVersions();
+
+function saveProfileVersions() {
+  try { localStorage.setItem(CV_VERSIONS_STORAGE_KEY, JSON.stringify(profileVersions)); } catch (_error) { /* private mode */ }
+}
+
+function renderProfileVersions() {
+  const container = document.querySelector('#cv-versions');
+  if (!container) return;
+  if (!profileVersions.length) {
+    container.innerHTML = '<p class="cv-quality-empty">No saved profile versions yet. Save a version before large edits to keep a restorable point.</p>';
+    return;
+  }
+  container.innerHTML = profileVersions.map((version) => `
+    <div class="cv-version-item">
+      <span title="${escapeAttribute(version.text.length)} characters"><strong>${escapeHtml(version.label || 'Unnamed')}</strong> · ${escapeHtml(version.createdAt ? new Date(version.createdAt).toLocaleString() : '')}</span>
+      <span class="cv-version-actions"><button class="text-button cv-version-restore" type="button" data-version-id="${escapeAttribute(version.createdAt)}">Restore</button><button class="text-button cv-version-delete" type="button" data-version-id="${escapeAttribute(version.createdAt)}">Delete</button></span>
+    </div>`).join('');
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 function loadJobStatusCache() {
   try {
     const stored = JSON.parse(localStorage.getItem(JOB_STATUS_STORAGE_KEY) || '{}');
@@ -337,7 +400,12 @@ function autoCheckTopRoles() {
 function loadPortalListings() {
   try {
     const stored = JSON.parse(localStorage.getItem(PORTAL_STORAGE_KEY) || '[]');
-    return Array.isArray(stored) ? stored : [];
+    if (!Array.isArray(stored)) return [];
+    const valid = stored.map(normalizePortalListing).filter(Boolean);
+    if (valid.length !== stored.length) {
+      localStorage.setItem(PORTAL_STORAGE_KEY, JSON.stringify(valid));
+    }
+    return valid;
   } catch (_error) {
     return [];
   }
@@ -347,7 +415,8 @@ function isLikelyPortalFinanceRole(listing) {
   const title = String(listing?.title || '');
   const location = String(listing?.location || '');
   if (!/\b(?:india|bengaluru|bangalore|mumbai|pune|hyderabad|gurugram|gurgaon|delhi|noida|chennai|kolkata|ahmedabad|jaipur)\b/i.test(location)) return false;
-  if (/\b(?:software|developer|engineer|engineering|cloud|devops|cyber|data scientist|machine learning|frontend|backend|ui|ux|designer|design|creative|brand|visual|product manager|project manager|marketing|sales|business development|customer success|recruit|human resources|legal|support|operations manager|assistant manager|senior analyst|senior associate|team lead|manager)\b/i.test(title)) return false;
+  if (/\b(?:software|developer|engineer|engineering|cloud|devops|cyber|data scientist|machine learning|frontend|backend|ui|ux|designer|design|creative|brand|visual|product manager|project manager|marketing|sales|business development|customer success|customer experience|recruit|human resources|legal|support|operations manager|assistant manager|senior analyst|senior associate|senior specialist|senior consultant|senior accountant|team lead|team leader|manager|tele ?caller|collections|loan recovery|growth management|voice ?over|content creator|architect|sap|abap|servicenow|itsm|itam|testing|quality analyst|digital analyst|demand planner|replenishment|data management|information management|personal assistant|executive assistant|helpdesk|vendor onboarding|talent management|human capital|strats|chat process|ccm|aiml|applied ai|agentic|intelligence automation|automation|dm \/ am \/ se|managing consultant|people leader|deputy manager|dgm)\b/i.test(title)) return false;
+  if (/^(?:about the team|responsibilities|qualifications|india|team member|german,? ?nct|csg laf|prospect application for future jobs)$/i.test(title.trim())) return false;
   const specificFinance = /\b(?:finance|financial|account(?:ing)?|audit|credit|risk|investment|investments|research|portfolio|treasury|tax|valuation|fund|banking|capital markets|reconciliation|compliance|aml|kyc|fp&a|controller)\b/i.test(title);
   const financeAnalyst = /\b(?:financial|finance|credit|risk|investment|research|portfolio|fund|treasury|tax|valuation|equity|banking)\b[\w /&-]{0,30}\banalyst\b/i.test(title);
   return specificFinance || financeAnalyst;
@@ -443,12 +512,19 @@ function renderCvMatches() {
     const jobId = jobIdentity(job);
     const canDraftCoverLetter = ['required', 'mentioned', 'optional'].includes(result.coverLetter.status);
     const draft = canDraftCoverLetter ? (coverLetterDrafts[jobId] || engine.buildCoverLetter(job, result, profile)) : '';
+    const reviewed = isDraftReviewed(jobId);
+    const verifyReport = canDraftCoverLetter && draft ? engine.verifyCoverLetter(draft, profile) : null;
+    const verifyNote = verifyReport && !verifyReport.ok
+      ? `<p class="cv-brief-warning">Verifier found ${verifyReport.unverified.length} line${verifyReport.unverified.length === 1 ? '' : 's'} not backed by the profile: ${escapeHtml(verifyReport.unverified.slice(0, 3).join(' · '))}. Edit or remove before exporting.</p>`
+      : '';
     const coverLetterPanel = canDraftCoverLetter && draft
       ? `<div class="cover-letter-panel" id="cover-letter-panel-${escapeAttribute(jobId)}" hidden>
           <p class="cover-status"><strong>Cover letter: ${escapeHtml(result.coverLetter.label)}</strong>${result.coverLetter.evidence ? ` — ${escapeHtml(result.coverLetter.evidence)}` : ''}</p>
           <label class="field-label" for="cover-letter-${escapeAttribute(jobId)}">Conservative evidence-backed draft</label>
           <textarea class="cover-letter-textarea" id="cover-letter-${escapeAttribute(jobId)}" rows="13">${escapeHtml(draft)}</textarea>
-          <div class="cv-controls"><button class="button button-dark cover-letter-save" type="button" data-cover-job-id="${escapeAttribute(jobId)}">Save draft</button><button class="text-button cover-letter-copy" type="button" data-cover-job-id="${escapeAttribute(jobId)}">Copy draft</button></div>
+          ${verifyNote}
+          <label class="review-gate"><input class="cover-letter-review" type="checkbox" data-cover-job-id="${escapeAttribute(jobId)}"${reviewed ? ' checked' : ''} /> I reviewed every line of this draft against my profile before use.</label>
+          <div class="cv-controls"><button class="button button-dark cover-letter-save" type="button" data-cover-job-id="${escapeAttribute(jobId)}">Save draft</button><button class="text-button cover-letter-copy" type="button" data-cover-job-id="${escapeAttribute(jobId)}"${reviewed ? '' : ' disabled'} title="${reviewed ? '' : 'Tick the review checkbox first.'}">Copy draft</button><button class="text-button cover-letter-export" type="button" data-cover-job-id="${escapeAttribute(jobId)}"${reviewed && (!verifyReport || verifyReport.ok) ? '' : ' disabled'} title="${reviewed ? (verifyReport && !verifyReport.ok ? 'Fix unverified lines first.' : '') : 'Tick the review checkbox first.'}">Export .docx</button></div>
           <p class="privacy-note">Local draft only. Review every line; unmatched requirements are not filled in and no metrics or experience were invented.</p>
         </div>`
       : `<div class="cover-letter-panel" hidden><p class="cover-letter-empty">${result.coverLetter.status === 'not_mentioned' ? 'Cover letter is not mentioned in this posting; no draft was generated.' : result.coverLetter.status === 'unknown' ? 'The posting text is unavailable, so the cover-letter requirement cannot be determined.' : 'No evidence-backed draft is available until at least two profile lines support the role.'}</p></div>`;
@@ -893,8 +969,35 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  const coverReview = event.target.closest('.cover-letter-review');
+  if (coverReview) {
+    setDraftReviewed(coverReview.dataset.coverJobId || '', coverReview.checked);
+    const panel = coverReview.closest('.cover-letter-panel');
+    if (panel) {
+      const jobId = coverReview.dataset.coverJobId || '';
+      const textarea = panel.querySelector(`#cover-letter-${CSS.escape(jobId)}`);
+      const engine = cvEngine();
+      const report = engine && textarea ? engine.verifyCoverLetter(textarea.value, profileText()) : null;
+      const exportAllowed = coverReview.checked && (!report || report.ok);
+      const copyButton = panel.querySelector('.cover-letter-copy');
+      const exportButton = panel.querySelector('.cover-letter-export');
+      if (copyButton) copyButton.disabled = !coverReview.checked;
+      if (exportButton) {
+        exportButton.disabled = !exportAllowed;
+        exportButton.title = exportAllowed ? '' : (coverReview.checked && report && !report.ok ? 'Fix unverified lines first.' : 'Tick the review checkbox first.');
+      }
+      if (coverReview.checked && report && !report.ok) {
+        showToast(`Review recorded, but ${report.unverified.length} line${report.unverified.length === 1 ? '' : 's'} still need fixing before export.`);
+        return;
+      }
+    }
+    showToast(coverReview.checked ? 'Review recorded on this device.' : 'Review gate cleared.');
+    return;
+  }
+
   const coverCopy = event.target.closest('.cover-letter-copy');
   if (coverCopy) {
+    if (coverCopy.disabled) return;
     const textarea = document.querySelector(`#cover-letter-${CSS.escape(coverCopy.dataset.coverJobId || '')}`);
     if (!textarea) return;
     try {
@@ -903,6 +1006,87 @@ document.addEventListener('click', async (event) => {
     } catch (_error) {
       textarea.select();
       showToast('Copy was blocked. The draft is selected for manual copy.');
+    }
+    return;
+  }
+
+  const coverExport = event.target.closest('.cover-letter-export');
+  if (coverExport) {
+    if (coverExport.disabled) return;
+    const engine = cvEngine();
+    if (!engine) return;
+    const jobId = coverExport.dataset.coverJobId || '';
+    const job = currentJobs.find((candidate) => jobIdentity(candidate) === jobId);
+    if (!job) return;
+    const textarea = document.querySelector(`#cover-letter-${CSS.escape(jobId)}`);
+    if (!textarea) return;
+    const report = engine.verifyCoverLetter(textarea.value, profileText());
+    if (!report.ok) {
+      showToast(`Export blocked: ${report.unverified.length} line${report.unverified.length === 1 ? '' : 's'} are not backed by the profile.`);
+      return;
+    }
+    try {
+      const doc = engine.buildDocx({ profile: profileText(), coverLetter: textarea.value, job });
+      downloadBlob(doc.blob, doc.filename);
+      showToast('Exported an ATS-readable .docx (cover letter + profile).');
+    } catch (_error) {
+      showToast('The .docx export failed on this browser.');
+    }
+    return;
+  }
+
+  const versionSave = event.target.closest('#cv-save-version');
+  if (versionSave) {
+    const profile = profileText();
+    if (!profile) {
+      showToast('Add profile text before saving a version.');
+      return;
+    }
+    const labelInput = document.querySelector('#cv-version-name');
+    const label = (labelInput?.value || '').trim().slice(0, 40);
+    profileVersions = [{ label: label || `Version ${profileVersions.length + 1}`, text: profile, createdAt: new Date().toISOString() }, ...profileVersions].slice(0, 12);
+    saveProfileVersions();
+    if (labelInput) labelInput.value = '';
+    renderProfileVersions();
+    showToast('Profile version saved on this device.');
+    return;
+  }
+
+  const versionRestore = event.target.closest('.cv-version-restore');
+  if (versionRestore) {
+    const version = profileVersions.find((candidate) => candidate.createdAt === versionRestore.dataset.versionId);
+    if (version && cvProfile) {
+      cvProfile.value = version.text;
+      if (cvMeta) cvMeta.textContent = 'Restored from a saved version — save to keep it';
+      renderCvMatches();
+      showToast('Version restored to the editor. Save to keep it as the master.');
+    }
+    return;
+  }
+
+  const versionDelete = event.target.closest('.cv-version-delete');
+  if (versionDelete) {
+    profileVersions = profileVersions.filter((candidate) => candidate.createdAt !== versionDelete.dataset.versionId);
+    saveProfileVersions();
+    renderProfileVersions();
+    showToast('Profile version deleted.');
+    return;
+  }
+
+  const profileExport = event.target.closest('#cv-export-profile');
+  if (profileExport) {
+    const engine = cvEngine();
+    const profile = profileText();
+    if (!engine || !profile) {
+      showToast('Add profile text before exporting.');
+      return;
+    }
+    try {
+      const doc = engine.buildDocx({ profile });
+      downloadBlob(doc.blob, doc.filename);
+      showToast('Exported your profile as an ATS-readable .docx.');
+    } catch (_error) {
+      showToast('The .docx export failed on this browser.');
     }
     return;
   }
@@ -1018,6 +1202,7 @@ document.addEventListener('keydown', (event) => {
 
 window.FirstLookUI = { renderJobs, renderCoverage, safeUrl };
 renderCompanyDirectory();
+renderProfileVersions();
 loadStoredProfile();
 loadData();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});

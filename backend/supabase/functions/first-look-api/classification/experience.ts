@@ -7,7 +7,14 @@ export interface ExperienceResult {
   evidence: string[];
 }
 
+// Strict 0-2 band: only roles whose wording caps experience at 0, 1 or 2 years
+// (or the month equivalent). Open-ended floors ("2+", "at least 2") and unknown
+// wording stay out of the public feed — they are not confirmed 0-2.
+
 const SENIOR_EXECUTIVE_TITLE = /\b(?:vice president|vp|avp|svp|assistant vice president|senior vice president|managing director|executive director|director|associate director|head of|chief [a-z]+ officer|partner|principal|senior manager)\b/i;
+const ENTRY_LEVEL_PHRASE = /\b(?:freshers?|recent graduates?|new graduates?|campus hires?|early career|entry[- ]level|no (?:prior|previous) experience (?:is )?required|zero years?(?: of experience)?)\b/;
+const MID_OR_SENIOR_PHRASE = /\b(?:mid[- ]level|seasoned(?: professional)?|highly experienced|extensive experience|substantial experience)\b/;
+const YEAR_UNIT = String.raw`(?:years?|yrs?|yoe|months?)`;
 
 export function parseExperience(input: string): ExperienceResult {
   const text = normalizeExperienceText(input);
@@ -23,32 +30,54 @@ export function parseExperience(input: string): ExperienceResult {
     };
   }
 
+  const midMatch = text.match(MID_OR_SENIOR_PHRASE)?.[0];
+  if (midMatch) {
+    return {
+      status: 'over_two',
+      minimumYears: 3,
+      maximumYears: null,
+      evidence: [midMatch],
+    };
+  }
+
   const preferred = findPreferredOnly(text);
   const requiredText = text.replace(/[^.!?;\n]*\b(?:preferred|desirable|nice to have)\b[^.!?;\n]*/g, ' ');
   const bounds = findRequiredBounds(requiredText);
 
   if (bounds.length === 0) {
-    if (/\b(?:freshers?|recent graduates?|entry level|no (?:prior|previous) experience (?:is )?required)\b/.test(text)) {
-      const evidence = text.match(/\b(?:freshers?|recent graduates?|entry level|no (?:prior|previous) experience (?:is )?required)\b/)?.[0];
+    if (ENTRY_LEVEL_PHRASE.test(text)) {
+      const evidence = text.match(ENTRY_LEVEL_PHRASE)?.[0];
       return zeroToTwo(0, 0, evidence ? [evidence] : []);
     }
     if (preferred) {
-      const preferredYears = preferredRangeYears(preferred);
-      if (preferredYears.length > 0 && preferredYears.some((value) => value > 2)) {
-        return { status: 'over_two', minimumYears: null, maximumYears: null, evidence: [preferred] };
-      }
-      return zeroToTwo(null, null, [preferred]);
+      return classifyPreferredOnly(preferred);
     }
     return ambiguous([]);
   }
 
-  const hasOpenEndedAtOrBelowTwo = bounds.some((bound) => bound.minimum !== null
-    && bound.minimum <= 2 && bound.maximum === null);
-  const hasOverTwo = bounds.some((bound) => (bound.minimum ?? 0) > 2 || (bound.maximum ?? 0) > 2);
-  const hasAtMostTwo = bounds.some((bound) => bound.maximum !== null && bound.maximum <= 2);
+  const hasOpenEnded = bounds.some((bound) => bound.minimum !== null && bound.maximum === null);
+  const hasOverTwo = bounds.some((bound) => exceedsTwo(bound.minimum) || exceedsTwo(bound.maximum));
+  const hasAtMostTwo = bounds.some((bound) => bound.maximum !== null && bound.maximum <= 2
+    && (bound.minimum === null || bound.minimum <= 2));
   const evidence = [...new Set(bounds.map((bound) => bound.evidence))];
 
-  if ((hasOverTwo && hasAtMostTwo) || hasOpenEndedAtOrBelowTwo) return ambiguous(evidence);
+  // Open-ended floors ("1+", "2+", "at least 2") are not a confirmed 0-2 cap.
+  if (hasOpenEnded) {
+    // A confirmed cap beside an open floor ("0-2 years ... minimum 4 years")
+    // is contradictory, not a clear senior requirement: keep it ambiguous.
+    if (hasAtMostTwo) return ambiguous(evidence);
+    if (hasOverTwo || bounds.some((bound) => bound.minimum !== null && bound.minimum > 2)) {
+      return {
+        status: 'over_two',
+        minimumYears: minimumKnown(bounds),
+        maximumYears: maximumKnown(bounds),
+        evidence,
+      };
+    }
+    return ambiguous(evidence);
+  }
+
+  if (hasOverTwo && hasAtMostTwo) return ambiguous(evidence);
   if (hasOverTwo) {
     return {
       status: 'over_two',
@@ -57,35 +86,80 @@ export function parseExperience(input: string): ExperienceResult {
       evidence,
     };
   }
-  if (hasAtMostTwo) return zeroToTwo(minimumKnown(bounds), maximumKnown(bounds), evidence);
+  if (hasAtMostTwo) {
+    const minimumYears = minimumKnown(bounds);
+    const maximumYears = maximumKnown(bounds);
+    if (!isWithinZeroToTwo(minimumYears, maximumYears)) return ambiguous(evidence);
+    return zeroToTwo(minimumYears, maximumYears, evidence);
+  }
   return ambiguous(evidence);
+}
+
+/** True only when both known bounds sit inside the inclusive 0-2 year band. */
+export function isWithinZeroToTwo(minimumYears: number | null, maximumYears: number | null): boolean {
+  if (minimumYears !== null && (minimumYears < 0 || minimumYears > 2)) return false;
+  if (maximumYears !== null && (maximumYears < 0 || maximumYears > 2)) return false;
+  if (minimumYears !== null && maximumYears !== null && minimumYears > maximumYears) return false;
+  return true;
+}
+
+/** Serving-layer helper: only confirmed zero_to_two inside the 0-2 band. */
+export function isStrictZeroToTwoExperience(result: ExperienceResult): boolean {
+  return result.status === 'zero_to_two' && isWithinZeroToTwo(result.minimumYears, result.maximumYears);
+}
+
+function classifyPreferredOnly(preferred: string): ExperienceResult {
+  const openEnded = /\d+(?:\.\d+)?\+\s*(?:years?|yrs?|yoe|months?)/.test(preferred);
+  const preferredYears = preferredRangeYears(preferred);
+  if (openEnded || preferredYears.some((value) => value > 2)) {
+    return { status: 'over_two', minimumYears: null, maximumYears: null, evidence: [preferred] };
+  }
+  if (preferredYears.length > 0 && preferredYears.every((value) => value <= 2)) {
+    const minimumYears = Math.min(...preferredYears);
+    const maximumYears = Math.max(...preferredYears);
+    return zeroToTwo(minimumYears, maximumYears, [preferred]);
+  }
+  return zeroToTwo(null, null, [preferred]);
 }
 
 function findRequiredBounds(text: string): Bound[] {
   const bounds: Bound[] = [];
   const consumed: Array<[number, number]> = [];
 
-  collect(text, /\bup to\s+(\d+(?:\.\d+)?)\s*(years?|months?)\b/g, (match) => ({
+  collect(text, new RegExp(String.raw`\bup to\s+(\d+(?:\.\d+)?)\s*(${YEAR_UNIT})\b`, 'g'), (match) => ({
     minimum: 0,
     maximum: toYears(Number(match[1]), match[2]),
     evidence: match[0],
   }), bounds, consumed);
-  collect(text, /\b(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*(years?|months?)\b/g, (match) => ({
+
+  collect(text, new RegExp(String.raw`\b(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*(${YEAR_UNIT})\b`, 'g'), (match) => ({
     minimum: toYears(Number(match[1]), match[3]),
     maximum: toYears(Number(match[2]), match[3]),
     evidence: match[0],
   }), bounds, consumed);
-  collect(text, /\b(?:minimum(?: of)?|at least)\s+(\d+(?:\.\d+)?)\+?\s*(years?|months?)\b/g, (match) => ({
+
+  collect(text, new RegExp(String.raw`\b(?:minimum(?: of)?|at least|more than|over)\s+(\d+(?:\.\d+)?)\+?\s*(${YEAR_UNIT})\b`, 'g'), (match) => {
+    const kind = match[0];
+    const value = toYears(Number(match[1]), match[2]);
+    // "more than" / "over" is a floor strictly above the stated number.
+    const minimum = /\b(?:more than|over)\b/.test(kind) ? value + 0.01 : value;
+    return { minimum, maximum: null, evidence: match[0] };
+  }, bounds, consumed);
+
+  collect(text, new RegExp(String.raw`\b(\d+(?:\.\d+)?)\+\s*(${YEAR_UNIT})\b`, 'g'), (match) => ({
     minimum: toYears(Number(match[1]), match[2]),
     maximum: null,
     evidence: match[0],
   }), bounds, consumed);
-  collect(text, /\b(\d+(?:\.\d+)?)\+\s*(years?|months?)\b/g, (match) => ({
-    minimum: toYears(Number(match[1]), match[2]),
-    maximum: null,
-    evidence: match[0],
-  }), bounds, consumed);
-  collect(text, /\b(\d+(?:\.\d+)?)\s*(years?|months?)\b(?=[^.!?;\n]{0,30}\b(?:required|experience|needed|need|must|minimum)\b)/g, (match) => {
+
+  // "requires 5 years", "must have 3 years", "with 4 years experience"
+  collect(text, new RegExp(String.raw`\b(?:requires?|must(?:\s+have|\s+possess)?|needs?|with|possess(?:es|ing)?)\s+(\d+(?:\.\d+)?)\s*(${YEAR_UNIT})\b`, 'g'), (match) => {
+    const value = toYears(Number(match[1]), match[2]);
+    return { minimum: value, maximum: value, evidence: match[0] };
+  }, bounds, consumed);
+
+  // "5 years of experience" / "3 yrs experience required"
+  collect(text, new RegExp(String.raw`\b(\d+(?:\.\d+)?)\s*(${YEAR_UNIT})\b(?=[^.!?;\n]{0,40}\b(?:required|experience|needed|need|must|minimum|relevant)\b)`, 'g'), (match) => {
     const value = toYears(Number(match[1]), match[2]);
     return { minimum: value, maximum: value, evidence: match[0] };
   }, bounds, consumed);
@@ -104,23 +178,33 @@ function collect(
     const start = match.index ?? 0;
     const end = start + match[0].length;
     if (consumed.some(([usedStart, usedEnd]) => start < usedEnd && end > usedStart)) continue;
-    if (isCorporateHistoryPhrase(text, start)) continue;
+    if (isCorporateHistoryPhrase(text, start, end)) continue;
     bounds.push(makeBound(match));
     consumed.push([start, end]);
   }
 }
 
-function isCorporateHistoryPhrase(text: string, start: number): boolean {
+function isCorporateHistoryPhrase(text: string, start: number, end: number): boolean {
   const prefix = text.slice(Math.max(0, start - 24), start);
-  return /\b(?:more than|over|nearly|almost|founded in|since)\s*$/i.test(prefix);
+  if (!/\b(?:more than|over|nearly|almost|founded in|since)\s*$/i.test(prefix)
+    && !/\b(?:more than|over)\s+\d/.test(text.slice(start, end))) {
+    return false;
+  }
+  // Real requirements usually continue with experience/required wording.
+  const suffix = text.slice(end, end + 40);
+  if (/\b(?:experience|required|needed|relevant|in (?:finance|banking|accounting|audit|risk))\b/i.test(suffix)) {
+    return false;
+  }
+  // Bare "more than 150 years" / "founded in 1869" style history.
+  return true;
 }
 
 function findPreferredOnly(text: string): string | null {
-  return text.match(/\b\d+(?:\.\d+)?(?:\s*(?:-|to)\s*\d+(?:\.\d+)?)?\+?\s*(?:years?|months?)[^.!?;\n]{0,20}\b(?:preferred|desirable|nice to have)\b/)?.[0] ?? null;
+  return text.match(new RegExp(String.raw`\b\d+(?:\.\d+)?(?:\s*(?:-|to)\s*\d+(?:\.\d+)?)?\+?\s*${YEAR_UNIT}[^.!?;\n]{0,20}\b(?:preferred|desirable|nice to have)\b`))?.[0] ?? null;
 }
 
 function preferredRangeYears(preferred: string): number[] {
-  const match = preferred.match(/(\d+(?:\.\d+)?)(?:\s*(?:-|to)\s*(\d+(?:\.\d+)?))?\+?\s*(years?|months?)/);
+  const match = preferred.match(new RegExp(String.raw`(\d+(?:\.\d+)?)(?:\s*(?:-|to)\s*(\d+(?:\.\d+)?))?\+?\s*(${YEAR_UNIT})`));
   if (!match) return [];
   const unit = match[3];
   const values = [toYears(Number(match[1]), unit)];
@@ -147,6 +231,10 @@ function toYears(value: number, unit: string): number {
   return unit.startsWith('month') ? value / 12 : value;
 }
 
+function exceedsTwo(value: number | null): boolean {
+  return value !== null && value > 2;
+}
+
 function minimumKnown(bounds: Bound[]): number | null {
   const values = bounds.map((bound) => bound.minimum).filter((value): value is number => value !== null);
   return values.length > 0 ? Math.min(...values) : null;
@@ -163,4 +251,10 @@ function zeroToTwo(minimumYears: number | null, maximumYears: number | null, evi
 
 function ambiguous(evidence: string[]): ExperienceResult {
   return { status: 'ambiguous', minimumYears: null, maximumYears: null, evidence };
+}
+
+interface Bound {
+  minimum: number | null;
+  maximum: number | null;
+  evidence: string;
 }

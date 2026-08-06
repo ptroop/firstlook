@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>First Look - finance roles</title>
-    <link rel="stylesheet" href="./styles.css?v=6" />
+    <link rel="stylesheet" href="./styles.css?v=7" />
 
   </head>
   <body>
@@ -64,6 +64,12 @@
                 <button class="button button-dark" id="save-profile">Save profile</button>
                 <button class="text-button" id="clear-profile" type="button">Clear</button>
               </div>
+              <div class="cv-version-row">
+                <input id="cv-version-name" type="text" placeholder="Version label (e.g. banking-1)" maxlength="40" aria-label="Profile version label" />
+                <button class="text-button" id="cv-save-version" type="button">Save version</button>
+                <button class="text-button" id="cv-export-profile" type="button">Export .docx</button>
+              </div>
+              <div class="cv-versions" id="cv-versions" aria-live="polite"></div>
               <p class="privacy-note">Saved only on this device.</p>
               <aside class="cv-quality-panel" aria-live="polite">
                 <div class="cv-quality-heading"><h3>Resume readiness</h3><span id="cv-quality-meta">No profile yet</span></div>
@@ -155,9 +161,9 @@
     </aside>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script>window.JOB_MONITOR_API = 'https://xbckwzodpwfpvvkujbgp.supabase.co/functions/v1/first-look-api'; window.JOB_MONITOR_VAPID_PUBLIC_KEY = '';</script>
+    <script>window.JOB_MONITOR_API = 'https://xbckwzodpwfpvvkujbgp.supabase.co/functions/v1/first-look-api'; window.JOB_MONITOR_VAPID_PUBLIC_KEY = 'BLP1A6D2Z6WTRtAz_pJUwfs99ibn5JoVUbHLEfz7kNQZp5zen_daMKepZd7jcMokj4dqWo4tuW1yibDIv3L4RH0';</script>
     <script src="./company-catalog.js?v=1"></script>
-    <script src="./cv-evaluator.js?v=1"></script>
-    <script src="./app.js?v=10"></script>
+    <script src="./cv-evaluator.js?v=2"></script>
+    <script src="./app.js?v=11"></script>
   </body>
 </html>

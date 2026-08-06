@@ -1,5 +1,5 @@
-const CACHE = 'first-look-v9';
-const ASSETS = ['./', './index.html', './styles.css?v=6', './company-catalog.js?v=1', './cv-evaluator.js?v=1', './app.js?v=10', './manifest.webmanifest', './icon.svg', './lib/pdfjs/pdf.min.mjs', './lib/pdfjs/pdf.worker.min.mjs'];
+const CACHE = 'first-look-v10';
+const ASSETS = ['./', './index.html', './styles.css?v=7', './company-catalog.js?v=1', './cv-evaluator.js?v=2', './app.js?v=11', './manifest.webmanifest', './icon.svg', './lib/pdfjs/pdf.min.mjs', './lib/pdfjs/pdf.worker.min.mjs'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));

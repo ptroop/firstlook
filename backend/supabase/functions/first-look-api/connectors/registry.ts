@@ -6,12 +6,12 @@ import { createGoldmanConnector } from './goldman.ts';
 import { GROWW_CONFIG, PHONEPE_CONFIG, RAZORPAY_CONFIG, createGreenhouseConnector } from './greenhouse.ts';
 import { createMoodysConnector, runMoodysConnector } from './moodys.ts';
 import { BARCLAYS_CONFIG, BLACKROCK_CONFIG, createTalentBrewConnector } from './talentbrew.ts';
-import { AMEX_CONFIG, KPMG_CONFIG, createOracleConnector } from './oracle.ts';
+import { AMEX_CONFIG, JPMORGAN_CONFIG, KPMG_CONFIG, createOracleConnector } from './oracle.ts';
 import { 
   ACCENTURE_CONFIG, PWC_CONFIG, WELLS_FARGO_CONFIG, DEUTSCHE_BANK_CONFIG, 
   BANK_OF_AMERICA_CONFIG, NATWEST_CONFIG, FIDELITY_CONFIG, GE_HEALTHCARE_CONFIG, 
   DIAGEO_CONFIG, MORNINGSTAR_CONFIG,
-  JPMORGAN_CONFIG, MORGAN_STANLEY_CONFIG, PAYPAL_CONFIG, SHELL_CONFIG,
+  MORGAN_STANLEY_CONFIG, PAYPAL_CONFIG, SHELL_CONFIG,
   STATE_STREET_CONFIG, NORTHERN_TRUST_CONFIG, MASTERCARD_CONFIG, VISA_CONFIG, FACTSET_CONFIG, BLOOMBERG_CONFIG,
   createWorkdayConnector
 } from './workday.ts';
@@ -62,6 +62,8 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createOracleConnector(KPMG_CONFIG, fetch, 'kpmg-reconcile'),
     createOracleConnector(AMEX_CONFIG, fetch, 'amex-watch'),
     createOracleConnector(AMEX_CONFIG, fetch, 'amex-reconcile'),
+    createOracleConnector(JPMORGAN_CONFIG, fetch, 'jpmorgan-watch'),
+    createOracleConnector(JPMORGAN_CONFIG, fetch, 'jpmorgan-reconcile'),
     createSpGlobalConnector(fetch, 'watch'),
     createSpGlobalConnector(fetch, 'reconcile'),
     createDeloitteConnector(fetch, 'watch'),
@@ -81,7 +83,6 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
       GE_HEALTHCARE_CONFIG,
       DIAGEO_CONFIG,
       MORNINGSTAR_CONFIG,
-      JPMORGAN_CONFIG,
       MORGAN_STANLEY_CONFIG,
       PAYPAL_CONFIG,
       SHELL_CONFIG

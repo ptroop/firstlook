@@ -2,6 +2,7 @@ import { loadRuntimeConfig } from './config.ts';
 import { createOfficialConnectorRegistry, selectConnectorGroup, supportedOfficialConnectorIds } from './connectors/registry.ts';
 import { parseScanRequest, safePublicError } from './http.ts';
 import { checkJobStatusUrl, pickRoleStatusUrl } from './job-status.ts';
+import { sendPushMessage, type PushSendResult, type PushSubscriptionRecord, type VapidConfig } from './push/web-push.ts';
 import { createSourceAwareStore, createSupabaseRestClient } from './persistence/store.ts';
 import {
   presentCoverage,
@@ -13,8 +14,8 @@ import {
   type SourceRow,
 } from './presenters.ts';
 import { runSourceAwareScan } from './scan.ts';
-import { parseExperience } from './classification/experience.ts';
-import { classifyFinance } from './classification/taxonomy.ts';
+import { isStrictZeroToTwoExperience, parseExperience } from './classification/experience.ts';
+import { classifyFinance, isNoiseTitle } from './classification/taxonomy.ts';
 
 Deno.serve(async (request) => {
   const origin = request.headers.get('Origin');
@@ -30,6 +31,7 @@ Deno.serve(async (request) => {
     if (route.endsWith('/job-status') && request.method === 'GET') return getJobStatus(url, headers);
     if (route.endsWith('/coverage') && request.method === 'GET') return getCoverage(headers);
     if (route.endsWith('/push/subscribe') && request.method === 'POST') return saveSubscription(request, headers);
+    if (route.endsWith('/push/send') && request.method === 'POST') return sendPushWorker(request, headers);
     if (route.endsWith('/scan') && request.method === 'POST') {
       const scanToken = Deno.env.get('SCAN_TOKEN');
       if (!scanToken || request.headers.get('Authorization') !== `Bearer ${scanToken}`) {
@@ -77,20 +79,28 @@ function corsHeaders(origin: string | null) {
   };
 }
 
-const SENIOR_TITLE_EXCLUSION = /\b(?:vice president|vp|avp|svp|assistant vice president|senior vice president|managing director|executive director|associate director|director|asst dir|head of|chief [a-z]+ officer|partner|principal|senior manager|lead manager|group manager|assistant manager|senior analyst|senior associate|lead analyst|manager|team lead)\b/i;
-const NON_FINANCE_TITLE_EXCLUSION = /(?:\b(?:software|developer|dev|programmer|engineer|cloud|devops|cybersecurity|technology|data scientist|machine learning|frontend|backend|human resources|\bhr\b|recruiter|talent acquisition|marketing|public relations|communications|legal|counsel|facilities|real estate|event manager|supply chain|logistics|procurement|nurse|security guard|product manager|program manager|project manager|area manager|store manager|cyber|sailpoint|salesforce|sap|kinaxis|scrum master|agile|solutions architect|designer|design|creative|brand|visual|graphic designer|environmental|health and safety|\behs\b|safety)\b|\bui\b|\bux\b)/i;
-
 function isSeniorOrNonFinanceTitle(title: string): boolean {
-  return SENIOR_TITLE_EXCLUSION.test(title) || NON_FINANCE_TITLE_EXCLUSION.test(title);
+  return isNoiseTitle(title);
+}
+
+function isConfirmedZeroToTwo(row: JobRow): boolean {
+  const parsed = parseExperience(`${row.title}\n${row.description}`);
+  if (!isStrictZeroToTwoExperience(parsed)) return false;
+  // Guard stored year columns too, in case classification lags the parser.
+  if (row.minimum_years !== null && (row.minimum_years < 0 || row.minimum_years > 2)) return false;
+  if (row.maximum_years !== null && (row.maximum_years < 0 || row.maximum_years > 2)) return false;
+  return true;
 }
 
 async function getJobs(headers: Record<string, string>) {
   const select = 'id,company,official_detail_url,official_apply_url,title,location,description,first_seen_at,last_seen_at,posted_at,match_tier,classification_method,location_status,finance_status,experience_status,minimum_years,maximum_years,classified_at';
-  const rows = ((await supabaseClient().request(`/rest/v1/jobs?active=eq.true&location_status=eq.india&finance_status=in.(exact,likely)&match_tier=in.(exact,possible)&or=(experience_status.in.(zero_to_two,ambiguous),experience_status.is.null)&select=${select}&limit=2000`)) as JobRow[])
+  // Strict 0-2 feed: DB prefilter keeps confirmed zero_to_two rows, then every
+  // row is re-parsed from title+description so stale or open-ended wording
+  // (2+, at least 3, 3-5 yrs, ambiguous blanks) cannot reach the UI.
+  const rows = ((await supabaseClient().request(`/rest/v1/jobs?active=eq.true&location_status=eq.india&finance_status=in.(exact,likely)&match_tier=in.(exact,possible)&experience_status=eq.zero_to_two&select=${select}&limit=2000`)) as JobRow[])
     .filter((row) => !isSeniorOrNonFinanceTitle(row.title)
       && classifyFinance({ title: row.title, jobCategory: '', description: row.description }).status !== 'unrelated'
-      && (row.experience_status === 'zero_to_two'
-        || parseExperience(`${row.title}\n${row.description}`).status !== 'over_two'));
+      && isConfirmedZeroToTwo(row));
   if (rows.length === 0) return json({ jobs: [], snapshotAt: null }, headers);
 
   const ids = rows.map((row) => encodeURIComponent(row.id)).join(',');
@@ -182,6 +192,102 @@ async function saveSubscription(request: Request, headers: Record<string, string
     }),
   });
   return json({ saved: true }, headers);
+}
+
+async function sendPushWorker(request: Request, headers: Record<string, string>) {
+  const pushToken = Deno.env.get('PUSH_TOKEN');
+  const scanToken = Deno.env.get('SCAN_TOKEN');
+  const authorized = (pushToken && request.headers.get('Authorization') === `Bearer ${pushToken}`)
+    || (scanToken && request.headers.get('Authorization') === `Bearer ${scanToken}`);
+  if (!authorized) return json({ error: 'Unauthorized' }, headers, 401);
+
+  const vapid = vapidConfig();
+  if (!vapid) return json({ error: 'VAPID is not configured' }, headers, 503);
+
+  const now = new Date();
+  const pending = (await supabaseClient().request(
+    '/rest/v1/notification_outbox?status=eq.pending&next_attempt_at=lte.' + encodeURIComponent(now.toISOString()) + '&select=id,job_id,title,company,payload,attempts&order=created_at.asc&limit=10',
+  )) as Array<{ id: number; job_id: string; title: string; company: string; payload: Record<string, unknown>; attempts: number }>;
+  if (pending.length === 0) return json({ sent: 0, skipped: 0 }, headers);
+
+  const subscriptions = (await supabaseClient().request('/rest/v1/push_subscriptions?select=endpoint,subscription_json&limit=500')) as Array<{ endpoint: string; subscription_json: PushSubscriptionRecord }>;
+  const targets = (subscriptions ?? []).map((row) => row.subscription_json || { endpoint: row.endpoint });
+
+  const MAX_ATTEMPTS = 5; // bounded retries: give up after five drains
+  let sent = 0;
+  let skipped = 0;
+  for (const row of pending) {
+    const payload = JSON.stringify({ ...(row.payload || {}), jobId: row.job_id, title: row.title, company: row.company });
+    const results = await sendWithConcurrency(targets, payload, vapid, now);
+    let delivered = false;
+    let goneCount = 0;
+    for (let index = 0; index < targets.length; index += 1) {
+      const result = results[index];
+      if (result.gone) {
+        goneCount += 1;
+        await supabaseClient().request(`/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(targets[index].endpoint)}`, {
+          method: 'DELETE',
+        });
+      } else if (result.ok) {
+        delivered = true;
+      }
+    }
+    const attempts = row.attempts + 1;
+    if (delivered) {
+      await supabaseClient().request(`/rest/v1/notification_outbox?id=eq.${row.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'sent', attempts, sent_at: now.toISOString(), last_error: null }),
+      });
+      sent += 1;
+    } else if (targets.length === 0 || goneCount === targets.length || attempts >= MAX_ATTEMPTS) {
+      await supabaseClient().request(`/rest/v1/notification_outbox?id=eq.${row.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'failed',
+          attempts,
+          last_error: targets.length === 0 ? 'No deliverable subscription' : 'Max push attempts reached',
+        }),
+      });
+      skipped += 1;
+    } else {
+      await supabaseClient().request(`/rest/v1/notification_outbox?id=eq.${row.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ attempts, last_error: 'Push delivery failed; will retry', next_attempt_at: new Date(now.getTime() + 5 * 60 * 1000).toISOString() }),
+      });
+      skipped += 1;
+    }
+  }
+  return json({ sent, skipped }, headers);
+}
+
+// Send one message to many subscriptions with a bounded concurrency pool so
+// a large subscriber list cannot exceed the edge-function time limit.
+async function sendWithConcurrency(
+  targets: PushSubscriptionRecord[],
+  payload: string,
+  vapid: VapidConfig,
+  now: Date,
+): Promise<PushSendResult[]> {
+  const results = new Array<PushSendResult>(targets.length);
+  const poolSize = Math.min(8, targets.length);
+  let next = 0;
+  async function worker() {
+    while (next < targets.length) {
+      const index = next;
+      next += 1;
+      results[index] = await sendPushMessage(targets[index], payload, vapid, { now: () => now });
+    }
+  }
+  await Promise.all(Array.from({ length: poolSize }, worker));
+  return results;
+}
+
+function vapidConfig(): VapidConfig | null {
+  const subject = Deno.env.get('VAPID_SUBJECT');
+  const publicKey = Deno.env.get('VAPID_PUBLIC_KEY');
+  const privateKey = Deno.env.get('VAPID_PRIVATE_KEY');
+  if (!subject || !publicKey || !privateKey) return null;
+  return { subject, publicKey, privateKey };
 }
 
 function runtimeConfig() {

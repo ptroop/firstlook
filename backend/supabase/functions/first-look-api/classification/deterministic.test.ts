@@ -10,11 +10,15 @@ test('normalizes zero-to-two-year experience wording', () => {
     '1 - 2 years of relevant experience',
     'one to two years in financial analysis',
     '0–2 years',
+    '0-2 yrs',
+    '1-2 yr experience',
     'up to 24 months of experience',
     'up to 2 years',
     'Freshers may apply',
     'No prior experience required',
+    'early career finance analyst',
     '2 years of experience preferred',
+    '0-2 years preferred',
   ];
 
   for (const text of cases) {
@@ -22,18 +26,11 @@ test('normalizes zero-to-two-year experience wording', () => {
   }
 });
 
-test('keeps open-ended and contradictory requirements ambiguous', () => {
-  const cases = [
-    '1+ years of experience',
-    '2+ years of experience',
-    'At least 2 years of experience',
-    '0-2 years in analytics and minimum 4 years in banking',
-    '',
-  ];
-
-  for (const text of cases) {
+test('keeps open-ended floors and blank wording out of the confirmed 0-2 band', () => {
+  for (const text of ['1+ years of experience', '2+ years of experience', 'At least 2 years of experience', '']) {
     assert.equal(parseExperience(text).status, 'ambiguous', text);
   }
+  assert.equal(parseExperience('0-2 years in analytics and minimum 4 years in banking').status, 'ambiguous');
 });
 
 test('marks explicit requirements above two years as over two', () => {
@@ -42,6 +39,13 @@ test('marks explicit requirements above two years as over two', () => {
     '3+ years in finance',
     '1-3 years of relevant experience',
     '36 months of required experience',
+    '3-5 yrs experience',
+    'Requires 5 years in finance',
+    'Must have 4 years of banking experience',
+    '5 years experience in financial analysis',
+    '3 yoe required',
+    'mid-level finance professional',
+    'Looking for professionals with over 5 years experience',
   ];
 
   for (const text of cases) {
@@ -49,11 +53,17 @@ test('marks explicit requirements above two years as over two', () => {
   }
 });
 
-test('keeps preferred-only experience within two years eligible and rejects higher preferred ranges', () => {
-  for (const text of ['0-2 years preferred', '2+ years preferred', '0–1 years desirable', 'up to 18 months preferred']) {
+test('keeps preferred-only experience within two years eligible and rejects open or higher preferred ranges', () => {
+  for (const text of ['0-2 years preferred', '0–1 years desirable', 'up to 18 months preferred', '2 years preferred']) {
     assert.equal(parseExperience(text).status, 'zero_to_two', text);
   }
-  for (const text of ['3-8 years preferred', '5+ years of experience preferred', '6-10 years desirable', '4 years experience preferred']) {
+  for (const text of [
+    '2+ years preferred',
+    '3-8 years preferred',
+    '5+ years of experience preferred',
+    '6-10 years desirable',
+    '4 years experience preferred',
+  ]) {
     assert.equal(parseExperience(text).status, 'over_two', text);
   }
 });
@@ -65,11 +75,11 @@ test('extracts numeric years and evidence without inventing missing bounds', () 
     maximumYears: 2,
     evidence: ['1-2 years'],
   });
-  assert.deepEqual(parseExperience('2+ years preferred'), {
+  assert.deepEqual(parseExperience('2 years preferred'), {
     status: 'zero_to_two',
-    minimumYears: null,
-    maximumYears: null,
-    evidence: ['2+ years preferred'],
+    minimumYears: 2,
+    maximumYears: 2,
+    evidence: ['2 years preferred'],
   });
 });
 
