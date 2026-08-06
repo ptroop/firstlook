@@ -12,6 +12,8 @@ on:
       - "icon.svg"
       - "manifest.webmanifest"
       - "sw.js"
+      - "lib/pdfjs/pdf.min.mjs"
+      - "lib/pdfjs/pdf.worker.min.mjs"
       - "browser-extension/README.md"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
@@ -43,6 +45,8 @@ jobs:
             test -f "$file"
             cp -- "$file" _site/
           done
+          mkdir -p _site/lib/pdfjs
+          cp -- lib/pdfjs/pdf.min.mjs lib/pdfjs/pdf.worker.min.mjs _site/lib/pdfjs/
           mkdir -p _site/browser-extension
           cp -- browser-extension/README.md _site/browser-extension/README.md
           test -f _site/index.html

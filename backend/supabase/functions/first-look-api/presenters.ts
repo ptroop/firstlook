@@ -106,6 +106,8 @@ export function presentJob(row: JobRow, sourceRows: SourceRow[] = [], healthRows
     matchTier: row.match_tier,
     classificationMethod: row.classification_method,
     eligibilityNote: row.match_tier === 'possible' ? 'Experience or relevance unconfirmed' : null,
+    experienceStatus: row.experience_status,
+    experienceYears: row.minimum_years !== null || row.maximum_years !== null ? { minimum: row.minimum_years, maximum: row.maximum_years } : null,
     evidence: conciseEvidence(row),
     firstSeenAt: row.first_seen_at,
     lastSeenAt: row.last_seen_at,

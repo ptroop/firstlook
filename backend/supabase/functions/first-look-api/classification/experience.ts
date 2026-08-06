@@ -32,7 +32,13 @@ export function parseExperience(input: string): ExperienceResult {
       const evidence = text.match(/\b(?:freshers?|recent graduates?|entry level|no (?:prior|previous) experience (?:is )?required)\b/)?.[0];
       return zeroToTwo(0, 0, evidence ? [evidence] : []);
     }
-    if (preferred) return zeroToTwo(null, null, [preferred]);
+    if (preferred) {
+      const preferredYears = preferredRangeYears(preferred);
+      if (preferredYears.length > 0 && preferredYears.some((value) => value > 2)) {
+        return { status: 'over_two', minimumYears: null, maximumYears: null, evidence: [preferred] };
+      }
+      return zeroToTwo(null, null, [preferred]);
+    }
     return ambiguous([]);
   }
 
@@ -111,6 +117,15 @@ function isCorporateHistoryPhrase(text: string, start: number): boolean {
 
 function findPreferredOnly(text: string): string | null {
   return text.match(/\b\d+(?:\.\d+)?(?:\s*(?:-|to)\s*\d+(?:\.\d+)?)?\+?\s*(?:years?|months?)[^.!?;\n]{0,20}\b(?:preferred|desirable|nice to have)\b/)?.[0] ?? null;
+}
+
+function preferredRangeYears(preferred: string): number[] {
+  const match = preferred.match(/(\d+(?:\.\d+)?)(?:\s*(?:-|to)\s*(\d+(?:\.\d+)?))?\+?\s*(years?|months?)/);
+  if (!match) return [];
+  const unit = match[3];
+  const values = [toYears(Number(match[1]), unit)];
+  if (match[2]) values.push(toYears(Number(match[2]), unit));
+  return values;
 }
 
 function normalizeExperienceText(input: string): string {

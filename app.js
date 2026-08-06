@@ -61,16 +61,28 @@ const cvQualityMeta = document.querySelector('#cv-quality-meta');
 const cvQualityList = document.querySelector('#cv-quality-list');
 const companyDirectory = document.querySelector('#company-directory');
 const companiesMeta = document.querySelector('#companies-meta');
+const companySearch = document.querySelector('#company-search');
+const companiesRail = document.querySelector('#companies-rail');
+const drawer = document.querySelector('#companies-drawer');
+const drawerOverlay = document.querySelector('#drawer-overlay');
+const drawerClose = document.querySelector('#drawer-close');
+const resumeDropzone = document.querySelector('#resume-dropzone');
+let companySearchTerm = '';
+let pdfJsPromise = null;
 const API_BASE = window.JOB_MONITOR_API || '';
 const VAPID_PUBLIC_KEY = window.JOB_MONITOR_VAPID_PUBLIC_KEY || '';
 const FIXTURE_MODE = new URLSearchParams(window.location.search).get('fixture') === '1';
 let toastTimer;
 let currentJobs = [];
 let latestCoverage = [];
+let latestSnapshotAt = null;
 let refreshInFlight = false;
 const CV_STORAGE_KEY = 'first-look-master-profile-v1';
 const COVER_LETTER_STORAGE_KEY = 'first-look-cover-letter-drafts-v1';
 const PORTAL_STORAGE_KEY = 'first-look-portal-listings-v1';
+const JOB_STATUS_STORAGE_KEY = 'first-look-job-status-v1';
+const JOB_STATUS_TTL_MS = 30 * 60 * 1000;
+let autoCheckedTopRoles = false;
 const SKILL_KEYWORDS = [
   'Python', 'SQL', 'Excel', 'AWS', 'Financial Modeling', 'Tableau', 
   'Power BI', 'Machine Learning', 'C++', 'Java', 'Bloomberg', 'R', 
@@ -95,13 +107,13 @@ function renderJobs(jobs) {
   renderCompanyDirectory();
   renderCvMatches();
   if (!jobs.length) {
-    showFeedState('No matching roles yet', 'Prior listings are kept when a career-page scan is incomplete.', '0 current matches');
+    showFeedState('No matching roles yet', 'Prior listings are kept when a career-page scan is incomplete.', '0 roles');
     return;
   }
 
   matchesEmpty.hidden = true;
   jobList.hidden = false;
-  matchesMeta.textContent = `${jobs.length} ${jobs.length === 1 ? 'role' : 'roles'}`;
+  matchesMeta.textContent = `${jobs.length} ${jobs.length === 1 ? 'role' : 'roles'}${latestSnapshotAt ? ` · feed updated ${formatAge(latestSnapshotAt)}` : ''}`;
 
   const byCompany = {};
   for (const job of jobs) {
@@ -132,6 +144,7 @@ function renderJobs(jobs) {
       const applyLabel = job.officialApplyUrl ? 'Apply direct' : 'Open role';
       const statusBadges = [
         `<span class="badge badge-match">${job.matchTier === 'exact' ? 'Strong match' : 'Check match'}</span>`,
+        job.experienceYears ? `<span class="badge">Experience ${escapeHtml(formatExperienceRange(job.experienceYears))}</span>` : '',
         job.officialVerified
           ? '<span class="badge">Official source</span>'
           : '<span class="badge badge-warning">Official not verified</span>',
@@ -150,8 +163,9 @@ function renderJobs(jobs) {
       }).join('');
       const note = job.eligibilityNote || job.verificationNote;
 
+      const jobId = jobIdentity(job);
       return `
-        <article class="job-card">
+        <article class="job-card" data-job-id="${escapeAttribute(jobId)}">
           <div class="job-main">
             <h3>${escapeHtml(job.title)}</h3>
             <p class="job-location">${escapeHtml(job.location || 'Location not listed')}</p>
@@ -160,7 +174,8 @@ function renderJobs(jobs) {
             ${note ? `<p class="job-note">${escapeHtml(note)}</p>` : ''}
           </div>
           <div class="job-actions">
-            <span class="verified-time">Checked ${escapeHtml(formatAge(job.newestVerificationAt))}</span>
+            <span class="verified-time">Verified ${escapeHtml(formatAge(job.newestVerificationAt))}</span>
+            <span class="job-status-area" data-status-job-id="${escapeAttribute(jobId)}">${statusBadgeHtml(jobId)}<button class="text-button job-status-check" type="button" data-status-job-id="${escapeAttribute(jobId)}">Check if open</button></span>
             ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${applyLabel}</a>` : '<span class="apply-unavailable">Direct Apply link pending</span>'}
             ${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}
           </div>
@@ -196,8 +211,8 @@ function renderCvQuality() {
   const engine = cvEngine();
   const profile = profileText();
   if (!engine || !profile) {
-    cvQualityMeta.textContent = 'Paste a profile to score';
-    cvQualityList.innerHTML = '<p class="cv-quality-empty">This is a local text-readiness check, not an employer ATS score.</p>';
+    cvQualityMeta.textContent = 'No profile yet';
+    cvQualityList.innerHTML = '<p class="cv-quality-empty">A local readability check, not an employer ATS score.</p>';
     return;
   }
   const result = engine.scoreResume(profile);
@@ -223,6 +238,102 @@ function loadCoverLetterDrafts() {
 let coverLetterDrafts = loadCoverLetterDrafts();
 let portalListings = loadPortalListings();
 
+function loadJobStatusCache() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(JOB_STATUS_STORAGE_KEY) || '{}');
+    return stored && typeof stored === 'object' ? stored : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+let jobStatusCache = loadJobStatusCache();
+
+function saveJobStatusCache() {
+  try { localStorage.setItem(JOB_STATUS_STORAGE_KEY, JSON.stringify(jobStatusCache)); } catch (_error) { /* private mode */ }
+}
+
+function cachedJobStatus(jobId) {
+  const entry = jobStatusCache[jobId];
+  if (!entry || !entry.checkedAt || !['open', 'closed', 'unknown'].includes(entry.status)) return null;
+  if (Date.now() - Date.parse(entry.checkedAt) > JOB_STATUS_TTL_MS) return null;
+  return entry;
+}
+
+function statusBadgeHtml(jobId) {
+  const entry = cachedJobStatus(jobId);
+  if (!entry) return '';
+  const label = entry.status === 'open' ? 'Open' : entry.status === 'closed' ? 'Closed' : 'Unverified';
+  return `<span class="job-status-badge is-${escapeAttribute(entry.status)}" title="${escapeAttribute(entry.note || '')}">${label}</span>`;
+}
+
+function renderStatusArea(area, result) {
+  area.innerHTML = '';
+  const badge = document.createElement('span');
+  badge.className = `job-status-badge is-${result.status}`;
+  badge.textContent = result.status === 'open' ? 'Open' : result.status === 'closed' ? 'Closed' : 'Unverified';
+  if (result.note) badge.title = result.note;
+  const when = document.createElement('span');
+  when.className = 'job-status-checked';
+  when.textContent = formatAge(result.checkedAt);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'text-button job-status-check';
+  button.dataset.statusJobId = area.dataset.statusJobId;
+  button.textContent = 'Check again';
+  area.append(badge, when, button);
+}
+
+function updateStatusAreas(jobId) {
+  const result = cachedJobStatus(jobId);
+  if (!result) return;
+  document.querySelectorAll(`.job-status-area[data-status-job-id="${CSS.escape(jobId)}"]`).forEach((area) => renderStatusArea(area, result));
+}
+
+async function checkJobStatus(jobId) {
+  const response = await fetch(`${API_BASE.replace(/\/$/, '')}/job-status?id=${encodeURIComponent(jobId)}`).then(requireJson);
+  const result = { status: response.status, checkedAt: response.checkedAt, note: response.note };
+  jobStatusCache[jobId] = result;
+  saveJobStatusCache();
+  return result;
+}
+
+async function checkJobStatusFor(jobId, button) {
+  if (!API_BASE) {
+    showToast('The job feed is not connected.');
+    return;
+  }
+  const originalLabel = button ? button.textContent : '';
+  if (button) { button.disabled = true; button.textContent = 'Checking…'; }
+  try {
+    const result = await checkJobStatus(jobId);
+    updateStatusAreas(jobId);
+    const message = result.status === 'open' ? 'This posting is live.' : result.status === 'closed' ? 'This posting appears to be closed.' : 'Could not verify this posting.';
+    showToast(`${message} ${result.note || ''}`);
+  } catch (_error) {
+    showToast('Could not check this posting right now.');
+    if (button) { button.disabled = false; button.textContent = originalLabel; }
+  }
+}
+
+function autoCheckTopRoles() {
+  if (autoCheckedTopRoles || !API_BASE) return;
+  autoCheckedTopRoles = true;
+  const targets = currentJobs.filter((job) => job.matchTier === 'exact' && !cachedJobStatus(jobIdentity(job))).slice(0, 3);
+  let index = 0;
+  const run = async () => {
+    if (index >= targets.length) return;
+    const job = targets[index];
+    index += 1;
+    try {
+      await checkJobStatus(jobIdentity(job));
+      updateStatusAreas(jobIdentity(job));
+    } catch (_error) { /* keep the list stable; user can check manually */ }
+    setTimeout(run, 400);
+  };
+  run();
+}
+
 function loadPortalListings() {
   try {
     const stored = JSON.parse(localStorage.getItem(PORTAL_STORAGE_KEY) || '[]');
@@ -236,7 +347,7 @@ function isLikelyPortalFinanceRole(listing) {
   const title = String(listing?.title || '');
   const location = String(listing?.location || '');
   if (!/\b(?:india|bengaluru|bangalore|mumbai|pune|hyderabad|gurugram|gurgaon|delhi|noida|chennai|kolkata|ahmedabad|jaipur)\b/i.test(location)) return false;
-  if (/\b(?:software|developer|engineer|engineering|cloud|devops|cyber|data scientist|machine learning|frontend|backend|ui|ux|designer|design|creative|brand|visual|product manager|project manager|marketing|sales|business development|customer success|recruit|human resources|legal|support|operations manager)\b/i.test(title)) return false;
+  if (/\b(?:software|developer|engineer|engineering|cloud|devops|cyber|data scientist|machine learning|frontend|backend|ui|ux|designer|design|creative|brand|visual|product manager|project manager|marketing|sales|business development|customer success|recruit|human resources|legal|support|operations manager|assistant manager|senior analyst|senior associate|team lead|manager)\b/i.test(title)) return false;
   const specificFinance = /\b(?:finance|financial|account(?:ing)?|audit|credit|risk|investment|investments|research|portfolio|treasury|tax|valuation|fund|banking|capital markets|reconciliation|compliance|aml|kyc|fp&a|controller)\b/i.test(title);
   const financeAnalyst = /\b(?:financial|finance|credit|risk|investment|research|portfolio|fund|treasury|tax|valuation|equity|banking)\b[\w /&-]{0,30}\banalyst\b/i.test(title);
   return specificFinance || financeAnalyst;
@@ -307,13 +418,13 @@ function renderCvMatches() {
   const profile = profileText();
   renderCvQuality();
   if (!profile) {
-    cvResultsMeta.textContent = 'Add your profile to begin';
-    cvResults.innerHTML = '<div class="cv-empty"><h3>Your profile stays yours.</h3><p>Save a profile to see which current roles fit it best.</p></div>';
+    cvResultsMeta.textContent = 'No profile yet';
+    cvResults.innerHTML = '<div class="cv-empty"><h3>No profile yet.</h3><p>Upload or paste your resume above.</p></div>';
     return;
   }
   if (!currentJobs.length) {
     cvResultsMeta.textContent = 'No open roles yet';
-    cvResults.innerHTML = '<div class="cv-empty"><h3>Waiting for roles.</h3><p>Your profile is saved. Matches will appear when the career-page feed returns roles.</p></div>';
+    cvResults.innerHTML = '<div class="cv-empty"><h3>No open roles yet.</h3><p>Your profile is saved; matches appear when the feed returns roles.</p></div>';
     return;
   }
   const engine = cvEngine();
@@ -414,13 +525,18 @@ function renderCoverage(payload) {
 function renderCompanyDirectory() {
   if (!companyDirectory || !companiesMeta) return;
   const catalog = Array.isArray(window.COMPANY_CATALOG) ? window.COMPANY_CATALOG : [];
-  const groups = catalog.reduce((result, company) => {
+  const term = companySearchTerm.trim().toLowerCase();
+  const visible = term
+    ? catalog.filter((company) => String(company.name).toLowerCase().includes(term) || String(company.segment || '').toLowerCase().includes(term))
+    : catalog;
+  const groups = visible.reduce((result, company) => {
     if (!result[company.segment]) result[company.segment] = [];
     result[company.segment].push(company);
     return result;
   }, {});
   const liveRoleCount = catalog.filter((company) => currentJobs.some((job) => sameCompany(job.company, company.name))).length;
-  companiesMeta.textContent = `${catalog.length} employers · ${liveRoleCount} with matching roles in the current snapshot`;
+  const prefix = term ? `${visible.length} of ${catalog.length}` : String(catalog.length);
+  companiesMeta.textContent = `${prefix} employers · ${liveRoleCount} with matching roles in the current snapshot`;
   companyDirectory.innerHTML = Object.entries(groups).map(([segment, companies]) => `
     <section class="company-group">
       <div class="company-group-heading"><h3>${escapeHtml(segment)}</h3><span>${companies.length}</span></div>
@@ -489,9 +605,120 @@ function showCoverageError() {
 }
 
 function navigate(view) {
+  closeDrawer();
   const target = document.querySelector(`[data-section="${CSS.escape(view)}"]`);
   if (target) target.scrollIntoView({ behavior: 'smooth' });
   document.querySelectorAll('.nav-link').forEach((link) => link.classList.toggle('is-active', link.dataset.view === view));
+}
+
+let lastDrawerTrigger = null;
+
+function openDrawer(trigger) {
+  if (!drawer) return;
+  lastDrawerTrigger = trigger || null;
+  drawer.classList.add('is-open');
+  drawer.setAttribute('aria-hidden', 'false');
+  drawer.inert = false;
+  drawer.setAttribute('role', 'dialog');
+  drawer.setAttribute('aria-modal', 'true');
+  if (drawerOverlay) drawerOverlay.hidden = false;
+  document.body.classList.add('drawer-locked');
+  document.querySelectorAll('.nav-link[data-drawer], #companies-rail').forEach((element) => element.setAttribute('aria-expanded', 'true'));
+  document.querySelectorAll('.nav-link[data-drawer]').forEach((link) => link.classList.add('is-active'));
+  companySearch?.focus();
+}
+
+function closeDrawer() {
+  if (!drawer) return;
+  drawer.classList.remove('is-open');
+  drawer.setAttribute('aria-hidden', 'true');
+  drawer.inert = true;
+  drawer.removeAttribute('role');
+  drawer.removeAttribute('aria-modal');
+  if (drawerOverlay) drawerOverlay.hidden = true;
+  document.body.classList.remove('drawer-locked');
+  document.querySelectorAll('.nav-link[data-drawer], #companies-rail').forEach((element) => element.setAttribute('aria-expanded', 'false'));
+  document.querySelectorAll('.nav-link[data-drawer]').forEach((link) => link.classList.remove('is-active'));
+  const trigger = lastDrawerTrigger;
+  lastDrawerTrigger = null;
+  if (trigger && typeof trigger.focus === 'function' && trigger.isConnected) trigger.focus();
+}
+
+function loadPdfJs() {
+  if (!pdfJsPromise) {
+    pdfJsPromise = import('./lib/pdfjs/pdf.min.mjs')
+      .then((module) => {
+        module.GlobalWorkerOptions.workerSrc = './lib/pdfjs/pdf.worker.min.mjs';
+        return module;
+      })
+      .catch((error) => {
+        pdfJsPromise = null;
+        throw error;
+      });
+  }
+  return pdfJsPromise;
+}
+
+async function extractPdfText(file) {
+  const pdfjs = await loadPdfJs();
+  const documentTask = pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false });
+  const doc = await documentTask.promise;
+  const pages = [];
+  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
+    const page = await doc.getPage(pageNumber);
+    const content = await page.getTextContent();
+    let lastY = null;
+    let line = '';
+    const lines = [];
+    for (const item of content.items) {
+      if (typeof item.str !== 'string' || !item.str) continue;
+      const y = item.transform ? item.transform[5] : null;
+      const isNewLine = item.hasEOL || (lastY !== null && y !== null && Math.abs(y - lastY) > 3);
+      if (isNewLine && line) {
+        lines.push(line.trimEnd());
+        line = '';
+      }
+      if (y !== null) lastY = y;
+      line += `${item.str} `;
+    }
+    if (line.trim()) lines.push(line.trimEnd());
+    pages.push(lines.join('\n'));
+  }
+  await doc.destroy();
+  return pages.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+async function importFileIntoProfile(file) {
+  if (!file || !cvProfile) return;
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+    if (cvMeta) cvMeta.textContent = 'Reading PDF…';
+    try {
+      const text = await extractPdfText(file);
+      if (text.length < 40) {
+        showToast('No readable text found. This PDF may be a scanned image — paste your profile instead.');
+        if (cvMeta) cvMeta.textContent = 'PDF had no readable text';
+        return;
+      }
+      cvProfile.value = text;
+      if (cvMeta) cvMeta.textContent = 'Imported from PDF — save to keep it';
+      renderCvMatches();
+      showToast(`Extracted ${text.length} characters from ${file.name}.`);
+    } catch (error) {
+      console.error('PDF import failed', error);
+      showToast('That PDF could not be read. Paste your profile as text instead.');
+      if (cvMeta) cvMeta.textContent = 'PDF import failed';
+    }
+    return;
+  }
+  const raw = await file.text();
+  if (file.name.toLowerCase().endsWith('.html')) {
+    const parsed = new DOMParser().parseFromString(raw, 'text/html');
+    cvProfile.value = parsed.body?.innerText || raw;
+  } else {
+    cvProfile.value = raw;
+  }
+  if (cvMeta) cvMeta.textContent = 'Imported — save to keep it';
+  renderCvMatches();
 }
 
 function showToast(message) {
@@ -525,11 +752,16 @@ async function loadData({ manual = false } = {}) {
       fetch(`${base}/jobs${cacheBust}`).then(requireJson),
       fetch(`${base}/coverage${cacheBust}`).then(requireJson),
     ]);
-    if (jobsResult.status === 'fulfilled') renderJobs([...(Array.isArray(jobsResult.value.jobs) ? jobsResult.value.jobs : []), ...portalListings]);
-    else showFeedState('Job feed unavailable', 'The monitor could not be reached. Try again shortly.', 'Connection error');
+    if (jobsResult.status === 'fulfilled') {
+      latestSnapshotAt = jobsResult.value?.snapshotAt || null;
+      renderJobs([...(Array.isArray(jobsResult.value.jobs) ? jobsResult.value.jobs : []), ...portalListings]);
+      autoCheckTopRoles();
+    } else showFeedState('Job feed unavailable', 'The monitor could not be reached. Try again shortly.', 'Connection error');
     if (coverageResult.status === 'fulfilled') renderCoverage(coverageResult.value);
     else showCoverageError();
-    if (manual) showToast(jobsResult.status === 'fulfilled' || coverageResult.status === 'fulfilled' ? 'Fetched the latest published monitor snapshot.' : 'Refresh failed; existing data was kept.');
+    if (manual) showToast(jobsResult.status === 'fulfilled' || coverageResult.status === 'fulfilled'
+      ? `Fetched the latest snapshot${latestSnapshotAt ? ` — feed updated ${formatAge(latestSnapshotAt)}` : ''}.`
+      : 'Refresh failed; existing data was kept.');
   } finally {
     if (manual) {
       refreshInFlight = false;
@@ -556,7 +788,18 @@ function formatAge(value) {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} hr ago`;
   const days = Math.round(hours / 24);
+  if (days > 60) return 'not recently checked';
   return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function formatExperienceRange(years) {
+  if (!years) return '';
+  const bothKnown = years.minimum !== null && years.maximum !== null;
+  if (bothKnown && years.minimum === years.maximum) return `${years.minimum} ${years.minimum === 1 ? 'yr' : 'yrs'}`;
+  if (bothKnown) return `${years.minimum}-${years.maximum} yrs`;
+  if (years.maximum !== null) return `up to ${years.maximum} yrs`;
+  if (years.minimum !== null) return `${years.minimum}+ yrs`;
+  return '';
 }
 
 function safeUrl(value) {
@@ -613,6 +856,12 @@ function urlBase64ToUint8Array(value) {
 }
 
 document.addEventListener('click', async (event) => {
+  const drawerTrigger = event.target.closest('[data-drawer]');
+  if (drawerTrigger) {
+    openDrawer(drawerTrigger);
+    return;
+  }
+
   const viewTrigger = event.target.closest('[data-view]');
   if (viewTrigger) navigate(viewTrigger.dataset.view);
 
@@ -655,6 +904,12 @@ document.addEventListener('click', async (event) => {
       textarea.select();
       showToast('Copy was blocked. The draft is selected for manual copy.');
     }
+    return;
+  }
+
+  const statusCheck = event.target.closest('.job-status-check');
+  if (statusCheck) {
+    checkJobStatusFor(statusCheck.dataset.statusJobId || '', statusCheck);
     return;
   }
 
@@ -725,18 +980,40 @@ cvProfile?.addEventListener('input', () => {
   if (cvMeta) cvMeta.textContent = 'Unsaved changes';
   renderCvQuality();
 });
-cvFile?.addEventListener('change', async () => {
-  const file = cvFile.files?.[0];
-  if (!file || !cvProfile) return;
-  const raw = await file.text();
-  if (file.name.toLowerCase().endsWith('.html')) {
-    const parsed = new DOMParser().parseFromString(raw, 'text/html');
-    cvProfile.value = parsed.body?.innerText || raw;
-  } else {
-    cvProfile.value = raw;
-  }
-  cvMeta.textContent = 'Imported — save to keep it';
-  renderCvMatches();
+cvFile?.addEventListener('change', () => {
+  importFileIntoProfile(cvFile.files?.[0]);
+  cvFile.value = '';
+});
+
+if (resumeDropzone) {
+  ['dragenter', 'dragover'].forEach((name) => resumeDropzone.addEventListener(name, (event) => {
+    event.preventDefault();
+    resumeDropzone.classList.add('is-dragging');
+  }));
+  ['dragleave', 'drop'].forEach((name) => resumeDropzone.addEventListener(name, (event) => {
+    event.preventDefault();
+    resumeDropzone.classList.remove('is-dragging');
+  }));
+  resumeDropzone.addEventListener('drop', (event) => {
+    const file = event.dataTransfer?.files?.[0];
+    if (file && /\.(pdf|txt|md|html)$/i.test(file.name)) {
+      importFileIntoProfile(file);
+    } else {
+      showToast('Drop a .pdf, .txt, .md or .html resume file.');
+    }
+  });
+}
+
+drawerClose?.addEventListener('click', closeDrawer);
+drawerOverlay?.addEventListener('click', closeDrawer);
+companiesRail?.addEventListener('click', () => openDrawer(companiesRail));
+document.querySelector('.wordmark')?.addEventListener('click', closeDrawer);
+companySearch?.addEventListener('input', (event) => {
+  companySearchTerm = event.target.value || '';
+  renderCompanyDirectory();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && drawer?.classList.contains('is-open')) closeDrawer();
 });
 
 window.FirstLookUI = { renderJobs, renderCoverage, safeUrl };

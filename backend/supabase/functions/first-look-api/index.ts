@@ -1,6 +1,7 @@
 import { loadRuntimeConfig } from './config.ts';
 import { createOfficialConnectorRegistry, selectConnectorGroup, supportedOfficialConnectorIds } from './connectors/registry.ts';
 import { parseScanRequest, safePublicError } from './http.ts';
+import { checkJobStatusUrl, pickRoleStatusUrl } from './job-status.ts';
 import { createSourceAwareStore, createSupabaseRestClient } from './persistence/store.ts';
 import {
   presentCoverage,
@@ -12,6 +13,7 @@ import {
   type SourceRow,
 } from './presenters.ts';
 import { runSourceAwareScan } from './scan.ts';
+import { parseExperience } from './classification/experience.ts';
 import { classifyFinance } from './classification/taxonomy.ts';
 
 Deno.serve(async (request) => {
@@ -25,6 +27,7 @@ Deno.serve(async (request) => {
   try {
     if (route.endsWith('/health')) return json({ ok: true, service: 'first-look-job-monitor' }, headers);
     if (route.endsWith('/jobs') && request.method === 'GET') return getJobs(headers);
+    if (route.endsWith('/job-status') && request.method === 'GET') return getJobStatus(url, headers);
     if (route.endsWith('/coverage') && request.method === 'GET') return getCoverage(headers);
     if (route.endsWith('/push/subscribe') && request.method === 'POST') return saveSubscription(request, headers);
     if (route.endsWith('/scan') && request.method === 'POST') {
@@ -74,8 +77,8 @@ function corsHeaders(origin: string | null) {
   };
 }
 
-const SENIOR_TITLE_EXCLUSION = /\b(?:vice president|vp|avp|svp|assistant vice president|senior vice president|managing director|executive director|associate director|director|asst dir|head of|chief [a-z]+ officer|partner|principal|senior manager|lead manager|group manager)\b/i;
-const NON_FINANCE_TITLE_EXCLUSION = /(?:\b(?:software|developer|dev|programmer|engineer|cloud|devops|cybersecurity|technology|data scientist|machine learning|frontend|backend|human resources|\bhr\b|recruiter|talent acquisition|marketing|public relations|communications|legal|counsel|facilities|real estate|event manager|supply chain|logistics|procurement|nurse|security guard|product manager|program manager|project manager|area manager|store manager|cyber|sailpoint|salesforce|sap|kinaxis|scrum master|agile|solutions architect|designer|design|creative|brand|visual|graphic designer)\b|\bui\b|\bux\b)/i;
+const SENIOR_TITLE_EXCLUSION = /\b(?:vice president|vp|avp|svp|assistant vice president|senior vice president|managing director|executive director|associate director|director|asst dir|head of|chief [a-z]+ officer|partner|principal|senior manager|lead manager|group manager|assistant manager|senior analyst|senior associate|lead analyst|manager|team lead)\b/i;
+const NON_FINANCE_TITLE_EXCLUSION = /(?:\b(?:software|developer|dev|programmer|engineer|cloud|devops|cybersecurity|technology|data scientist|machine learning|frontend|backend|human resources|\bhr\b|recruiter|talent acquisition|marketing|public relations|communications|legal|counsel|facilities|real estate|event manager|supply chain|logistics|procurement|nurse|security guard|product manager|program manager|project manager|area manager|store manager|cyber|sailpoint|salesforce|sap|kinaxis|scrum master|agile|solutions architect|designer|design|creative|brand|visual|graphic designer|environmental|health and safety|\behs\b|safety)\b|\bui\b|\bux\b)/i;
 
 function isSeniorOrNonFinanceTitle(title: string): boolean {
   return SENIOR_TITLE_EXCLUSION.test(title) || NON_FINANCE_TITLE_EXCLUSION.test(title);
@@ -83,9 +86,12 @@ function isSeniorOrNonFinanceTitle(title: string): boolean {
 
 async function getJobs(headers: Record<string, string>) {
   const select = 'id,company,official_detail_url,official_apply_url,title,location,description,first_seen_at,last_seen_at,posted_at,match_tier,classification_method,location_status,finance_status,experience_status,minimum_years,maximum_years,classified_at';
-  const rows = ((await supabaseClient().request(`/rest/v1/jobs?active=eq.true&location_status=eq.india&finance_status=in.(exact,likely)&match_tier=in.(exact,possible)&select=${select}&limit=2000`)) as JobRow[])
-    .filter((row) => !isSeniorOrNonFinanceTitle(row.title) && classifyFinance({ title: row.title, jobCategory: '', description: row.description }).status !== 'unrelated');
-  if (rows.length === 0) return json({ jobs: [] }, headers);
+  const rows = ((await supabaseClient().request(`/rest/v1/jobs?active=eq.true&location_status=eq.india&finance_status=in.(exact,likely)&match_tier=in.(exact,possible)&or=(experience_status.in.(zero_to_two,ambiguous),experience_status.is.null)&select=${select}&limit=2000`)) as JobRow[])
+    .filter((row) => !isSeniorOrNonFinanceTitle(row.title)
+      && classifyFinance({ title: row.title, jobCategory: '', description: row.description }).status !== 'unrelated'
+      && (row.experience_status === 'zero_to_two'
+        || parseExperience(`${row.title}\n${row.description}`).status !== 'over_two'));
+  if (rows.length === 0) return json({ jobs: [], snapshotAt: null }, headers);
 
   const ids = rows.map((row) => encodeURIComponent(row.id)).join(',');
   const sourceSelect = 'id,job_id,connector_id,source_type,source_name,source_external_id,listing_url,detail_url,apply_url,is_official,last_verified_at,active,hydration_status';
@@ -94,7 +100,63 @@ async function getJobs(headers: Record<string, string>) {
   const health = connectorIds.length > 0
     ? (await supabaseClient().request(`/rest/v1/source_scan_runs?connector_id=in.(${connectorIds.map(encodeURIComponent).join(',')})&select=connector_id,run_type,status,finished_at&order=finished_at.desc&limit=200`)) as HealthRow[]
     : [];
-  return json({ jobs: sortPresentedJobs(rows.map((row) => presentJob(row, sources, health))) }, headers);
+  const snapshotAt = newestDate([
+    ...health.map((row) => row.finished_at),
+    ...sources.map((source) => source.last_verified_at),
+  ]);
+  return json({ jobs: sortPresentedJobs(rows.map((row) => presentJob(row, sources, health))), snapshotAt }, headers);
+}
+
+function newestDate(values: Array<string | null>): string | null {
+  const parsed = values
+    .filter((value): value is string => Boolean(value))
+    .map((value) => Date.parse(value))
+    .filter((timestamp) => Number.isFinite(timestamp))
+    .sort((left, right) => right - left);
+  return parsed.length > 0 ? new Date(parsed[0]).toISOString() : null;
+}
+
+const jobStatusCooldown = new Map<string, number>();
+const JOB_STATUS_COOLDOWN_MS = 60_000;
+
+async function getJobStatus(url: URL, headers: Record<string, string>) {
+  const id = url.searchParams.get('id') ?? '';
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$/.test(id) || id.length > 120) {
+    return json({ error: 'Invalid job id' }, headers, 400);
+  }
+  const lastChecked = jobStatusCooldown.get(id);
+  if (lastChecked && Date.now() - lastChecked < JOB_STATUS_COOLDOWN_MS) {
+    return json({ error: 'Checked very recently; try again shortly.' }, headers, 429);
+  }
+  jobStatusCooldown.set(id, Date.now());
+  const select = 'id,company,official_detail_url,official_apply_url';
+  const rows = (await supabaseClient().request(`/rest/v1/jobs?id=eq.${encodeURIComponent(id)}&select=${select}&limit=1`)) as Array<{
+    id: string;
+    company: string;
+    official_detail_url: string | null;
+    official_apply_url: string | null;
+  }>;
+  const row = rows?.[0];
+  if (!row) return json({ error: 'Unknown job' }, headers, 404);
+
+  const sourceSelect = 'detail_url,listing_url,apply_url,is_official';
+  const sources = (await supabaseClient().request(`/rest/v1/job_sources?job_id=eq.${encodeURIComponent(id)}&active=eq.true&select=${sourceSelect}&limit=25`)) as Array<{
+    detail_url: string | null;
+    listing_url: string | null;
+    apply_url: string | null;
+    is_official: boolean | null;
+  }>;
+  const targetUrl = pickRoleStatusUrl(row, sources);
+  if (!targetUrl) {
+    return json({
+      id,
+      status: 'unknown',
+      checkedAt: new Date().toISOString(),
+      note: 'No role-level URL is available to verify this listing.',
+    }, headers);
+  }
+  const result = await checkJobStatusUrl(targetUrl);
+  return json({ id, ...result }, headers);
 }
 
 async function getCoverage(headers: Record<string, string>) {

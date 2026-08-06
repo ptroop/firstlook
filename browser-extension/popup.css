@@ -1,0 +1,16 @@
+:root { color-scheme: light; --ink: #1f2523; --muted: #6f7773; --line: #d9ddd9; --accent: #d26745; --surface: #f4f2ed; }
+* { box-sizing: border-box; }
+body { width: 340px; margin: 0; background: #fff; color: var(--ink); font: 13px/1.45 Arial, sans-serif; }
+main { padding: 18px; }
+.eyebrow { margin: 0 0 5px; color: var(--accent); font: 700 11px/1 Georgia, serif; letter-spacing: .08em; text-transform: uppercase; }
+h1 { margin: 0 0 8px; font: 500 24px/1.05 Georgia, serif; }
+.intro { margin: 0 0 16px; color: var(--muted); }
+form { display: grid; gap: 10px; }
+label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; }
+input { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font: inherit; }
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.actions, .secondary-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+button, .file-button { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 7px 10px; border: 1px solid var(--ink); border-radius: 4px; background: #fff; color: var(--ink); cursor: pointer; font: 600 11px/1 Arial, sans-serif; }
+button.accent { border-color: var(--accent); background: var(--accent); color: #fff; }
+.file-button, .link-button { border: 0; padding: 3px 0; background: transparent; color: var(--accent); }
+.status { min-height: 18px; margin: 12px 0 0; color: var(--muted); font-size: 12px; }

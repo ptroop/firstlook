@@ -49,6 +49,15 @@ test('marks explicit requirements above two years as over two', () => {
   }
 });
 
+test('keeps preferred-only experience within two years eligible and rejects higher preferred ranges', () => {
+  for (const text of ['0-2 years preferred', '2+ years preferred', '0–1 years desirable', 'up to 18 months preferred']) {
+    assert.equal(parseExperience(text).status, 'zero_to_two', text);
+  }
+  for (const text of ['3-8 years preferred', '5+ years of experience preferred', '6-10 years desirable', '4 years experience preferred']) {
+    assert.equal(parseExperience(text).status, 'over_two', text);
+  }
+});
+
 test('extracts numeric years and evidence without inventing missing bounds', () => {
   assert.deepEqual(parseExperience('Candidates need 1-2 years of experience.'), {
     status: 'zero_to_two',
@@ -140,6 +149,19 @@ test('does not classify a software role as finance from generic bank boilerplate
     description: 'Build Java services and cloud infrastructure for a global financial services company.',
     jobCategory: 'Technology / Applications Development',
     experienceText: '5-8 years of experience',
+  });
+
+  assert.equal(result.financeStatus, 'unrelated');
+  assert.equal(result.matchTier, 'not_targeted');
+});
+
+test('hard-excludes safety and environmental roles before reading finance boilerplate', () => {
+  const result = classifyDeterministically({
+    title: 'Assistant Manager - Environment, Health and Safety',
+    location: 'Kumbalgodu, India',
+    description: 'Manage site safety, risk assessment, and regulatory reporting.',
+    jobCategory: 'Environment, Health and Safety',
+    experienceText: '3-5 years',
   });
 
   assert.equal(result.financeStatus, 'unrelated');

@@ -29,6 +29,9 @@ The first scan of a new connector may create a detail backlog. Later 30-minute r
 | Live | BlackRock | `careers.blackrock.com/location/india-jobs` | Paginated official inventory, India filtering, and direct Workday apply resolution |
 | Live | Barclays | `search.jobs.barclays/location/india-jobs` | Paginated official inventory, total/page reconciliation, and direct Workday apply resolution |
 | Live | Razorpay | `job-boards.greenhouse.io/razorpaysoftwareprivatelimited` | Public Greenhouse inventory, stable requisition IDs, and role-level official Apply page |
+| ATS candidate | Groww, PhonePe | Public Greenhouse boards | Structured Greenhouse inventory/detail candidates; health remains scan-gated |
+| ATS candidate | Paytm | `api.lever.co/v0/postings/paytm` | Public Lever inventory/detail feed and role-level hosted Apply URL |
+| ATS candidate | State Street, Northern Trust, Mastercard, Visa, FactSet, Bloomberg | Public Workday CXS job feeds | Structured Workday inventory/detail candidates; health remains scan-gated |
 | 1 | KPMG India | `ejgk.fa.em2.oraclecloud.com/.../CX_1/jobs` | Reusable Oracle Recruiting Cloud adapter |
 | 1 | American Express | `careers.americanexpress.com/.../CX_1/jobs` | Same Oracle adapter with employer-specific facets |
 | 1 | Deloitte India | `southasiacareers.deloitte.com` | Paginated catalog with advertised-total proof |
@@ -56,6 +59,8 @@ The first scan of a new connector may create a detail backlog. Later 30-minute r
 | Pending | Morningstar | `morningstar.com/company/careers` | Verify the public global/India job search surface |
 | Pending | ICRA | `icra.in/careers` | Confirm whether live vacancies are exposed on an official public endpoint |
 
+The remaining RCV employers are represented as explicit source candidates through a quota-gated Firecrawl fallback queue. Firecrawl is not scheduled unattended; use it only after checking the available quota and validating the resulting role-level detail and Apply URLs.
+
 Wave order balances reusable adapters, completeness, and employer value. Within Wave 1, build the shared KPMG/American Express adapter first, then Goldman Sachs and JPMorgan, followed by the remaining paginated portals.
 
 ## Matching policy for 0-2 year MBA finance roles
@@ -68,7 +73,7 @@ The detail classifier keeps roles visible when experience is absent or ambiguous
 
 LinkedIn, Naukri, IIMJobs, and Indeed are supplementary discovery signals, never proof that official coverage is complete. Each record preserves its exact source type and portal URL. Canonical jobs prefer a verified official detail/apply URL. Portal-only records remain visibly unverified until matched by employer job ID or canonical official URL.
 
-Authenticated-page scraping is excluded. Where a portal has no suitable public API, user-owned alert-email ingestion or explicitly shared links are safer than automating a logged-in session.
+Authenticated-page scraping is excluded. The local browser helper supports an explicit one-listing capture and local JSON import for unsupported employers; it does not crawl a portal, read credentials/cookies, or turn a portal Apply link into an official Apply URL. Where a portal has no suitable public API, user-owned alert-email ingestion or explicitly shared links remain safer than automating a logged-in session. See `docs/portal-discovery-strategy.md` for the source matrix and precedence rules.
 
 ## Operations
 

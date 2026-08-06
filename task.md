@@ -1,3 +1,20 @@
 - [x] Task 1: Create the generic Workday connector
 - [x] Task 2: Integrate Workday into the Registry
 - [x] Task 3: Add Database Migration for Workday Schedules
+- [x] Task 4: Mark truncated Workday pagination as partial
+- [x] Task 5: Keep tailored-CV matching local and evidence-first
+- [x] Task 6: Add Groww and PhonePe through the verified Greenhouse adapter
+- [x] Task 7: Add local evidence-only cover-letter drafts with review and copy controls
+- [x] Task 8: Add the complete 60-company RCV directory with official career links
+- [x] Task 9: Tighten finance-role filtering against bank and fintech noise
+- [x] Task 10: Prefer direct role Apply URLs over generic career pages
+- [x] Task 11: Add explicit-click local form-fill helper without submission or credentials
+- [x] Task 12: Prefer public Workday/Lever feeds over Firecrawl for RCV employers where stable ATS endpoints were verified
+- [x] Task 13: Disable unattended Firecrawl polling to protect the free tier; keep fallback scans explicit and reviewable
+- [x] Task 14: Add explicit one-listing portal capture/import for unsupported employers without logged-in scraping
+- [x] Task 15: Replace raw CV keyword matching with evidence-first role matching, deterministic resume-readiness checks and cover-letter requirement gating
+- [x] Task 16: Add a privacy-safe Indian finance 0-2-year benchmark and explicit latest-snapshot refresh control
+- [x] Task 17: Add local PDF resume upload (vendored Mozilla pdf.js, offline, no network call), make CV match the first content section, and move the 60-company directory into a slide-in side drawer with search
+- [x] Task 18: Enforce a strict 0-2 year experience feed end-to-end (DB experience_status filter + in-memory re-check, preferred-only over-2 ranges rejected, senior-title and safety/environmental exclusions) and expose snapshot freshness and per-role experience years
+- [x] Task 19: Trim CV section copy to a crisp minimum and make the refresh flow transparent (feed-updated timestamp in the roles meta, honest refresh toast, stale verification clamped)
+- [x] Task 20: Add live per-job open/closed verification via a public /job-status endpoint (server-side page check with conservative closed detection, DESIS/generic-URL handling, per-job cooldown) and a per-card "Check if open" action with cached badges plus auto-check of top matches

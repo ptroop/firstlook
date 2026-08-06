@@ -8,17 +8,18 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>First Look - finance roles</title>
-    <link rel="stylesheet" href="./styles.css?v=4" />
+    <link rel="stylesheet" href="./styles.css?v=6" />
+
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <a class="wordmark" href="#overview" aria-label="First Look home">first look<span>.</span></a>
         <nav class="topnav" aria-label="Primary navigation">
-          <button class="nav-link is-active" data-view="overview">Overview</button>
-          <button class="nav-link" data-view="companies">Companies</button>
+          <button class="nav-link" data-view="overview">Overview</button>
+          <button class="nav-link is-active" data-view="cv">CV match</button>
           <button class="nav-link" data-view="matches">Open roles</button>
-          <button class="nav-link" data-view="cv">CV match</button>
+          <button class="nav-link" data-drawer="companies" aria-controls="companies-drawer" aria-expanded="false">Companies</button>
         </nav>
         <button class="button button-dark" id="alerts-button">Turn on alerts</button>
       </header>
@@ -39,13 +40,51 @@
           </dl>
         </section>
 
-        <section class="content-section companies-section" id="companies" data-section="companies">
+        <section class="content-section cv-section" id="cv" data-section="cv">
           <div class="section-heading">
-            <h2>Company directory</h2>
-            <span class="section-meta" id="companies-meta">Loading</span>
+            <h2>CV match</h2>
+            <span class="section-meta" id="cv-meta">Private on this device</span>
           </div>
-          <p class="section-intro">Every company from the RCV planning registry is listed here. A directory entry is not a claim that its live feed is connected; roles appear only after an official source passes reconciliation and the finance-first filter.</p>
-          <div class="company-directory" id="company-directory" aria-live="polite"></div>
+          <p class="section-intro">Upload your resume once, then see which open roles fit. Every match cites your profile text; drafts stay local.</p>
+          <div class="cv-workspace">
+            <div class="cv-editor">
+              <div class="resume-dropzone" id="resume-dropzone">
+                <div class="resume-dropzone-icon" aria-hidden="true">
+                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><polyline points="12 11 12 17"></polyline><polyline points="9 14 12 17 15 14"></polyline></svg>
+                </div>
+                <p><strong>Upload your resume as a PDF</strong></p>
+                <p class="dropzone-help">Drop it here, or <label class="text-button" for="cv-file">browse files</label>. Plain text, Markdown and HTML profiles are also accepted.</p>
+              </div>
+              <label class="field-label" for="cv-profile">Master profile</label>
+              <p class="field-help">Review the extracted text, then edit if needed.</p>
+              <textarea id="cv-profile" class="cv-textarea" rows="16" placeholder="Example:&#10;MBA, Finance — 2026&#10;&#10;Experience&#10;• Built a financial model...&#10;&#10;Skills&#10;Excel, SQL, Power BI"></textarea>
+              <div class="cv-controls">
+                <label class="button" for="cv-file">Import .pdf, .txt, .md or .html</label>
+                <input id="cv-file" type="file" accept=".pdf,.txt,.md,.html,application/pdf,text/plain,text/html" hidden />
+                <button class="button button-dark" id="save-profile">Save profile</button>
+                <button class="text-button" id="clear-profile" type="button">Clear</button>
+              </div>
+              <p class="privacy-note">Saved only on this device.</p>
+              <aside class="cv-quality-panel" aria-live="polite">
+                <div class="cv-quality-heading"><h3>Resume readiness</h3><span id="cv-quality-meta">No profile yet</span></div>
+                <div id="cv-quality-list"><p class="cv-quality-empty">A local readability check, not an employer ATS score.</p></div>
+              </aside>
+              <aside class="helper-callout">
+                <h3>Review-first form fill</h3>
+                <p>Optional local helper: fills supported public contact fields on click. Never submits forms or touches passwords.</p>
+                <a class="text-button" href="./browser-extension/README.md" target="_blank" rel="noreferrer">Set up the local form-fill helper</a>
+              </aside>
+            </div>
+            <div class="cv-results-panel">
+              <div class="cv-results-heading">
+                <h3>Best matches</h3>
+                <span class="section-meta" id="cv-results-meta">Add your profile to begin</span>
+              </div>
+              <div id="cv-results" class="cv-results" aria-live="polite">
+                <div class="cv-empty"><h3>Your profile stays yours.</h3><p>Save a profile to see which current roles fit it best.</p></div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="content-section" id="matches" data-section="matches">
@@ -75,46 +114,6 @@
           </div>
           <div class="job-list" id="job-list" hidden></div>
         </section>
-
-        <section class="content-section cv-section" id="cv" data-section="cv">
-          <div class="section-heading">
-            <h2>CV match</h2>
-            <span class="section-meta" id="cv-meta">Private on this device</span>
-          </div>
-          <p class="section-intro">Keep one truthful master profile, then check it against the roles found by First Look. Each brief points back to text already in your profile; review points are not instructions to add unsupported claims. Evidence-backed cover-letter drafts stay local and remain yours to review.</p>
-          <div class="cv-workspace">
-            <div class="cv-editor">
-              <label class="field-label" for="cv-profile">Master profile</label>
-              <p class="field-help">Paste your CV or a structured profile with education, experience, projects, achievements and skills.</p>
-              <textarea id="cv-profile" class="cv-textarea" rows="16" placeholder="Example:\nMBA, Finance — 2026\n\nExperience\n• Built a financial model...\n\nSkills\nExcel, SQL, Power BI"></textarea>
-              <div class="cv-controls">
-                <label class="button" for="cv-file">Import .txt, .md or .html</label>
-                <input id="cv-file" type="file" accept=".txt,.md,.html,text/plain,text/html" hidden />
-                <button class="button button-dark" id="save-profile">Save profile</button>
-                <button class="text-button" id="clear-profile" type="button">Clear</button>
-              </div>
-              <p class="privacy-note">Stored locally on this device. No automatic rewriting, fabrication or application submission.</p>
-              <aside class="cv-quality-panel" aria-live="polite">
-                <div class="cv-quality-heading"><h3>Resume readiness</h3><span id="cv-quality-meta">Paste a profile to score</span></div>
-                <div id="cv-quality-list"><p class="cv-quality-empty">This local check looks for readable structure, evidence and contact text. It is not an employer ATS score.</p></div>
-              </aside>
-              <aside class="helper-callout">
-                <h3>Review-first form fill</h3>
-                <p>Use the optional local browser helper to save your contact fields once, open a direct role, and fill supported application fields for review. It never fills passwords, uploads files or submits forms.</p>
-                <a class="text-button" href="./browser-extension/README.md" target="_blank" rel="noreferrer">Set up the local form-fill helper</a>
-              </aside>
-            </div>
-            <div class="cv-results-panel">
-              <div class="cv-results-heading">
-                <h3>Best matches</h3>
-                <span class="section-meta" id="cv-results-meta">Add your profile to begin</span>
-              </div>
-              <div id="cv-results" class="cv-results" aria-live="polite">
-                <div class="cv-empty"><h3>Your profile stays yours.</h3><p>Save a profile to see which current roles fit it best.</p></div>
-              </div>
-            </div>
-          </div>
-        </section>
       </main>
 
       <div class="health-indicator-container">
@@ -132,10 +131,33 @@
         <span>Applications open on the original source.</span>
       </footer>
     </div>
+
+    <button class="side-rail" id="companies-rail" type="button" aria-controls="companies-drawer" aria-expanded="false" aria-label="Open company directory">
+      <span class="side-rail-dot" aria-hidden="true"></span>
+      <span>Companies</span>
+    </button>
+
+    <div class="drawer-overlay" id="drawer-overlay" hidden></div>
+    <aside class="drawer" id="companies-drawer" aria-hidden="true" aria-label="Company directory" inert>
+      <div class="drawer-head">
+        <div>
+          <p class="eyebrow">RCV registry</p>
+          <h2>Company directory</h2>
+        </div>
+        <button class="drawer-close" id="drawer-close" type="button" aria-label="Close company directory">&times;</button>
+      </div>
+      <p class="drawer-intro">Every company from the RCV planning registry is listed here. A directory entry is not a claim that its live feed is connected; roles appear only after an official source passes reconciliation and the finance-first filter.</p>
+      <div class="drawer-search">
+        <input id="company-search" type="search" placeholder="Search employers…" autocomplete="off" aria-label="Search company directory" />
+      </div>
+      <span class="section-meta drawer-meta" id="companies-meta">Loading</span>
+      <div class="company-directory" id="company-directory" aria-live="polite"></div>
+    </aside>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script>window.JOB_MONITOR_API = 'https://xbckwzodpwfpvvkujbgp.supabase.co/functions/v1/first-look-api'; window.JOB_MONITOR_VAPID_PUBLIC_KEY = '';</script>
     <script src="./company-catalog.js?v=1"></script>
     <script src="./cv-evaluator.js?v=1"></script>
-    <script src="./app.js?v=7"></script>
+    <script src="./app.js?v=10"></script>
   </body>
 </html>

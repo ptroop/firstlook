@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>pdf.js browser smoke check</title>
+    <style>
+      body { font-family: ui-monospace, Menlo, monospace; font-size: 13px; padding: 24px; background: #faf9f6; color: #2a2a28; }
+      pre { white-space: pre-wrap; background: #fff; border: 1px solid #e5e0d8; padding: 14px; border-radius: 6px; }
+      .pass { color: #508c69; font-weight: 600; }
+      .fail { color: #c45a5a; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>pdf.js browser smoke check</h1>
+    <p id="status">Running…</p>
+    <pre id="output">(waiting)</pre>
+    <script type="module">
+      const status = document.querySelector('#status');
+      const output = document.querySelector('#output');
+      const required = ['Finance Analyst', 'MBA Finance 2026'];
+
+      async function run() {
+        try {
+          const pdfjs = await import('/lib/pdfjs/pdf.min.mjs');
+          pdfjs.GlobalWorkerOptions.workerSrc = '/lib/pdfjs/pdf.worker.min.mjs';
+          const response = await fetch('/scripts/sample-resume.pdf');
+          const doc = await pdfjs.getDocument({ data: new Uint8Array(await response.arrayBuffer()), isEvalSupported: false }).promise;
+          let text = '';
+          for (let page = 1; page <= doc.numPages; page += 1) {
+            const pdfPage = await doc.getPage(page);
+            const content = await pdfPage.getTextContent();
+            for (const item of content.items) {
+              if (typeof item.str === 'string' && item.str) text += item.str + (item.hasEOL ? '\n' : ' ');
+            }
+          }
+          if (typeof doc.destroy === "function") { await doc.destroy(); } else if (typeof doc.cleanup === "function") { doc.cleanup(); }
+          const missing = required.filter((needle) => !text.includes(needle));
+          if (missing.length) throw new Error(`Missing expected text: ${missing.join(', ')}`);
+          status.textContent = 'PASS: pdf.js extracted the expected resume text.';
+          status.className = 'pass';
+          output.textContent = `Extracted: ${JSON.stringify(text.trim())}`;
+        } catch (error) {
+          status.textContent = `FAIL: ${error.message}`;
+          status.className = 'fail';
+          output.textContent = error.stack || String(error);
+        }
+      }
+      run();
+    </script>
+  </body>
+</html>
