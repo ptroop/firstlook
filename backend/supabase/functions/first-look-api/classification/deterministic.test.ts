@@ -6,6 +6,8 @@ import { parseExperience } from './experience.ts';
 
 test('normalizes zero-to-two-year experience wording', () => {
   const cases = [
+    '0 years of experience',
+    '0-1 years of experience',
     '0-2 years experience',
     '1 - 2 years of relevant experience',
     'one to two years in financial analysis',
@@ -16,6 +18,7 @@ test('normalizes zero-to-two-year experience wording', () => {
     'up to 2 years',
     'Freshers may apply',
     'No prior experience required',
+    'No experience needed',
     'early career finance analyst',
     '2 years of experience preferred',
     '0-2 years preferred',
@@ -26,16 +29,23 @@ test('normalizes zero-to-two-year experience wording', () => {
   }
 });
 
-test('keeps open-ended floors and blank wording out of the confirmed 0-2 band', () => {
-  for (const text of ['1+ years of experience', '2+ years of experience', 'At least 2 years of experience', '']) {
-    assert.equal(parseExperience(text).status, 'ambiguous', text);
+test('qualifies open-ended floors at or below two years as confirmed 0-2', () => {
+  for (const text of ['1+ years of experience', '2+ years of experience', 'At least 1 year of experience', 'At least 2 years of experience', 'Minimum 1 year required']) {
+    assert.equal(parseExperience(text).status, 'zero_to_two', text);
   }
+  assert.equal(parseExperience('1+ years of experience').minimumYears, 1);
+  assert.equal(parseExperience('At least 2 years of experience').minimumYears, 2);
+});
+
+test('keeps blank wording and contradictory caps out of the confirmed 0-2 band', () => {
+  assert.equal(parseExperience('').status, 'ambiguous');
   assert.equal(parseExperience('0-2 years in analytics and minimum 4 years in banking').status, 'ambiguous');
 });
 
 test('marks explicit requirements above two years as over two', () => {
   const cases = [
     'Minimum 3 years of experience',
+    'At least 3 years of experience',
     '3+ years in finance',
     '1-3 years of relevant experience',
     '36 months of required experience',

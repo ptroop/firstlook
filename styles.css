@@ -591,6 +591,7 @@ h2 { margin-bottom: 8px; font-family: var(--serif); font-size: 32px; font-weight
   font-weight: 500;
 }
 .badge-match { background: #E7F0E9; color: var(--success); }
+.badge-score { background: var(--ink); color: var(--paper); font-weight: 700; letter-spacing: .02em; }
 .badge-new { background: #FBEEDC; color: #B9761B; font-weight: 600; }
 .badge-warning { background: #F6E9E9; color: var(--warning); }
 .badge-skill { background: transparent; border: 1px solid var(--line); color: var(--muted); }

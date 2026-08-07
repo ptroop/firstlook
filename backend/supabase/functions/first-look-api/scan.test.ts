@@ -146,10 +146,10 @@ function ambiguousSourceConnector() {
     ...observation,
     sourceExternalId: listing.sourceExternalId,
     employerJobId: listing.sourceExternalId,
-    // An open-ended floor is a genuine "possible" case: it is not a confirmed
-    // 0-2 cap, so the strict parser keeps it ambiguous and it must not notify.
-    experienceText: '2+ years',
-    description: 'Credit risk and financial model analysis. Candidates should have 2+ years of relevant experience.',
+    // Genuinely ambiguous wording (no experience band at all) stays "possible":
+    // the parser cannot confirm a 0-2 cap, so it must not notify.
+    experienceText: '',
+    description: 'Credit risk and financial model analysis.',
     detailUrl: listing.detailUrl,
     listingUrl: listing.detailUrl,
   });
@@ -241,7 +241,7 @@ test('uses OpenRouter only for an ambiguous job and persists the actual response
           locationStatus: 'india', financeStatus: 'exact', experienceStatus: 'zero_to_two',
           minimumYears: 0, maximumYears: 2, confidence: 0.93,
           evidence: {
-            location: ['Mumbai, India'], finance: ['Credit risk'], experience: ['2+ years'],
+            location: ['Mumbai, India'], finance: ['Credit risk'], experience: ['financial model analysis'],
           },
         }) } }],
       }), { status: 200 });

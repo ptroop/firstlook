@@ -8,11 +8,13 @@ export interface ExperienceResult {
 }
 
 // Strict 0-2 band: only roles whose wording caps experience at 0, 1 or 2 years
-// (or the month equivalent). Open-ended floors ("2+", "at least 2") and unknown
-// wording stay out of the public feed — they are not confirmed 0-2.
+// (or the month equivalent). Open-ended floors at or below two years ("at least
+// 1", "1+", "at least 2", "2+") and explicit no-experience wording count as
+// confirmed 0-2 for the public feed — a 0-2 year candidate satisfies them.
+// Floors above two years ("at least 3", "3+") and unknown wording stay out.
 
 const SENIOR_EXECUTIVE_TITLE = /\b(?:vice president|vp|avp|svp|assistant vice president|senior vice president|managing director|executive director|director|associate director|head of|chief [a-z]+ officer|partner|principal|senior manager)\b/i;
-const ENTRY_LEVEL_PHRASE = /\b(?:freshers?|recent graduates?|new graduates?|campus hires?|early career|entry[- ]level|no (?:prior|previous) experience (?:is )?required|zero years?(?: of experience)?)\b/;
+const ENTRY_LEVEL_PHRASE = /\b(?:freshers?|recent graduates?|new graduates?|campus hires?|early career|entry[- ]level|no\s+(?:(?:prior|previous|any|prior work)\s+)?experience\s+(?:is\s+)?(?:required|needed|necessary|expected)|zero years?(?: of experience)?|0 years?(?: of experience)?)\b/;
 const MID_OR_SENIOR_PHRASE = /\b(?:mid[- ]level|seasoned(?: professional)?|highly experienced|extensive experience|substantial experience)\b/;
 const YEAR_UNIT = String.raw`(?:years?|yrs?|yoe|months?)`;
 
@@ -56,36 +58,27 @@ export function parseExperience(input: string): ExperienceResult {
   }
 
   const hasOpenEnded = bounds.some((bound) => bound.minimum !== null && bound.maximum === null);
+  const openFloorMinimum = openFloorMinimumOf(bounds);
   const hasOverTwo = bounds.some((bound) => exceedsTwo(bound.minimum) || exceedsTwo(bound.maximum));
   const hasAtMostTwo = bounds.some((bound) => bound.maximum !== null && bound.maximum <= 2
     && (bound.minimum === null || bound.minimum <= 2));
   const evidence = [...new Set(bounds.map((bound) => bound.evidence))];
 
-  // Open-ended floors ("1+", "2+", "at least 2") are not a confirmed 0-2 cap.
   if (hasOpenEnded) {
-    // A confirmed cap beside an open floor ("0-2 years ... minimum 4 years")
-    // is contradictory, not a clear senior requirement: keep it ambiguous.
-    if (hasAtMostTwo) return ambiguous(evidence);
-    if (hasOverTwo || bounds.some((bound) => bound.minimum !== null && bound.minimum > 2)) {
-      return {
-        status: 'over_two',
-        minimumYears: minimumKnown(bounds),
-        maximumYears: maximumKnown(bounds),
-        evidence,
-      };
-    }
-    return ambiguous(evidence);
+    // A confirmed 0-2 cap beside an open floor above two ("0-2 years ... minimum
+    // 4 years") is contradictory, not a clear senior requirement: ambiguous.
+    if (hasOverTwo && hasAtMostTwo) return ambiguous(evidence);
+    if (hasOverTwo) return overTwoResult(bounds, evidence);
+    // Open floor above two years ("at least 3", "3+") is not a 0-2 target.
+    if (openFloorMinimum !== null && openFloorMinimum > 2) return overTwoResult(bounds, evidence);
+    // Open floor at or below two years ("at least 1", "1+", "at least 2", "2+")
+    // qualifies: a candidate with 0-2 years satisfies the floor.
+    const minimumYears = Math.max(minimumKnown(bounds) ?? 0, openFloorMinimum ?? 0);
+    return zeroToTwo(minimumYears, maximumKnown(bounds), evidence);
   }
 
   if (hasOverTwo && hasAtMostTwo) return ambiguous(evidence);
-  if (hasOverTwo) {
-    return {
-      status: 'over_two',
-      minimumYears: minimumKnown(bounds),
-      maximumYears: maximumKnown(bounds),
-      evidence,
-    };
-  }
+  if (hasOverTwo) return overTwoResult(bounds, evidence);
   if (hasAtMostTwo) {
     const minimumYears = minimumKnown(bounds);
     const maximumYears = maximumKnown(bounds);
@@ -247,6 +240,22 @@ function maximumKnown(bounds: Bound[]): number | null {
 
 function zeroToTwo(minimumYears: number | null, maximumYears: number | null, evidence: string[]): ExperienceResult {
   return { status: 'zero_to_two', minimumYears, maximumYears, evidence };
+}
+
+function overTwoResult(bounds: Bound[], evidence: string[]): ExperienceResult {
+  return {
+    status: 'over_two',
+    minimumYears: minimumKnown(bounds),
+    maximumYears: maximumKnown(bounds),
+    evidence,
+  };
+}
+
+function openFloorMinimumOf(bounds: Bound[]): number | null {
+  const values = bounds
+    .filter((bound) => bound.maximum === null && bound.minimum !== null)
+    .map((bound) => bound.minimum as number);
+  return values.length > 0 ? Math.min(...values) : null;
 }
 
 function ambiguous(evidence: string[]): ExperienceResult {

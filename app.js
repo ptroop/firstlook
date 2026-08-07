@@ -79,6 +79,9 @@ const applicationKitPanel = document.querySelector('#application-kit-panel');
 const applicationKitList = document.querySelector('#application-kit-list');
 const applicationKitMeta = document.querySelector('#application-kit-meta');
 let companySearchTerm = '';
+let matchScoreCache = new Map();
+let matchScoreCacheProfile = '';
+let parsedProfileForScoring = null;
 let pdfJsPromise = null;
 const API_BASE = window.JOB_MONITOR_API || '';
 const VAPID_PUBLIC_KEY = window.JOB_MONITOR_VAPID_PUBLIC_KEY || '';
@@ -201,6 +204,38 @@ function renderJobs(jobs) {
     return newestRight - newestLeft || left.localeCompare(right);
   });
 
+  // Tsenta-style resume-aware scoring: match % is expensive per role, so scores
+  // are memoized against the saved profile and only recomputed when it changes.
+  const profileFingerprint = (() => {
+    const profile = profileText();
+    return profile ? simpleHash(profile) : '';
+  })();
+  if (profileFingerprint !== matchScoreCacheProfile) {
+    matchScoreCacheProfile = profileFingerprint;
+    matchScoreCache = new Map();
+    parsedProfileForScoring = (() => {
+      const engine = cvEngine();
+      if (!engine || !profileFingerprint) return null;
+      try { return engine.parseProfile(profileText()); } catch (_error) { return null; }
+    })();
+  }
+
+  function jobMatchScore(job) {
+    const engine = cvEngine();
+    if (!engine || !parsedProfileForScoring) return null;
+    const jobId = jobIdentity(job);
+    if (matchScoreCache.has(jobId)) return matchScoreCache.get(jobId);
+    try {
+      const result = engine.matchJob(job, parsedProfileForScoring);
+      const score = typeof result?.score === 'number' ? result.score : null;
+      matchScoreCache.set(jobId, score);
+      return score;
+    } catch (_error) {
+      matchScoreCache.set(jobId, null);
+      return null;
+    }
+  }
+
   jobList.innerHTML = sortedCompanies.map(company => {
     const companyJobs = byCompany[company];
     const headerHtml = `
@@ -224,9 +259,14 @@ function renderJobs(jobs) {
       const listedDays = jobListedDays(job);
       const newBadge = listedDays !== null && listedDays <= 7 ? '<span class="badge badge-new">New</span>' : '';
       const isRoleLink = String(job.id || '').startsWith('link_');
+      const matchScore = jobMatchScore(job);
+      const matchBadge = matchScore !== null
+        ? `<span class="badge badge-score" title="Evidence-based match with your saved profile">${matchScore}% match</span>`
+        : '';
       const statusBadges = [
         `${newBadge}`,
         isRoleLink ? '<span class="badge badge-warning">Pasted link</span>' : '',
+        matchBadge,
         `<span class="badge badge-match">${job.matchTier === 'exact' ? 'Strong match' : 'Check match'}</span>`,
         job.experienceYears ? `<span class="badge">Experience ${escapeHtml(formatExperienceRange(job.experienceYears))}</span>` : '',
         job.officialVerified

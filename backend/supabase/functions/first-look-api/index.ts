@@ -87,24 +87,35 @@ function isSeniorOrNonFinanceTitle(title: string): boolean {
   return isNoiseTitle(title);
 }
 
-function isConfirmedZeroToTwo(row: JobRow): boolean {
-  const parsed = parseExperience(`${row.title}\n${row.description}`);
-  if (!isStrictZeroToTwoExperience(parsed)) return false;
-  // Guard stored year columns too, in case classification lags the parser.
-  if (row.minimum_years !== null && (row.minimum_years < 0 || row.minimum_years > 2)) return false;
-  if (row.maximum_years !== null && (row.maximum_years < 0 || row.maximum_years > 2)) return false;
-  return true;
-}
-
 async function getJobs(headers: Record<string, string>) {
   const select = 'id,company,official_detail_url,official_apply_url,title,location,description,first_seen_at,last_seen_at,posted_at,match_tier,classification_method,location_status,finance_status,experience_status,minimum_years,maximum_years,classified_at';
-  // Strict 0-2 feed: DB prefilter keeps confirmed zero_to_two rows, then every
-  // row is re-parsed from title+description so stale or open-ended wording
-  // (2+, at least 3, 3-5 yrs, ambiguous blanks) cannot reach the UI.
-  const rows = ((await supabaseClient().request(`/rest/v1/jobs?active=eq.true&location_status=eq.india&finance_status=in.(exact,likely)&match_tier=in.(exact,possible)&experience_status=eq.zero_to_two&select=${select}&limit=2000`)) as JobRow[])
+  // Strict 0-2 feed: DB prefilter keeps confirmed zero_to_two rows plus rows the
+  // classifier stored as ambiguous ("at least 1", "2+", blank wording) so the
+  // in-memory re-parse below can promote the qualifying ones, then every row is
+  // re-parsed from title+description so stale or open-ended wording (3+, senior
+  // bands) cannot reach the UI.
+  // Newest-first ordering makes the 2000-row cap deterministic: the in-memory
+  // re-parse and the freshness-first feed both start from the most recent rows.
+  const rows = ((await supabaseClient().request(`/rest/v1/jobs?active=eq.true&location_status=eq.india&finance_status=in.(exact,likely)&match_tier=in.(exact,possible)&experience_status=in.(zero_to_two,ambiguous)&select=${select}&order=last_seen_at.desc&limit=2000`)) as JobRow[])
     .filter((row) => !isSeniorOrNonFinanceTitle(row.title)
-      && classifyFinance({ title: row.title, jobCategory: '', description: row.description }).status !== 'unrelated'
-      && isConfirmedZeroToTwo(row));
+      && classifyFinance({ title: row.title, jobCategory: '', description: row.description }).status !== 'unrelated')
+    // Re-parse every row once and serve the confirmed band, so ambiguous rows
+    // whose wording qualifies ("at least 1", "2+") surface with accurate
+    // experience evidence while stale/senior wording cannot reach the UI.
+    .map((row) => {
+      const parsed = parseExperience(`${row.title}\n${row.description}`);
+      if (!isStrictZeroToTwoExperience(parsed)) return null;
+      // Guard stored year columns too, in case classification lags the parser.
+      if (row.minimum_years !== null && (row.minimum_years < 0 || row.minimum_years > 2)) return null;
+      if (row.maximum_years !== null && (row.maximum_years < 0 || row.maximum_years > 2)) return null;
+      return {
+        ...row,
+        experience_status: parsed.status,
+        minimum_years: parsed.minimumYears,
+        maximum_years: parsed.maximumYears,
+      };
+    })
+    .filter((row): row is JobRow => row !== null);
   if (rows.length === 0) return json({ jobs: [], snapshotAt: null }, headers);
 
   const ids = rows.map((row) => encodeURIComponent(row.id)).join(',');
