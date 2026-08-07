@@ -72,7 +72,7 @@ function corsHeaders(origin: string | null) {
     'https://ptroop.github.io',
     ...(Deno.env.get('ALLOWED_ORIGIN') ? [Deno.env.get('ALLOWED_ORIGIN')!] : []),
   ];
-  const isLocalhost = origin && /^https?:\\/\\/(localhost|127\\.0\\.0\\.1)(:\\d+)?$/.test(origin);
+  const isLocalhost = origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
   const isAllowed = origin && (allowedOrigins.includes(origin) || isLocalhost);
   return {
     'Access-Control-Allow-Origin': isAllowed ? origin : (allowedOrigins[0] || '*'),
