@@ -120,6 +120,16 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
       createOfficialPageConnector(config, fetch, 'watch', `rcv-official-page-wave-${waveIndex + 1}-watch`),
       createOfficialPageConnector(config, fetch, 'reconcile', `rcv-official-page-wave-${waveIndex + 1}-reconcile`),
     ])),
+    ...[
+      MICROSOFT_CONFIG,
+      HSBC_CONFIG,
+      PIRAMAL_CONFIG,
+      PINE_LABS_CONFIG,
+      ICRA_CONFIG,
+    ].flatMap(config => [
+      createOfficialPageConnector(config, fetch, 'watch', 'rcv-official-page-wave-5-watch'),
+      createOfficialPageConnector(config, fetch, 'reconcile', 'rcv-official-page-wave-5-reconcile'),
+    ]),
   ];
 }
 

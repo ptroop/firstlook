@@ -213,8 +213,10 @@ test('schedules quota-free official-page RCV waves separately from Firecrawl', (
   for (const group of [
     'rcv-official-page-wave-1-watch', 'rcv-official-page-wave-2-watch',
     'rcv-official-page-wave-3-watch', 'rcv-official-page-wave-4-watch',
+    'rcv-official-page-wave-5-watch',
     'rcv-official-page-wave-1-reconcile', 'rcv-official-page-wave-2-reconcile',
     'rcv-official-page-wave-3-reconcile', 'rcv-official-page-wave-4-reconcile',
+    'rcv-official-page-wave-5-reconcile',
   ]) assert.match(rcvOfficialPageSchedule, new RegExp(`'${group}'`));
   assert.match(rcvOfficialPageSchedule, /invoke_first_look_rcv_official_page_scan/);
   assert.doesNotMatch(rcvOfficialPageSchedule, /firecrawl/i);

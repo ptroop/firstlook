@@ -16,7 +16,7 @@ export const AMAZON_CONFIG: FirecrawlConfig = {
 export const MICROSOFT_CONFIG: FirecrawlConfig = {
   companyName: 'Microsoft',
   connectorIdPrefix: 'microsoft',
-  careerSearchUrl: 'https://careers.microsoft.com/global/en/search?l=India&pg=1',
+  careerSearchUrl: 'https://careers.microsoft.com/v2/global/en/locations/india.html',
 };
 export const DELOITTE_CONFIG: FirecrawlConfig = {
   companyName: 'Deloitte',

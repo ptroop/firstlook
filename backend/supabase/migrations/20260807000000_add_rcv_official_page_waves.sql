@@ -20,7 +20,8 @@ begin
     'rcv-official-page-wave-1-watch', 'rcv-official-page-wave-1-reconcile',
     'rcv-official-page-wave-2-watch', 'rcv-official-page-wave-2-reconcile',
     'rcv-official-page-wave-3-watch', 'rcv-official-page-wave-3-reconcile',
-    'rcv-official-page-wave-4-watch', 'rcv-official-page-wave-4-reconcile'
+    'rcv-official-page-wave-4-watch', 'rcv-official-page-wave-4-reconcile',
+    'rcv-official-page-wave-5-watch', 'rcv-official-page-wave-5-reconcile'
   ) then
     raise exception 'Unknown First Look official-page scan group';
   end if;
@@ -60,7 +61,9 @@ select cron.schedule('first-look-rcv-official-page-wave-1-watch', '5 */2 * * *',
 select cron.schedule('first-look-rcv-official-page-wave-2-watch', '20 */2 * * *', $$select public.invoke_first_look_rcv_official_page_scan('rcv-official-page-wave-2-watch', 'watch', 120000);$$);
 select cron.schedule('first-look-rcv-official-page-wave-3-watch', '35 */2 * * *', $$select public.invoke_first_look_rcv_official_page_scan('rcv-official-page-wave-3-watch', 'watch', 120000);$$);
 select cron.schedule('first-look-rcv-official-page-wave-4-watch', '50 */2 * * *', $$select public.invoke_first_look_rcv_official_page_scan('rcv-official-page-wave-4-watch', 'watch', 120000);$$);
+select cron.schedule('first-look-rcv-official-page-wave-5-watch', '5 */2 * * *', $$select public.invoke_first_look_rcv_official_page_scan('rcv-official-page-wave-5-watch', 'watch', 120000);$$);
 select cron.schedule('first-look-rcv-official-page-wave-1-reconcile', '7 */6 * * *', $$select public.invoke_first_look_rcv_official_page_scan('rcv-official-page-wave-1-reconcile', 'reconcile', 120000);$$);
 select cron.schedule('first-look-rcv-official-page-wave-2-reconcile', '22 */6 * * *', $$select public.invoke_first_look_rcv_official_page_scan('rcv-official-page-wave-2-reconcile', 'reconcile', 120000);$$);
 select cron.schedule('first-look-rcv-official-page-wave-3-reconcile', '37 */6 * * *', $$select public.invoke_first_look_rcv_official_page_scan('rcv-official-page-wave-3-reconcile', 'reconcile', 120000);$$);
 select cron.schedule('first-look-rcv-official-page-wave-4-reconcile', '52 */6 * * *', $$select public.invoke_first_look_rcv_official_page_scan('rcv-official-page-wave-4-reconcile', 'reconcile', 120000);$$);
+select cron.schedule('first-look-rcv-official-page-wave-5-reconcile', '57 */6 * * *', $$select public.invoke_first_look_rcv_official_page_scan('rcv-official-page-wave-5-reconcile', 'reconcile', 120000);$$);

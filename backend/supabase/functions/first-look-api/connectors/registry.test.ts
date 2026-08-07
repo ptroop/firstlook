@@ -127,7 +127,7 @@ test('reports coverage only for implemented official connectors', () => {
     'zerodha-firecrawl-india'
   ];
   for (const id of expectedExistingIds) assert.ok(ids.includes(id), `missing connector ${id}`);
-  assert.equal(ids.filter((id) => id.endsWith('-official-page-india')).length, 31);
+  assert.equal(ids.filter((id) => id.endsWith('-official-page-india')).length, 36);
 });
 
 test('registers Workday connectors for the original and RCV companies', () => {
@@ -164,10 +164,12 @@ test('registers Firecrawl connectors for 5 companies', () => {
 test('registers quota-free official-page discovery for every Firecrawl fallback company', () => {
   const connectors = createOfficialConnectorRegistry();
   const pageConnectors = connectors.filter((connector) => connector.connectorId.endsWith('-official-page-india'));
-  assert.equal(new Set(pageConnectors.map((connector) => connector.connectorId)).size, 31);
+  assert.equal(new Set(pageConnectors.map((connector) => connector.connectorId)).size, 36);
   for (let wave = 1; wave <= 4; wave += 1) {
     const expectedCount = wave < 4 ? 10 : 1;
     assert.equal(connectors.filter((connector) => connector.scanGroup === `rcv-official-page-wave-${wave}-watch`).length, expectedCount);
     assert.equal(connectors.filter((connector) => connector.scanGroup === `rcv-official-page-wave-${wave}-reconcile`).length, expectedCount);
   }
+  assert.equal(connectors.filter((connector) => connector.scanGroup === 'rcv-official-page-wave-5-watch').length, 5);
+  assert.equal(connectors.filter((connector) => connector.scanGroup === 'rcv-official-page-wave-5-reconcile').length, 5);
 });
