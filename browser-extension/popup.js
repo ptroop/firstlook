@@ -1,10 +1,36 @@
 const STORAGE_KEY = 'first-look-apply-profile-v1';
-const FIELD_NAMES = ['fullName', 'email', 'phone', 'location', 'linkedin'];
+const KIT_STORAGE_KEY = 'first-look-application-kit-v1';
+const FIELD_NAMES = ['fullName', 'email', 'phone', 'location', 'linkedin', 'degree', 'institution', 'graduationYear'];
 const form = document.querySelector('#profile-form');
 const status = document.querySelector('#status');
+const kitSummary = document.querySelector('#kit-summary');
 
 function cleanProfile(value) {
   return Object.fromEntries(FIELD_NAMES.map((name) => [name, String(value?.[name] || '').trim().slice(0, name === 'linkedin' ? 300 : 200)]));
+}
+
+function profileFromKit(value) {
+  return cleanProfile(value?.contact || value?.profile || value);
+}
+
+function readStoredKit() {
+  try { return JSON.parse(localStorage.getItem(KIT_STORAGE_KEY) || 'null'); } catch (_error) { return null; }
+}
+
+function renderKit(kit) {
+  if (!kitSummary) return;
+  if (!kit?.job?.title) {
+    kitSummary.hidden = true;
+    kitSummary.innerHTML = '';
+    return;
+  }
+  const answers = String(kit.answers || '').trim();
+  kitSummary.hidden = false;
+  kitSummary.innerHTML = `<span class="kit-meta">Imported application kit</span><h2>${escapeHtml(kit.job.title)}</h2><p>${escapeHtml(kit.job.company || '')} Â· ${escapeHtml(kit.status || 'shortlisted')}</p><div class="kit-actions"><button id="copy-cover-letter" type="button" class="link-button"${kit.coverLetter ? '' : ' disabled'}>Copy reviewed cover letter</button>${answers ? '<button id="copy-answers" type="button" class="link-button">Copy saved answers</button>' : ''}</div>`;
+}
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 }
 
 function readForm() {
@@ -23,6 +49,7 @@ function setStatus(message) {
 async function loadProfile() {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
   writeForm(stored[STORAGE_KEY] || {});
+  renderKit(readStoredKit());
 }
 
 form.addEventListener('submit', async (event) => {
@@ -73,12 +100,31 @@ document.querySelector('#import-file').addEventListener('change', async (event) 
   const file = event.target.files?.[0];
   if (!file) return;
   try {
-    const profile = cleanProfile(JSON.parse(await file.text()));
+    const parsed = JSON.parse(await file.text());
+    const profile = profileFromKit(parsed);
     writeForm(profile);
     await chrome.storage.local.set({ [STORAGE_KEY]: profile });
-    setStatus('Imported and saved locally.');
+    if (parsed?.type === 'first-look-application-kit') {
+      localStorage.setItem(KIT_STORAGE_KEY, JSON.stringify(parsed));
+      renderKit(parsed);
+      setStatus('Application kit imported and saved locally.');
+    } else setStatus('Profile imported and saved locally.');
   } catch (_error) {
     setStatus('That JSON profile could not be read.');
+  }
+});
+
+kitSummary?.addEventListener('click', async (event) => {
+  const kit = readStoredKit();
+  const target = event.target.closest('#copy-cover-letter, #copy-answers');
+  if (!kit || !target) return;
+  const value = target.id === 'copy-cover-letter' ? String(kit.coverLetter || '') : String(kit.answers || '');
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    setStatus(target.id === 'copy-cover-letter' ? 'Reviewed cover letter copied.' : 'Saved answers copied.');
+  } catch (_error) {
+    setStatus('Copy was blocked by the browser.');
   }
 });
 
@@ -98,6 +144,9 @@ function fillSupportedFields(profile) {
     email: /e[- ]?mail|emailaddress/i,
     phone: /phone|mobile|telephone|contact.?number/i,
     linkedin: /linkedin/i,
+    degree: /degree|education level|qualification/i,
+    institution: /school|college|university|institution/i,
+    graduationYear: /graduation|grad(?:uation)? year|year of completion/i,
     location: /city|location|current.?city|address.?city|town/i,
     fullName: /full.?name|candidate.?name|your.?name|name/i,
   };

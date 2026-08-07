@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>First Look - finance roles</title>
-    <link rel="stylesheet" href="./styles.css?v=7" />
+    <link rel="stylesheet" href="./styles.css?v=9" />
 
   </head>
   <body>
@@ -19,6 +19,7 @@
           <button class="nav-link" data-view="overview">Overview</button>
           <button class="nav-link is-active" data-view="cv">CV match</button>
           <button class="nav-link" data-view="matches">Open roles</button>
+          <button class="nav-link" data-view="applications">Applications</button>
           <button class="nav-link" data-drawer="companies" aria-controls="companies-drawer" aria-expanded="false">Companies</button>
         </nav>
         <button class="button button-dark" id="alerts-button">Turn on alerts</button>
@@ -90,6 +91,43 @@
                 <div class="cv-empty"><h3>Your profile stays yours.</h3><p>Save a profile to see which current roles fit it best.</p></div>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section class="content-section application-section" id="applications" data-section="applications">
+          <div class="section-heading">
+            <h2>Application kit</h2>
+            <span class="section-meta" id="application-kit-meta">Private on this device</span>
+          </div>
+          <p class="section-intro">Prepare one role at a time: verified links, reviewed evidence, contact context, a cold-email draft you send yourself, and a follow-up tracker. First Look never submits an application and never sends email.</p>
+          <div class="application-auth-bar" id="application-auth-bar" aria-live="polite"></div>
+          <div id="application-kit-empty" class="application-empty">
+            <h3>No role selected.</h3>
+            <p>Choose “Prepare kit” from a role or CV match to start a reviewable application record.</p>
+          </div>
+          <div id="application-kit-panel" class="application-kit-panel" hidden></div>
+          <div id="application-kit-list" class="application-kit-list" aria-live="polite"></div>
+          <div class="hiring-signals">
+            <div class="application-kit-subheading">
+              <div><h4>Hiring signals from posts</h4><span class="badge badge-warning">Unverified</span></div>
+              <span class="section-meta" id="hiring-signal-meta"></span>
+            </div>
+            <p class="privacy-note">A “we are hiring” post is not proof of a live role or an email address. Capture one manually to review later; it is kept entirely separate from the verified feed and is never auto-converted into an application target. Confirm the role on the employer's own site before any outreach.</p>
+            <form class="hiring-signal-form" id="hiring-signal-form">
+              <label class="field-label">Source<select id="hiring-signal-source">
+                <option value="linkedin">LinkedIn</option>
+                <option value="x">X / Twitter</option>
+                <option value="website">Website / newsletter</option>
+                <option value="other">Other</option>
+              </select></label>
+              <label class="field-label">Post URL<input id="hiring-signal-url" type="url" required maxlength="500" placeholder="https://www.linkedin.com/posts/…" /></label>
+              <label class="field-label">Company<input id="hiring-signal-company" required maxlength="120" placeholder="Employer named in the post" /></label>
+              <label class="field-label">Role mentioned (optional)<input id="hiring-signal-title" maxlength="180" placeholder="Analyst, associate…" /></label>
+              <label class="field-label">Contact in post (optional)<input id="hiring-signal-contact" maxlength="200" placeholder="Name or public email the author shared" /></label>
+              <label class="field-label">Why save it<input id="hiring-signal-note" maxlength="2000" placeholder="e.g. team seems to be building out; confirm on careers page before outreach" /></label>
+              <div class="cv-controls"><button class="button button-dark" type="submit">Add signal</button></div>
+            </form>
+            <div class="hiring-signal-list" id="hiring-signal-list" aria-live="polite"></div>
           </div>
         </section>
 
@@ -171,9 +209,20 @@
     </aside>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script>window.JOB_MONITOR_API = 'https://xbckwzodpwfpvvkujbgp.supabase.co/functions/v1/first-look-api'; window.JOB_MONITOR_VAPID_PUBLIC_KEY = 'BLP1A6D2Z6WTRtAz_pJUwfs99ibn5JoVUbHLEfz7kNQZp5zen_daMKepZd7jcMokj4dqWo4tuW1yibDIv3L4RH0';</script>
-    <script src="./company-catalog.js?v=1"></script>
+    <script>
+      window.JOB_MONITOR_API = 'https://xbckwzodpwfpvvkujbgp.supabase.co/functions/v1/first-look-api';
+      window.JOB_MONITOR_VAPID_PUBLIC_KEY = 'BLP1A6D2Z6WTRtAz_pJUwfs99ibn5JoVUbHLEfz7kNQZp5zen_daMKepZd7jcMokj4dqWo4tuW1yibDIv3L4RH0';
+      window.SUPABASE_URL = 'https://xbckwzodpwfpvvkujbgp.supabase.co';
+      // Paste your public anon key here (Supabase dashboard -> Settings -> API).
+      // It is a public key; secrets never live in this file. Recruiter lookup stays off until set.
+      window.SUPABASE_ANON_KEY = '';
+    </script>
+    <script src="./company-catalog.js?v=2"></script>
     <script src="./cv-evaluator.js?v=2"></script>
-    <script src="./app.js?v=11"></script>
+    <script src="./application-kit.js?v=4"></script>
+    <script src="./hiring-signal.js?v=1"></script>
+    <script src="./auth.js?v=1"></script>
+    <script src="./outreach-corpus.js?v=1"></script>
+    <script src="./app.js?v=15"></script>
   </body>
 </html>

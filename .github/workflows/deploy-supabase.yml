@@ -52,5 +52,11 @@ jobs:
       - name: Deploy scanner and read API
         run: supabase functions deploy first-look-api --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
 
+      - name: Deploy JWT-protected contact lookup (optional Hunter finder)
+        run: supabase functions deploy contact-lookup --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Deploy public email verifier
+        run: supabase functions deploy email-verify --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
+
       - name: Verify production routes
         run: node scripts/verify-production.mjs

@@ -14,3 +14,10 @@ button, .file-button { display: inline-flex; align-items: center; justify-conten
 button.accent { border-color: var(--accent); background: var(--accent); color: #fff; }
 .file-button, .link-button { border: 0; padding: 3px 0; background: transparent; color: var(--accent); }
 .status { min-height: 18px; margin: 12px 0 0; color: var(--muted); font-size: 12px; }
+.kit-summary { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.kit-summary h2 { margin: 0 0 4px; font: 500 17px/1.15 Georgia, serif; }
+.kit-summary p { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.kit-summary .kit-meta { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.kit-summary .kit-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.kit-summary .kit-answer { width: 100%; padding: 8px 0; border-top: 1px solid var(--line); }
+.kit-summary .kit-answer strong { display: block; margin-bottom: 3px; font-size: 11px; }

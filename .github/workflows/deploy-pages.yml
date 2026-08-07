@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - "app.js"
+      - "application-kit.js"
+      - "auth.js"
+      - "hiring-signal.js"
+      - "outreach-corpus.js"
       - "company-catalog.js"
       - "cv-evaluator.js"
       - "index.html"
@@ -41,7 +45,7 @@ jobs:
           set -euxo pipefail
           rm -rf _site
           mkdir -p _site
-          for file in app.js company-catalog.js cv-evaluator.js index.html styles.css icon.svg manifest.webmanifest sw.js; do
+          for file in app.js application-kit.js auth.js hiring-signal.js outreach-corpus.js company-catalog.js cv-evaluator.js index.html styles.css icon.svg manifest.webmanifest sw.js; do
             test -f "$file"
             cp -- "$file" _site/
           done

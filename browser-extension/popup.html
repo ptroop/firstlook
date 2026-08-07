@@ -3,20 +3,23 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>First Look form fill</title>
+    <title>First Look Copilot</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main>
       <p class="eyebrow">first look.</p>
-      <h1>Review-first form fill</h1>
-      <p class="intro">Saved only in this browser. The helper fills supported public fields and never submits, uploads a CV, or touches passwords.</p>
+      <h1>First Look Copilot</h1>
+      <p class="intro">Import a reviewed application kit, fill supported fields on the current employer form, and finish the decisions yourself.</p>
       <form id="profile-form">
         <label>Full name<input name="fullName" autocomplete="name" maxlength="120" /></label>
         <label>Email<input name="email" type="email" autocomplete="email" maxlength="200" /></label>
         <label>Phone<input name="phone" type="tel" autocomplete="tel" maxlength="40" /></label>
         <label>City / location<input name="location" autocomplete="address-level2" maxlength="120" /></label>
         <label>LinkedIn URL<input name="linkedin" type="url" autocomplete="url" maxlength="300" /></label>
+        <label>Degree<input name="degree" autocomplete="organization-title" maxlength="120" placeholder="MBA / PGDM" /></label>
+        <label>Institution<input name="institution" autocomplete="organization" maxlength="180" /></label>
+        <label>Graduation year<input name="graduationYear" inputmode="numeric" maxlength="4" placeholder="2027" /></label>
         <div class="actions">
           <button type="submit">Save profile</button>
           <button id="fill-button" type="button" class="accent">Fill current page</button>
@@ -27,6 +30,7 @@
           <button id="export-button" type="button" class="link-button">Export JSON</button>
         </div>
       </form>
+      <section id="kit-summary" class="kit-summary" hidden aria-live="polite"></section>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </main>
     <script src="popup.js"></script>

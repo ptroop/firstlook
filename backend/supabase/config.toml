@@ -3,3 +3,9 @@ id = "xbckwzodpwfpvvkujbgp"
 
 [functions.first-look-api]
 verify_jwt = false
+
+[functions.contact-lookup]
+verify_jwt = true
+
+[functions.email-verify]
+verify_jwt = false

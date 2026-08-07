@@ -70,6 +70,10 @@ const drawer = document.querySelector('#companies-drawer');
 const drawerOverlay = document.querySelector('#drawer-overlay');
 const drawerClose = document.querySelector('#drawer-close');
 const resumeDropzone = document.querySelector('#resume-dropzone');
+const applicationKitEmpty = document.querySelector('#application-kit-empty');
+const applicationKitPanel = document.querySelector('#application-kit-panel');
+const applicationKitList = document.querySelector('#application-kit-list');
+const applicationKitMeta = document.querySelector('#application-kit-meta');
 let companySearchTerm = '';
 let pdfJsPromise = null;
 const API_BASE = window.JOB_MONITOR_API || '';
@@ -90,6 +94,7 @@ const PORTAL_STORAGE_KEY = 'first-look-portal-listings-v1';
 const JOB_STATUS_STORAGE_KEY = 'first-look-job-status-v1';
 const JOB_STATUS_TTL_MS = 30 * 60 * 1000;
 let autoCheckedTopRoles = false;
+let selectedApplicationKitId = null;
 const SKILL_KEYWORDS = [
   'Python', 'SQL', 'Excel', 'AWS', 'Financial Modeling', 'Tableau', 
   'Power BI', 'Machine Learning', 'C++', 'Java', 'Bloomberg', 'R', 
@@ -113,6 +118,7 @@ function renderJobs(jobs) {
   currentJobs = Array.isArray(jobs) ? jobs : [];
   renderCompanyDirectory();
   renderCvMatches();
+  renderApplicationWorkspace();
   if (!jobs.length) {
     showFeedState('No matching roles yet', 'Prior listings are kept when a career-page scan is incomplete.', '0 roles');
     return;
@@ -183,6 +189,7 @@ function renderJobs(jobs) {
           <div class="job-actions">
             <span class="verified-time">Verified ${escapeHtml(formatAge(job.newestVerificationAt))}</span>
             <span class="job-status-area" data-status-job-id="${escapeAttribute(jobId)}">${statusBadgeHtml(jobId)}<button class="text-button job-status-check" type="button" data-status-job-id="${escapeAttribute(jobId)}">Check if open</button></span>
+            <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Prepare kit</button>
             ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${applyLabel}</a>` : '<span class="apply-unavailable">Direct Apply link pending</span>'}
             ${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}
           </div>
@@ -264,6 +271,747 @@ function renderCvQuality() {
 
 function jobIdentity(job) {
   return String(job?.id || `${job?.company || ''}|${job?.title || ''}|${job?.location || ''}`);
+}
+
+function applicationKitStore() {
+  return window.FirstLookApplicationKit || null;
+}
+
+function applicationJob(jobId) {
+  const liveJob = currentJobs.find((job) => jobIdentity(job) === String(jobId));
+  if (liveJob) return liveJob;
+  return applicationKitStore()?.get(jobId)?.job || null;
+}
+
+function profileContact() {
+  const engine = cvEngine();
+  const profile = profileText();
+  const parsed = engine && profile ? engine.scoreResume(profile).parsed : null;
+  const linkedinUrl = profile.match(/https?:\/\/(?:www\.)?linkedin\.com\/[\w./?=-]+/i)?.[0] || '';
+  return {
+    name: parsed?.displayName || '',
+    email: parsed?.email || '',
+    phone: parsed?.phone || '',
+    linkedinUrl,
+  };
+}
+
+function prepareApplicationKit(jobId) {
+  const store = applicationKitStore();
+  const job = applicationJob(jobId);
+  if (!store || !job) return;
+  store.upsert(job);
+  selectedApplicationKitId = jobIdentity(job);
+  renderApplicationWorkspace();
+  navigate('applications');
+}
+
+function renderApplicationWorkspace() {
+  if (!applicationKitPanel || !applicationKitList || !applicationKitEmpty || !applicationKitMeta) return;
+  const store = applicationKitStore();
+  if (!store) return;
+  const records = store.all();
+  const selected = selectedApplicationKitId ? store.get(selectedApplicationKitId) : null;
+  applicationKitMeta.textContent = `${records.length} saved ${records.length === 1 ? 'kit' : 'kits'} · private on this device`;
+  applicationKitEmpty.hidden = Boolean(selected);
+  applicationKitPanel.hidden = !selected;
+
+  if (selected) {
+    const job = selected.job;
+    const directUrl = safeUrl(job.officialApplyUrl || (job.officialVerified ? job.applyUrl : ''));
+    const roleUrl = safeUrl(job.officialDetailUrl || job.applyUrl);
+    const contact = { ...profileContact(), ...(selected.contact || {}) };
+    const reviewedEvidence = isCvEvidenceReviewed(selected.id);
+    const reviewedCover = isDraftReviewed(selected.id);
+    const outreachReviewed = selected.outreachDraftReviewed;
+    const domain = employerDomain(job);
+    const authUser = window.FirstLookAuth?.currentUser() || null;
+    const lookupDisabled = !API_BASE || !domain;
+    const lookupTitle = !API_BASE
+      ? 'The monitor backend is not connected.'
+      : !domain
+        ? 'No employer domain is known for this role.'
+        : authUser
+          ? 'Look up a verified email for this contact via Hunter (server-side).'
+          : 'Sign in first — the lookup runs server-side.';
+    const lookupLabel = authUser ? 'Find email via Hunter' : 'Sign in to find email';
+    const outreachTerms = (() => {
+      const engine = cvEngine();
+      const profile = profileText();
+      if (!engine || !profile) return [];
+      try { return (engine.matchJob(applicationJob(selectedApplicationKitId) || job, profile).evidence || []).slice(0, 3).map((item) => item.term); } catch (_error) { return []; }
+    })();
+    const hasProfile = Boolean(cvEngine() && profileText());
+    const outreachHint = outreachTerms.length
+      ? `Evidence anchors for this role: ${outreachTerms.map((term) => `<strong>${escapeHtml(term)}</strong>`).join(', ')}.`
+      : hasProfile
+        ? 'No role text is available for this kit yet, so no evidence anchors could be derived.'
+        : 'Add and save a master profile to build the draft from your evidence.';
+    const evidenceBadge = contact.emailSource
+      ? (contact.emailVerified
+        ? '<span class="badge badge-match">Email verified valid</span>'
+        : `<span class="badge">Email ${contact.emailConfidence !== null ? `${contact.emailConfidence}% confidence` : 'found'}</span>`)
+      : '';
+    const evidenceSource = contact.emailSource && /^https:\/\//.test(contact.emailSource)
+      ? `<a class="text-button" href="${escapeAttribute(contact.emailSource)}" target="_blank" rel="noreferrer">Evidence source</a>`
+      : '';
+    const verificationBadge = contact.verificationStatus && contact.verifiedEmail === contact.email
+      ? `<span class="badge verdict-${verdictTone(contact.verificationStatus)}">${escapeHtml(contact.verificationLabel || contact.verificationStatus.replace(/_/g, ' '))}</span>`
+      : '';
+    const verificationStale = contact.verifiedEmail && contact.verificationStatus && contact.verifiedEmail !== contact.email
+      ? '<span class="section-meta">Email changed — verify again.</span>'
+      : '';
+    const provenanceBadge = contact.lookupAt
+      ? '<span class="badge">Hunter lookup</span>'
+      : (contact.sourceUrl ? '<span class="badge badge-match">User-sourced · evidence attached</span>' : '');
+    const canVerify = Boolean(API_BASE) && Boolean(contact.email);
+    const suggestDisabled = !domain || String(contact.name || '').trim().split(/\s+/).length < 2;
+    const suggestTitle = !domain ? 'No employer domain is known for this role.' : 'Learned only from your own delivered sends — enter a full contact name first.';
+    const resultRow = selected.outreachSentAt
+      ? `<div class="outreach-result-row">
+          <span class="section-meta">How did it go?</span>
+          <button class="text-button outreach-result${selected.outreachResult === 'delivered' ? ' is-active' : ''}" type="button" data-result="delivered">Delivered</button>
+          <button class="text-button outreach-result${selected.outreachResult === 'bounced' ? ' is-active' : ''}" type="button" data-result="bounced">Bounced</button>
+          <button class="text-button outreach-result${selected.outreachResult === 'replied' ? ' is-active' : ''}" type="button" data-result="replied">Replied</button>
+        </div>`
+      : '';
+    const followUpRows = selected.followUps.map((followUp, index) => `
+      <div class="follow-up-row ${followUp.sent ? 'is-sent' : (followUp.at && followUp.at <= new Date().toISOString().slice(0, 10)) ? 'is-due' : ''}">
+        <span class="follow-up-date">${escapeHtml(followUp.at ? formatDate(followUp.at) : 'No date')}</span>
+        <span class="follow-up-note">${escapeHtml(followUp.note || '')}</span>
+        <label class="follow-up-sent-label"><input class="follow-up-sent" type="checkbox" data-followup-index="${index}"${followUp.sent ? ' checked' : ''} /> Sent</label>
+        <button class="text-button follow-up-remove" type="button" data-followup-index="${index}">Remove</button>
+      </div>`).join('');
+    applicationKitPanel.innerHTML = `
+      <div class="application-kit-heading">
+        <div><p class="eyebrow">Selected role</p><h3>${escapeHtml(job.title)}</h3><p>${escapeHtml(job.company)} · ${escapeHtml(job.location || 'India')}</p></div>
+        <span class="badge ${job.officialVerified ? 'badge-match' : 'badge-warning'}">${job.officialVerified ? 'Official source' : 'Portal lead'}</span>
+      </div>
+      <div class="application-kit-grid">
+        <label class="field-label">Stage<select id="application-kit-status">${applicationKitStore().statuses.map((status) => `<option value="${status}"${selected.status === status ? ' selected' : ''}>${escapeHtml(status.replace('_', ' '))}</option>`).join('')}</select></label>
+        <div class="application-kit-checks"><span class="field-label">Review gates</span><span class="kit-check ${reviewedEvidence ? 'is-complete' : ''}">${reviewedEvidence ? '✓' : '○'} CV evidence</span><span class="kit-check ${reviewedCover ? 'is-complete' : ''}">${reviewedCover ? '✓' : '○'} Cover letter</span></div>
+      </div>
+      <label class="field-label" for="application-kit-answers">Saved application answers <span class="field-help">Drafts only; review each employer question manually.</span></label>
+      <textarea id="application-kit-answers" class="application-kit-textarea" rows="5" placeholder="Question: Why this role?\nAnswer: ...">${escapeHtml(selected.answers)}</textarea>
+      <label class="field-label" for="application-kit-notes">Notes <span class="field-help">Keep decisions, missing documents and follow-up context here.</span></label>
+      <textarea id="application-kit-notes" class="application-kit-textarea" rows="4" placeholder="Next action...">${escapeHtml(selected.notes)}</textarea>
+      <div class="application-contact-block">
+        <div class="application-kit-subheading"><h4>Recruiter / referral evidence</h4><span class="section-meta">Lookup stays opt-in and server-side; you send the email.</span></div>
+        <div class="application-kit-contact-grid">
+          <label class="field-label">Name<input id="application-contact-name" value="${escapeAttribute(contact.name)}" maxlength="160" /></label>
+          <label class="field-label">Role<input id="application-contact-title" value="${escapeAttribute(contact.title)}" maxlength="180" placeholder="Recruiter, alumnus..." /></label>
+          <label class="field-label">Type<select id="application-contact-type">${['recruiter', 'referral', 'alumni', 'other'].map((type) => `<option value="${type}"${contact.type === type ? ' selected' : ''}>${type}</option>`).join('')}</select></label>
+          <label class="field-label">LinkedIn URL<input id="application-contact-linkedin" value="${escapeAttribute(contact.linkedinUrl)}" maxlength="500" placeholder="Paste a profile URL" /></label>
+          <label class="field-label">Professional email<input id="application-contact-email" value="${escapeAttribute(contact.email)}" maxlength="240" type="email" /></label>
+          <label class="field-label">Evidence URL<input id="application-contact-source" value="${escapeAttribute(contact.sourceUrl)}" maxlength="500" placeholder="Where this was found" /></label>
+        </div>
+        <div class="contact-lookup-line">
+          <span class="section-meta">Employer domain: <strong>${escapeHtml(domain || 'unknown')}</strong></span>
+          <button class="text-button" type="button" id="application-contact-lookup"${lookupDisabled ? ' disabled' : ''} title="${escapeAttribute(lookupTitle)}">${escapeHtml(lookupLabel)}</button>
+          <button class="text-button" type="button" id="application-contact-verify"${canVerify ? '' : ' disabled'} title="${canVerify ? 'Free check: format, role account, disposable domain, and whether the domain accepts mail.' : 'Enter an email first.'}">Verify email</button>
+          <button class="text-button" type="button" id="application-contact-suggest"${suggestDisabled ? ' disabled' : ''} title="${escapeAttribute(suggestTitle)}">Suggest from your sends</button>
+          ${verificationBadge}${verificationStale}
+          ${provenanceBadge}
+          ${evidenceBadge}${evidenceSource}
+          ${contact.lookupAt ? `<span class="section-meta">Looked up ${escapeHtml(formatAge(contact.lookupAt))}</span>` : ''}
+          ${contact.emailSource ? `<button class="text-button" type="button" id="application-contact-clear-lookup">Clear evidence</button>` : ''}
+        </div>
+        <p class="privacy-note">Do not infer an address. Save only a public or user-provided contact and retain its source.</p>
+      </div>
+      <div class="application-outreach-block">
+        <div class="application-kit-subheading"><h4>Cold email draft</h4><span class="section-meta">Built from the role and your matched evidence. First Look never sends email.</span></div>
+        <p class="outreach-evidence">${outreachHint}</p>
+        <textarea id="application-outreach-draft" class="application-kit-textarea" rows="8" placeholder="Hi [Name],&#10;&#10;I applied for the [role] at [company] and wanted to introduce myself...">${escapeHtml(selected.outreachDraft)}</textarea>
+        <label class="review-gate"><input class="outreach-review" type="checkbox"${outreachReviewed ? ' checked' : ''} /> I reviewed every line of this draft against my profile before sending.</label>
+        <div class="cv-controls">
+          <button class="button button-dark" type="button" id="application-outreach-build">Build draft</button>
+          <button class="text-button" type="button" id="application-outreach-copy"${outreachReviewed && selected.outreachDraft ? '' : ' disabled'} title="${outreachReviewed && selected.outreachDraft ? '' : 'Tick the review checkbox first.'}">Copy draft</button>
+          ${outreachReviewed && contact.email && selected.outreachDraft ? '<button class="button" type="button" id="application-outreach-mailto">Open in email app</button>' : ''}
+          <button class="text-button" type="button" id="application-outreach-sent">${selected.outreachSentAt ? `Sent ${escapeHtml(formatAge(selected.outreachSentAt))} — undo` : 'Mark as sent'}</button>
+        </div>
+        ${resultRow}
+        <p class="privacy-note">Keep the first message to 4-5 lines and ask for a brief chat, not a job. One or two polite follow-ups, 5-7 days apart, is the research-backed ceiling. Marking a send as delivered or replied teaches the app the employer's email pattern — your own private corpus.</p>
+      </div>
+      <div class="application-followups">
+        <div class="application-kit-subheading"><h4>Follow-up tracker</h4><span class="section-meta">Add after you send the first message.</span></div>
+        <div class="follow-up-list" id="application-followup-list">${followUpRows || '<p class="cv-quality-empty">No follow-ups yet.</p>'}</div>
+        <div class="follow-up-add">
+          <input id="application-followup-at" type="date" aria-label="Follow-up date" />
+          <input id="application-followup-note" maxlength="1000" placeholder="Follow-up note" aria-label="Follow-up note" />
+          <button class="text-button" type="button" id="application-followup-draft" title="Fill the note with a short draft">Draft note</button>
+          <button class="text-button" type="button" id="application-followup-add">Add follow-up</button>
+        </div>
+      </div>
+      <div class="application-kit-actions">
+        ${directUrl ? `<a class="button button-accent" href="${directUrl}" target="_blank" rel="noreferrer">Open application</a>` : ''}
+        ${roleUrl && roleUrl !== directUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}
+        <button class="button button-dark" type="button" id="application-kit-save">Save kit</button>
+        <button class="text-button" type="button" id="application-kit-export">Export for First Look Copilot</button>
+      </div>`;
+  }
+
+  applicationKitList.innerHTML = records.map((record) => {
+    const followUpLabel = followUpStatus(record);
+    return `
+    <article class="application-kit-row">
+      <div><h4>${escapeHtml(record.job.title)}</h4><p>${escapeHtml(record.job.company)} · ${escapeHtml(record.status.replace('_', ' '))}${followUpLabel ? ` · <span class="badge badge-warning">${escapeHtml(followUpLabel)}</span>` : ''}${record.outreachResult ? ` · <span class="badge">${escapeHtml(record.outreachResult)}</span>` : ''}</p><small>Updated ${escapeHtml(formatAge(record.updatedAt))}</small></div>
+      <button class="text-button application-kit-select" type="button" data-application-job-id="${escapeAttribute(record.id)}">Open kit</button>
+    </article>`;
+  }).join('');
+}
+
+function employerDomain(job) {
+  const catalog = Array.isArray(window.COMPANY_CATALOG) ? window.COMPANY_CATALOG : [];
+  const entry = catalog.find((company) => sameCompany(company.name, job?.company || ''));
+  if (entry?.url) {
+    try { return new URL(entry.url).hostname.replace(/^www\./i, '').toLowerCase(); } catch (_error) { /* fall through */ }
+  }
+  const candidate = job?.officialDetailUrl || job?.officialApplyUrl || job?.applyUrl;
+  try {
+    const hostname = new URL(candidate).hostname.replace(/^www\./i, '').toLowerCase();
+    if (!/\.(?:linkedin|naukri|indeed|iimjobs)\.com$/.test(hostname)) return hostname;
+  } catch (_error) { /* none */ }
+  return '';
+}
+
+function firstWord(value) {
+  return String(value || '').trim().split(/\s+/)[0] || '';
+}
+
+function headlineFromProfile(profile) {
+  return String(profile || '').split('\n').map((item) => item.trim()).find(Boolean)?.slice(0, 100) || '';
+}
+
+function formatDate(value) {
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return String(value || 'No date');
+  return parsed.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function followUpStatus(record) {
+  const pending = (record?.followUps || []).filter((item) => !item.sent && item.at).sort((left, right) => left.at.localeCompare(right.at))[0];
+  if (!pending) return '';
+  const today = new Date().toISOString().slice(0, 10);
+  if (pending.at <= today) return 'Follow-up due';
+  const days = Math.ceil((Date.parse(`${pending.at}T00:00:00`) - Date.parse(`${today}T00:00:00`)) / 86400000);
+  if (days <= 3) return `Follow-up in ${days}d`;
+  return `Follow-up ${pending.at.slice(5).replace('-', '/')}`;
+}
+
+function buildOutreachDraft() {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !job) return;
+  const engine = cvEngine();
+  const profile = profileText();
+  if (!engine || !profile) {
+    showToast('Save a master profile first — the draft is built from your evidence.');
+    return;
+  }
+  const record = store.get(selectedApplicationKitId);
+  const contact = { ...profileContact(), ...(record?.contact || {}) };
+  const me = profileContact();
+  const result = engine.matchJob(job, profile);
+  const evidence = (result.evidence || []).slice(0, 3).map((item) => item.term);
+  const firstName = firstWord(contact.name) || 'there';
+  const myName = contact.name || me.name || 'Your name';
+  const parsed = engine.scoreResume(profile).parsed || {};
+  const headline = headlineFromProfile(profile);
+  const lines = [
+    `Hi ${firstName},`,
+    '',
+    evidence.length
+      ? `I just applied for the ${job.title} opening at ${job.company}${job.location ? ` (${job.location})` : ''} and wanted to introduce myself — my background lines up directly, with hands-on evidence in ${evidence.join(', ')}.`
+      : `I just applied for the ${job.title} opening at ${job.company}${job.location ? ` (${job.location})` : ''} and wanted to introduce myself.`,
+    '',
+    `I'm ${myName}${headline ? ` — ${headline}` : ''}. Would a 10-minute call this week be convenient? I'd love a couple of questions about the team and the role.`,
+    '',
+    'Thank you,',
+    myName,
+  ];
+  if (me.email || parsed.email) lines.push(me.email || parsed.email);
+  if (me.phone || parsed.phone) lines.push(me.phone || parsed.phone);
+  store.upsert(job, { outreachDraft: lines.join('\n') });
+  showToast('Draft built from your evidence — the email client subject is filled automatically.');
+  renderApplicationWorkspace();
+}
+
+function openOutreachMailto() {
+  const store = applicationKitStore();
+  const record = selectedApplicationKitId ? store?.get(selectedApplicationKitId) : null;
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !record?.outreachDraftReviewed || !job) return;
+  const textarea = document.querySelector('#application-outreach-draft');
+  const draft = (textarea ? textarea.value : record.outreachDraft) || '';
+  const email = document.querySelector('#application-contact-email')?.value || record.contact.email || '';
+  if (!email || !draft.trim()) { showToast('Add the contact email and a draft first.'); return; }
+  const body = draft.split('\n').filter((line) => !/^subject\s*:/i.test(line.trim())).join('\n').trim();
+  window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(`Application: ${job.title} at ${job.company}`)}&body=${encodeURIComponent(body)}`;
+}
+
+async function copyOutreachDraft() {
+  const record = selectedApplicationKitId ? applicationKitStore()?.get(selectedApplicationKitId) : null;
+  if (!record?.outreachDraftReviewed) return;
+  const textarea = document.querySelector('#application-outreach-draft');
+  const draft = (textarea ? textarea.value : record.outreachDraft) || '';
+  if (!draft.trim()) return;
+  try {
+    await navigator.clipboard.writeText(draft);
+    showToast('Outreach draft copied.', 'ok');
+  } catch (_error) {
+    const textarea = document.querySelector('#application-outreach-draft');
+    if (textarea) textarea.select();
+    showToast('Copy was blocked. The draft is selected for manual copy.');
+  }
+}
+
+function setOutreachReviewed(checked) {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !job) return;
+  store.upsert(job, { outreachDraftReviewed: checked });
+  renderApplicationWorkspace();
+  showToast(checked ? 'Outreach review recorded on this device.' : 'Outreach review gate cleared.');
+}
+
+function markOutreachSent() {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !job) return;
+  const record = store.get(selectedApplicationKitId);
+  store.upsert(job, { outreachSentAt: record.outreachSentAt ? '' : new Date().toISOString() });
+  renderApplicationWorkspace();
+  showToast(record.outreachSentAt ? 'Outreach marked as unsent.' : 'Outreach marked as sent — follow-ups start here.');
+}
+
+function followUpDraftText() {
+  const record = selectedApplicationKitId ? applicationKitStore()?.get(selectedApplicationKitId) : null;
+  const job = record?.job || {};
+  const contact = { ...profileContact(), ...(record?.contact || {}) };
+  const firstName = firstWord(contact.name) || 'there';
+  return `Hi ${firstName}, just bumping this — I applied for ${job.title || 'the role'} at ${job.company || 'your team'} last week and remain very interested. Happy to chat whenever a few minutes open up.`;
+}
+
+function insertFollowUpDraft() {
+  const note = document.querySelector('#application-followup-note');
+  if (!note) return;
+  note.value = followUpDraftText();
+  note.focus();
+}
+
+function addFollowUp() {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !job) return;
+  const record = store.get(selectedApplicationKitId);
+  const at = document.querySelector('#application-followup-at')?.value || '';
+  const note = document.querySelector('#application-followup-note')?.value || '';
+  if (!at && !note) { showToast('Set a date or a note for the follow-up.'); return; }
+  const followUps = [...(record?.followUps || [])];
+  if (followUps.length >= 2) { showToast('Keep it to 2 follow-ups per contact — more reads as spam.'); return; }
+  followUps.push({ id: `follow-${Date.now()}`, at, note, sent: false });
+  store.upsert(job, { followUps });
+  renderApplicationWorkspace();
+  showToast('Follow-up added to this kit.');
+}
+
+function patchFollowUps(mutator) {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !job) return;
+  const record = store.get(selectedApplicationKitId);
+  store.upsert(job, { followUps: mutator([...(record?.followUps || [])]) });
+  renderApplicationWorkspace();
+}
+
+function toggleFollowUpSent(index, sent) {
+  patchFollowUps((followUps) => followUps.map((item, itemIndex) => (itemIndex === index ? { ...item, sent } : item)));
+}
+
+function removeFollowUp(index) {
+  patchFollowUps((followUps) => followUps.filter((_item, itemIndex) => itemIndex !== index));
+  showToast('Follow-up removed.');
+}
+
+async function findRecruiterEmail() {
+  const auth = window.FirstLookAuth;
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!auth || !store || !job) return;
+  if (!auth.currentUser()) {
+    renderAuthForm();
+    document.querySelector('#application-auth-bar')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showToast('Sign in first — recruiter lookup runs server-side.');
+    return;
+  }
+  if (!API_BASE) { showToast('The monitor backend is not connected.'); return; }
+  const domain = employerDomain(job);
+  if (!domain) { showToast('No employer domain is known for this role.'); return; }
+  const record = store.get(selectedApplicationKitId);
+  const contact = { ...profileContact(), ...(record?.contact || {}) };
+  const nameParts = String(contact.name || '').trim().split(/\s+/);
+  if (nameParts.length < 2) { showToast('Enter a full contact name (first and last) first.'); return; }
+  const firstName = nameParts[0].slice(0, 120);
+  const lastName = nameParts.slice(1).join(' ').slice(0, 120);
+  const button = document.querySelector('#application-contact-lookup');
+  if (button) { button.disabled = true; button.textContent = 'Looking up…'; }
+  try {
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/contact/lookup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${window.FirstLookAuth.sessionToken()}` },
+      body: JSON.stringify({ firstName, lastName, domain }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error || `Lookup failed (${response.status})`);
+    if (payload.error === 'no_result') {
+      renderApplicationWorkspace();
+      showToast(payload.note || 'Hunter found no email for this person.');
+      return;
+    }
+    store.upsert(job, {
+      contact: {
+        ...contact,
+        email: payload.email,
+        emailSource: payload.source,
+        emailConfidence: payload.confidence,
+        emailVerified: payload.verification === 'valid',
+        lookupAt: payload.observedAt,
+      },
+    });
+    renderApplicationWorkspace();
+    showToast(`Found ${payload.email}. Check the confidence and evidence source before outreach.`);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Lookup failed.');
+    renderApplicationWorkspace();
+  }
+}
+
+function verdictTone(status) {
+  return { accepts_mail: 'ok', role_account: 'warn', disposable: 'bad', domain_no_mx: 'bad', invalid_format: 'bad' }[status] || 'muted';
+}
+
+async function verifyContactEmail() {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !job) return;
+  if (!API_BASE) { showToast('The monitor backend is not connected.'); return; }
+  const record = store.get(selectedApplicationKitId);
+  const contact = { ...profileContact(), ...(record?.contact || {}) };
+  const email = (document.querySelector('#application-contact-email')?.value || contact.email || '').trim();
+  if (!email) { showToast('Enter an email to verify first.'); return; }
+  const button = document.querySelector('#application-contact-verify');
+  if (button) { button.disabled = true; button.textContent = 'Verifying…'; }
+  try {
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/email/verify?email=${encodeURIComponent(email)}`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error || `Verification failed (${response.status})`);
+    store.upsert(job, {
+      contact: {
+        ...contact,
+        email,
+        verifiedEmail: email,
+        verificationStatus: payload.status,
+        verificationLabel: payload.label,
+        verificationProvider: payload.provider || '',
+        verificationCheckedAt: payload.checkedAt,
+      },
+    });
+    renderApplicationWorkspace();
+    showToast(payload.label || 'Verification complete.');
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Verification failed.');
+    renderApplicationWorkspace();
+  }
+}
+
+function suggestContactEmail() {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !job || !window.FirstLookCorpus) return;
+  const record = store.get(selectedApplicationKitId);
+  const contact = { ...profileContact(), ...(record?.contact || {}) };
+  const domain = employerDomain(job);
+  const nameParts = String(contact.name || '').trim().split(/\s+/);
+  if (!domain || nameParts.length < 2) { showToast('Enter a full contact name and use a role with a known employer domain.'); return; }
+  const suggestion = window.FirstLookCorpus.suggest(domain, nameParts[0], nameParts[nameParts.length - 1]);
+  if (!suggestion) {
+    showToast('No learned pattern for this domain yet — mark sent emails as delivered to build one.');
+    return;
+  }
+  const emailInput = document.querySelector('#application-contact-email');
+  if (emailInput) emailInput.value = suggestion.email;
+  showToast(`Pattern suggestion (${suggestion.pattern} from ${suggestion.sampleCount} confirmed send${suggestion.sampleCount === 1 ? '' : 's'}) — unconfirmed; verify before sending.`);
+}
+
+function isOwnProfileEmail(email) {
+  const own = profileContact().email;
+  return Boolean(own && email && String(email).trim().toLowerCase() === own.trim().toLowerCase());
+}
+
+function recordOutreachResult(result) {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  const record = store?.get(selectedApplicationKitId);
+  if (!store || !job || !record) return;
+  const contact = { ...profileContact(), ...(record.contact || {}) };
+  store.upsert(job, { outreachResult: result });
+  const isOwnEmail = isOwnProfileEmail(contact.email);
+  if (contact.email && !isOwnEmail) {
+    window.FirstLookCorpus?.recordResult({ name: contact.name || '', email: contact.email, result });
+  }
+  renderApplicationWorkspace();
+  showToast(isOwnEmail
+    ? 'Recorded. (This is your own email, so it was not added to the pattern corpus.)'
+    : result === 'delivered'
+      ? 'Recorded — this confirmed send teaches the app the domain pattern.'
+      : result === 'replied'
+        ? 'Recorded — a reply is the strongest signal; it feeds the corpus too.'
+        : 'Recorded as bounced — kept in history but never learned from.');
+}
+
+function clearLookupEvidence() {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !job) return;
+  const record = store.get(selectedApplicationKitId);
+  const contact = { ...profileContact(), ...(record?.contact || {}) };
+  store.upsert(job, {
+    contact: { ...contact, email: '', emailSource: '', emailConfidence: null, emailVerified: false, lookupAt: '' },
+  });
+  renderApplicationWorkspace();
+  showToast('Stored lookup evidence cleared.');
+}
+
+let pendingAuthEmail = '';
+
+function renderAuthBar() {
+  const bar = document.querySelector('#application-auth-bar');
+  if (!bar) return;
+  const auth = window.FirstLookAuth;
+  if (!auth) { bar.hidden = true; return; }
+  bar.hidden = false;
+  if (!auth.isConfigured()) {
+    bar.innerHTML = '<span class="auth-status">Recruiter lookup is off: add <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> in index.html.</span>';
+    return;
+  }
+  const user = auth.currentUser();
+  if (user?.email) {
+    bar.innerHTML = `<span class="auth-status is-signed-in">Recruiter lookup unlocked · signed in as <strong>${escapeHtml(user.email)}</strong></span><button class="text-button" type="button" id="auth-sign-out">Sign out</button>`;
+    return;
+  }
+  bar.innerHTML = `<span class="auth-status">Recruiter lookup runs server-side behind your own sign-in. Sign in to find a named contact's email for a saved role.</span><button class="text-button" type="button" id="auth-show-form">Sign in with email</button>`;
+}
+
+function renderAuthForm() {
+  const bar = document.querySelector('#application-auth-bar');
+  if (!bar) return;
+  bar.innerHTML = `<form class="auth-form" id="auth-form">
+    <label class="field-label" for="auth-email">Email<input id="auth-email" type="email" required maxlength="200" placeholder="you@example.com" /></label>
+    <div class="cv-controls"><button class="button button-dark" type="submit">Send sign-in link</button><button class="text-button" type="button" id="auth-cancel">Cancel</button></div>
+  </form>`;
+  document.querySelector('#auth-email')?.focus();
+}
+
+function renderAuthCodeForm(email) {
+  pendingAuthEmail = email;
+  const bar = document.querySelector('#application-auth-bar');
+  if (!bar) return;
+  bar.innerHTML = `<form class="auth-form" id="auth-code-form">
+    <span class="auth-status">Check <strong>${escapeHtml(email)}</strong>. Open the link in this browser, or paste the 6-digit code from the email.</span>
+    <label class="field-label" for="auth-code">Code<input id="auth-code" required maxlength="8" inputmode="numeric" placeholder="123456" /></label>
+    <div class="cv-controls"><button class="button button-dark" type="submit">Verify</button><button class="text-button" type="button" id="auth-cancel">Cancel</button></div>
+  </form>`;
+  document.querySelector('#auth-code')?.focus();
+}
+
+async function sendAuthLink() {
+  const email = document.querySelector('#auth-email')?.value || '';
+  const button = document.querySelector('#auth-form button[type="submit"]');
+  if (button) { button.disabled = true; button.textContent = 'Sending…'; }
+  try {
+    await window.FirstLookAuth.sendMagicLink(email);
+    renderAuthCodeForm(email);
+    showToast('Sign-in link sent. Check your inbox.');
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Could not send the sign-in link.');
+    renderAuthBar();
+  }
+}
+
+async function verifyAuthCode() {
+  const code = document.querySelector('#auth-code')?.value || '';
+  if (!pendingAuthEmail || !code) { showToast('Enter the code from the email.'); return; }
+  try {
+    const user = await window.FirstLookAuth.verifyOtpCode(pendingAuthEmail, code);
+    pendingAuthEmail = '';
+    renderAuthBar();
+    renderApplicationWorkspace();
+    showToast(`Signed in as ${user?.email || ''}. Recruiter lookup is unlocked.`);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'That code could not be verified.');
+  }
+}
+
+async function signOutFlow() {
+  await window.FirstLookAuth.signOut();
+  renderAuthBar();
+  renderApplicationWorkspace();
+  showToast('Signed out. Recruiter lookup is locked again.');
+}
+
+function renderHiringSignals() {
+  const list = document.querySelector('#hiring-signal-list');
+  const meta = document.querySelector('#hiring-signal-meta');
+  if (!list) return;
+  const signals = window.FirstLookHiringSignals?.all() || [];
+  if (meta) meta.textContent = `${signals.length} saved ${signals.length === 1 ? 'signal' : 'signals'} · unverified`;
+  if (!signals.length) {
+    list.innerHTML = '<p class="cv-quality-empty">No signals saved yet. Capture a “we are hiring” post you want to review later — it is never treated as a verified role.</p>';
+    return;
+  }
+  list.innerHTML = signals.map((signal) => `
+    <article class="hiring-signal-row">
+      <div>
+        <h4>${escapeHtml(signal.company)}${signal.title ? ` — ${escapeHtml(signal.title)}` : ''}</h4>
+        <p><span class="badge badge-warning">Unverified</span> ${escapeHtml(signal.sourceType)} · ${escapeHtml(formatAge(signal.capturedAt))}</p>
+        ${signal.note ? `<small>${escapeHtml(signal.note)}</small>` : ''}
+        ${signal.contactName ? `<small>Contact in post: ${escapeHtml(signal.contactName)}${signal.contactEmail ? ` (${escapeHtml(signal.contactEmail)})` : ''}</small>` : ''}
+      </div>
+      <div class="hiring-signal-actions">
+        ${signal.postUrl ? `<a class="text-button" href="${escapeAttribute(signal.postUrl)}" target="_blank" rel="noreferrer">Open post</a>` : ''}
+        <button class="text-button hiring-signal-kit" type="button" data-signal-id="${escapeAttribute(signal.id)}">Create kit from signal</button>
+        <button class="text-button hiring-signal-remove" type="button" data-signal-id="${escapeAttribute(signal.id)}">Remove</button>
+      </div>
+    </article>`).join('');
+}
+
+function addHiringSignal() {
+  const store = window.FirstLookHiringSignals;
+  if (!store) return;
+  const sourceType = document.querySelector('#hiring-signal-source')?.value || 'other';
+  const postUrl = document.querySelector('#hiring-signal-url')?.value || '';
+  const company = document.querySelector('#hiring-signal-company')?.value || '';
+  const title = document.querySelector('#hiring-signal-title')?.value || '';
+  const contact = document.querySelector('#hiring-signal-contact')?.value || '';
+  const note = document.querySelector('#hiring-signal-note')?.value || '';
+  if (!/^https:\/\//.test(postUrl)) { showToast('The post URL must start with https://'); return; }
+  if (!company) { showToast('Add the company named in the post.'); return; }
+  const contactName = contact.includes('@') ? '' : contact.slice(0, 160);
+  const contactEmail = contact.includes('@') ? contact.trim().slice(0, 240) : '';
+  store.add({ sourceType, postUrl, company, title, contactName, contactEmail, note });
+  document.querySelector('#hiring-signal-form')?.reset();
+  renderHiringSignals();
+  showToast('Hiring signal saved as unverified. Confirm the role on the employer site before outreach.');
+}
+
+function removeHiringSignal(id) {
+  window.FirstLookHiringSignals?.remove(id);
+  renderHiringSignals();
+  showToast('Hiring signal removed from this device.');
+}
+
+function kitFromSignal(id) {
+  const store = applicationKitStore();
+  const signal = window.FirstLookHiringSignals?.get(id);
+  if (!store || !signal) return;
+  const job = {
+    id: signal.id,
+    company: signal.company,
+    title: signal.title || 'Role not specified in post',
+    location: '',
+    description: signal.note,
+    applyUrl: signal.postUrl,
+    officialApplyUrl: '',
+    officialDetailUrl: signal.postUrl,
+    officialVerified: false,
+    verificationNote: 'Created from an unverified hiring signal; confirm the role on the employer site.',
+    matchTier: 'possible',
+    newestVerificationAt: signal.capturedAt,
+    sources: [{
+      type: 'other',
+      name: 'Hiring signal (unverified)',
+      listingUrl: signal.postUrl,
+      detailUrl: signal.postUrl,
+      applyUrl: signal.postUrl,
+      official: false,
+      verifiedAt: signal.capturedAt,
+    }],
+  };
+  store.upsert(job, {
+    contact: {
+      name: signal.contactName || '',
+      title: 'Post author',
+      type: 'recruiter',
+      linkedinUrl: '',
+      email: signal.contactEmail || '',
+      sourceUrl: signal.postUrl,
+    },
+    notes: `Created from a hiring signal (${signal.sourceType}). Verify this role on ${signal.company}'s careers page before any outreach. ${signal.note || ''}`.trim(),
+  });
+  selectedApplicationKitId = signal.id;
+  renderApplicationWorkspace();
+  navigate('applications');
+  showToast('Kit created from the signal — it stays unverified until you confirm the role.');
+}
+
+function applicationKitPatchFromPanel() {
+  const existing = selectedApplicationKitId ? (applicationKitStore()?.get(selectedApplicationKitId)?.contact || {}) : {};
+  const contact = {
+    name: document.querySelector('#application-contact-name')?.value || '',
+    title: document.querySelector('#application-contact-title')?.value || '',
+    type: document.querySelector('#application-contact-type')?.value || 'recruiter',
+    linkedinUrl: document.querySelector('#application-contact-linkedin')?.value || '',
+    email: document.querySelector('#application-contact-email')?.value || '',
+    sourceUrl: document.querySelector('#application-contact-source')?.value || '',
+    // Preserve server-side lookup evidence; it is never editable in the panel.
+    emailSource: existing.emailSource || '',
+    emailConfidence: existing.emailConfidence ?? null,
+    emailVerified: Boolean(existing.emailVerified),
+    lookupAt: existing.lookupAt || '',
+    verifiedEmail: existing.verifiedEmail || '',
+    verificationStatus: existing.verificationStatus || '',
+    verificationLabel: existing.verificationLabel || '',
+    verificationProvider: existing.verificationProvider || '',
+    verificationCheckedAt: existing.verificationCheckedAt || '',
+  };
+  return {
+    status: document.querySelector('#application-kit-status')?.value || 'shortlisted',
+    answers: document.querySelector('#application-kit-answers')?.value || '',
+    notes: document.querySelector('#application-kit-notes')?.value || '',
+    outreachDraft: document.querySelector('#application-outreach-draft')?.value || '',
+    contact,
+  };
+}
+
+function saveApplicationKitFromPanel() {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !job) return;
+  store.upsert(job, applicationKitPatchFromPanel());
+  renderApplicationWorkspace();
+  showToast('Application kit saved on this device.');
+}
+
+function exportApplicationKit() {
+  const store = applicationKitStore();
+  const job = applicationJob(selectedApplicationKitId);
+  if (!store || !job) return;
+  const record = store.upsert(job, applicationKitPatchFromPanel());
+  const engine = cvEngine();
+  const profile = profileText();
+  const coverLetter = coverLetterDrafts[record.id] || '';
+  const coverReport = engine && coverLetter ? engine.verifyCoverLetter(coverLetter, profile) : null;
+  const payload = store.exportPayload(record, {
+    profile,
+    contact: { ...profileContact(), ...record.contact },
+    coverLetter: isDraftReviewed(record.id) && (!coverReport || coverReport.ok) ? coverLetter : '',
+    evidenceReviewed: isCvEvidenceReviewed(record.id),
+    coverLetterReviewed: isDraftReviewed(record.id),
+  });
+  if (!payload) return;
+  downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), 'first-look-application-kit.json');
+  renderApplicationWorkspace();
+  showToast('Application kit exported for the First Look Copilot extension.');
 }
 
 function loadCoverLetterDrafts() {
@@ -593,7 +1341,7 @@ function renderCvMatches() {
     return `<article class="cv-result">
       <div class="cv-result-top"><div><h4>${escapeHtml(job.title)}</h4><p class="cv-result-company">${escapeHtml(job.company || '')}</p><p class="cv-result-location">${escapeHtml(job.location || 'Location not listed')}</p></div><span class="cv-score">${escapeHtml(score)}</span></div>
       <div class="cv-result-tags">${result.evidence.slice(0, 5).map(({ term }) => `<span class="badge">Supported: ${escapeHtml(term)}</span>`).join('')}${result.missing.slice(0, 5).map((term) => `<span class="badge badge-missing">Gap: ${escapeHtml(term)}</span>`).join('')}<span class="badge">Cover: ${escapeHtml(result.coverLetter.label)}</span></div>
-      <div class="cv-result-actions">${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${job.officialApplyUrl ? 'Apply direct' : 'Open role'}</a>` : ''}${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}<button class="text-button cv-brief-toggle" type="button" data-cv-job-id="${escapeAttribute(jobId)}">Show evidence brief</button><label class="review-gate"><input class="cv-evidence-review" type="checkbox" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? ' checked' : ''} /> I reviewed the evidence brief</label><button class="text-button cv-tailored-export" type="button" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? '' : ' disabled'} title="${evidenceReviewed ? '' : 'Review the evidence brief first.'}">Export tailored CV</button>${coverButton}</div>
+      <div class="cv-result-actions">${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${job.officialApplyUrl ? 'Apply direct' : 'Open role'}</a>` : ''}${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}<button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Prepare application kit</button><button class="text-button cv-brief-toggle" type="button" data-cv-job-id="${escapeAttribute(jobId)}">Show evidence brief</button><label class="review-gate"><input class="cv-evidence-review" type="checkbox" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? ' checked' : ''} /> I reviewed the evidence brief</label><button class="text-button cv-tailored-export" type="button" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? '' : ' disabled'} title="${evidenceReviewed ? '' : 'Review the evidence brief first.'}">Export tailored CV</button>${coverButton}</div>
       <div class="cv-brief" id="cv-brief-${escapeAttribute(jobId)}" hidden>${buildCvBrief(job, result)}</div>
       ${coverLetterPanel}
     </article>`;
@@ -674,7 +1422,10 @@ function renderCompanyDirectory() {
   }, {});
   const liveRoleCount = catalog.filter((company) => currentJobs.some((job) => sameCompany(job.company, company.name))).length;
   const prefix = term ? `${visible.length} of ${catalog.length}` : String(catalog.length);
-  companiesMeta.textContent = `${prefix} employers · ${liveRoleCount} with matching roles in the current snapshot`;
+  const registryMeta = window.RCV_REGISTRY_META || {};
+  const planningLabel = registryMeta.planningTargetLabel || 'RCV planned targets';
+  const normalizedLabel = registryMeta.normalizedEmployerLabel || `${catalog.length} normalized employers`;
+  companiesMeta.textContent = `${prefix} employers - ${planningLabel} - ${normalizedLabel} - ${liveRoleCount} with matching roles in the current snapshot`;
   companyDirectory.innerHTML = Object.entries(groups).map(([segment, companies]) => `
     <section class="company-group">
       <div class="company-group-heading"><h3>${escapeHtml(segment)}</h3><span>${companies.length}</span></div>
@@ -1010,6 +1761,124 @@ document.addEventListener('click', async (event) => {
   const viewTrigger = event.target.closest('[data-view]');
   if (viewTrigger) navigate(viewTrigger.dataset.view);
 
+  const applicationKitOpen = event.target.closest('.application-kit-open, .application-kit-select');
+  if (applicationKitOpen) {
+    prepareApplicationKit(applicationKitOpen.dataset.applicationJobId || '');
+    return;
+  }
+
+  if (event.target.closest('#application-kit-save')) {
+    saveApplicationKitFromPanel();
+    return;
+  }
+
+  if (event.target.closest('#application-kit-export')) {
+    exportApplicationKit();
+    return;
+  }
+
+  if (event.target.closest('#application-contact-lookup')) {
+    findRecruiterEmail();
+    return;
+  }
+
+  if (event.target.closest('#application-contact-clear-lookup')) {
+    clearLookupEvidence();
+    return;
+  }
+
+  if (event.target.closest('#application-contact-verify')) {
+    verifyContactEmail();
+    return;
+  }
+
+  if (event.target.closest('#application-contact-suggest')) {
+    suggestContactEmail();
+    return;
+  }
+
+  const outreachResultButton = event.target.closest('.outreach-result');
+  if (outreachResultButton) {
+    recordOutreachResult(outreachResultButton.dataset.result || '');
+    return;
+  }
+
+  if (event.target.closest('#application-outreach-build')) {
+    buildOutreachDraft();
+    return;
+  }
+
+  if (event.target.closest('#application-outreach-copy')) {
+    copyOutreachDraft();
+    return;
+  }
+
+  if (event.target.closest('#application-outreach-mailto')) {
+    openOutreachMailto();
+    return;
+  }
+
+  if (event.target.closest('#application-outreach-sent')) {
+    markOutreachSent();
+    return;
+  }
+
+  if (event.target.closest('#application-followup-add')) {
+    addFollowUp();
+    return;
+  }
+
+  if (event.target.closest('#application-followup-draft')) {
+    insertFollowUpDraft();
+    return;
+  }
+
+  const followUpSent = event.target.closest('.follow-up-sent');
+  if (followUpSent) {
+    toggleFollowUpSent(Number(followUpSent.dataset.followupIndex), followUpSent.checked);
+    return;
+  }
+
+  const followUpRemove = event.target.closest('.follow-up-remove');
+  if (followUpRemove) {
+    removeFollowUp(Number(followUpRemove.dataset.followupIndex));
+    return;
+  }
+
+  const outreachReview = event.target.closest('.outreach-review');
+  if (outreachReview) {
+    setOutreachReviewed(outreachReview.checked);
+    return;
+  }
+
+  if (event.target.closest('#auth-show-form')) {
+    renderAuthForm();
+    return;
+  }
+
+  if (event.target.closest('#auth-cancel')) {
+    pendingAuthEmail = '';
+    renderAuthBar();
+    return;
+  }
+
+  if (event.target.closest('#auth-sign-out')) {
+    signOutFlow();
+    return;
+  }
+
+  const signalRemove = event.target.closest('.hiring-signal-remove');
+  if (signalRemove) {
+    removeHiringSignal(signalRemove.dataset.signalId || '');
+    return;
+  }
+
+  const signalKit = event.target.closest('.hiring-signal-kit');
+  if (signalKit) {
+    kitFromSignal(signalKit.dataset.signalId || '');
+    return;
+  }
+
   const briefToggle = event.target.closest('.cv-brief-toggle');
   if (briefToggle) {
     const brief = document.querySelector(`#cv-brief-${CSS.escape(briefToggle.dataset.cvJobId || '')}`);
@@ -1024,6 +1893,7 @@ document.addEventListener('click', async (event) => {
   if (evidenceReview) {
     const jobId = evidenceReview.dataset.cvJobId || '';
     setCvEvidenceReviewed(jobId, evidenceReview.checked);
+    renderApplicationWorkspace();
     const exportButton = evidenceReview.closest('.cv-result-actions')?.querySelector('.cv-tailored-export');
     if (exportButton) {
       exportButton.disabled = !evidenceReview.checked;
@@ -1074,6 +1944,7 @@ document.addEventListener('click', async (event) => {
   const coverReview = event.target.closest('.cover-letter-review');
   if (coverReview) {
     setDraftReviewed(coverReview.dataset.coverJobId || '', coverReview.checked);
+    renderApplicationWorkspace();
     const panel = coverReview.closest('.cover-letter-panel');
     if (panel) {
       const jobId = coverReview.dataset.coverJobId || '';
@@ -1302,7 +2173,33 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && drawer?.classList.contains('is-open')) closeDrawer();
 });
 
+document.addEventListener('submit', async (event) => {
+  const authForm = event.target.closest('#auth-form');
+  if (authForm) {
+    event.preventDefault();
+    await sendAuthLink();
+    return;
+  }
+  const authCodeForm = event.target.closest('#auth-code-form');
+  if (authCodeForm) {
+    event.preventDefault();
+    await verifyAuthCode();
+    return;
+  }
+  const signalForm = event.target.closest('#hiring-signal-form');
+  if (signalForm) {
+    event.preventDefault();
+    addHiringSignal();
+  }
+});
+
 window.FirstLookUI = { renderJobs, renderCoverage, safeUrl };
+renderAuthBar();
+renderHiringSignals();
+window.FirstLookAuth?.onAuthChange(() => {
+  renderAuthBar();
+  renderApplicationWorkspace();
+});
 renderCompanyDirectory();
 renderProfileVersions();
 loadStoredProfile();

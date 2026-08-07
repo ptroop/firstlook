@@ -22,9 +22,13 @@ The source inventory is deliberately broader than the visible job feed. Determin
 
 Official observations must expose a role-specific Apply URL before they are counted as resolved. The frontend labels a missing direct Apply URL as pending and does not turn a generic employer career page into an Apply button.
 
-The other employers in the frontend directory are not yet claimed as monitored. Each needs a verified connector for its actual ATS or official search API; a directory link alone is never treated as coverage. Groww, PhonePe, Paytm and the six Workday employers above are registered candidates but remain subject to the same live inventory/detail reconciliation gate. Firecrawl is reserved for the remaining employers without a verified structured feed and is opt-in rather than unattended.
+The frontend directory contains the 60 normalized employer entries from the RCV registry table. The planning PDF describes the overall target as roughly 70 company/portal targets because some brands split into separate hiring entities or portals. Every directory entry is now assigned either a verified structured connector or the quota-free official-page fallback; a directory link alone is never treated as live coverage. Live source health still requires inventory enumeration, India/finance/0-2 filtering, detail hydration, and a role-level direct Apply URL. Firecrawl remains an opt-in fallback and is not unattended.
 
 The implementation order and completeness contract are in [`../docs/official-coverage-rollout.md`](../docs/official-coverage-rollout.md). `unsupported` is not exposed as a product state; Source health contains verified connectors only.
+
+## Contact lookup and verification
+
+The `email-verify` Edge Function is the free, keyless, in-house verifier (format, role-account, disposable-domain and MX checks via DNS-over-HTTPS, no SMTP). The `contact-lookup` Edge Function is the optional Hunter finder behind Supabase Auth (`verify_jwt = true`; see `docs/email-verification-and-corpus.md` and `docs/hunter-contact-lookup.md`). It never does Domain Search, never infers addresses from patterns, and is rate-limited per user. Set `HUNTER_API_KEY` as an Edge Function secret only if the optional finder is wanted; the frontend needs the public `SUPABASE_URL` and `SUPABASE_ANON_KEY` and an allowlisted redirect origin.
 
 ## Automatic production deployment
 

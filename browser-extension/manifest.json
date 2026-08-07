@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "First Look — review-first form fill",
-  "version": "0.1.0",
-  "description": "Fill supported public application fields from a local profile. Never submits, uploads, or handles passwords.",
+  "version": "0.2.0",
+  "description": "Import a reviewed First Look application kit and fill supported public fields. Never submits, uploads, or handles passwords.",
   "permissions": ["activeTab", "scripting", "storage"],
   "action": {
     "default_title": "First Look form fill",

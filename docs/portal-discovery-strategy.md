@@ -2,6 +2,11 @@
 
 Updated 2026-08-06.
 
+The source PDF describes the broader plan as roughly 70 company/portal
+targets, while its main registry table contains 60 normalized employer
+entries. The connector registry is larger than the fallback bucket: “31” is
+only the original custom fallback configuration count, not the catalogue size.
+
 The RCV catalogue remains exhaustive: all 60 employers are registered as source
 candidates. “Registered” means the employer is tracked in the directory and in
 the coverage queue; it does not mean that a live role feed has passed

@@ -31,9 +31,9 @@ The current website now follows the PDF's strongest boundary:
 - Matching points to exact non-empty profile lines; unmatched job terms are review points.
 - Cover letters are deterministic local drafts built only from the role title, company name and matched profile-line evidence.
 - Drafts can be edited, saved locally per role and copied for review. Nothing is uploaded, auto-submitted or silently fabricated.
-- The monitor does not claim to render an ATS-safe PDF or DOCX yet. That should be a separate, tested document-generation slice with parse and visual gates.
+- The monitor now renders an ATS-safe .docx locally (stored-entry ZIP OOXML, no library) with real text runs, escaping XML-sensitive characters and passing a round-trip parse check in the test suite.
 
-The next application-kit slices should be structured bullet IDs, role-family templates, versioned CV outputs, a separate verifier, and a human review gate. The profile model should be upgraded before introducing any model-assisted rewriting.
+The remaining application-kit slices are now implemented: structured bullet IDs (stable content-derived IDs on every profile line, cited by cover-letter evidence), role-family cover-letter templates, versioned CV outputs (named snapshots with restore/delete), a separate cover-letter verifier that proves each draft line exists in the profile, and a human review gate that must be ticked before copy or export is enabled. The profile model remains the local master; no model-assisted rewriting was introduced.
 
 ## Reference-repository decisions
 

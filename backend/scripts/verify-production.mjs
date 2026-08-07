@@ -16,7 +16,49 @@ if (process.env.REQUIRE_FRESH_COVERAGE === '1') verifyFreshCoverage(coverage.sou
 const jobs = await readJson('/jobs');
 if (!Array.isArray(jobs.jobs)) throw new Error('Production jobs response is invalid');
 
+// Sibling edge functions share the project URL, so derive their bases from
+// the configured first-look-api URL.
+const projectFunctionsBase = baseUrl.replace(/\/first-look-api$/, '');
+if (projectFunctionsBase === baseUrl) throw new Error('FIRST_LOOK_API_URL must end in /first-look-api');
+
+await verifyEmailRoute(`${projectFunctionsBase}/email-verify`);
+await verifyLookupRoute(`${projectFunctionsBase}/contact-lookup`);
+
 console.log(`Production verified: ${coverage.sources.length} sources, ${jobs.jobs.length} matching jobs`);
+
+async function verifyEmailRoute(url) {
+  const response = await retryFetch(`${url}?email=someone%40gmail.com`);
+  if (!response.ok) throw new Error(`email-verify returned HTTP ${response.status}`);
+  const payload = await response.json();
+  if (typeof payload.status !== 'string' || !payload.status) {
+    throw new Error('email-verify response is invalid');
+  }
+}
+
+async function verifyLookupRoute(url) {
+  const response = await retryFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ firstName: 'Jane', lastName: 'Doe', domain: 'example.com' }),
+  });
+  if (response.status !== 401) {
+    throw new Error(`contact-lookup must reject anonymous calls, got HTTP ${response.status}`);
+  }
+}
+
+async function retryFetch(url, init) {
+  let lastError;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      const response = await fetch(url, init);
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, attempt * 2_000));
+    }
+  }
+  throw lastError;
+}
 
 function verifyFreshCoverage(sources) {
   if (sources.length === 0) throw new Error('No verified production sources are reporting coverage');

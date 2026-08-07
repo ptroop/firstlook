@@ -1,3 +1,11 @@
+// The source PDF describes this as a roughly 70-target plan, while its main
+// registry table contains 60 normalized employer entries. Keep both numbers
+// visible so a connector bucket cannot be mistaken for the company count.
+window.RCV_REGISTRY_META = {
+  planningTargetLabel: '~70 planned targets',
+  normalizedEmployerLabel: '60 normalized employers',
+};
+
 window.COMPANY_CATALOG = [
   { segment: 'MBB & consulting', name: 'BCG', url: 'https://careers.bcg.com/' },
   { segment: 'MBB & consulting', name: 'BCG Expand', url: 'https://careers.bcg.com/global/en/teams/expand' },
