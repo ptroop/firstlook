@@ -11,9 +11,11 @@ import {
 } from './email-verify.ts';
 
 function mxResponse(hosts: string[]) {
+  // Mirrors the real Google/Cloudflare DoH shape: MX answers put the
+  // preference and host together in the `data` field.
   return async () => new Response(JSON.stringify({
     Status: 0,
-    Answer: hosts.map((exchange, index) => ({ name: 'example.com', type: 15, TTL: 300, data: `10 ${exchange}`, exchange, priority: 10, index })),
+    Answer: hosts.map((exchange, index) => ({ name: 'example.com', type: 15, TTL: 300, data: `10 ${exchange}.`, index })),
   }), { status: 200 });
 }
 
@@ -99,12 +101,15 @@ test('treats an authoritative NXDOMAIN as no-MX without consulting the fallback'
   assert.equal(calls.length, 1, 'authoritative answer should not need the fallback');
 });
 
-test('parses MX answers and detects providers', () => {
-  const hosts = parseMxAnswers({ Answer: [
-    { type: 16, exchange: 'ignored' },
-    { type: 15, exchange: 'aspmx.l.google.com.' },
+test('parses MX answers from the real DoH shape (data field) and the exchange field', () => {
+  const realShape = parseMxAnswers({ Answer: [
+    { type: 16, data: 'ignored' },
+    { type: 15, data: '5 gmail-smtp-in.l.google.com.' },
+    { type: 15, data: '10 alt1.gmail-smtp-in.l.google.com.' },
   ] });
-  assert.deepEqual(hosts, ['aspmx.l.google.com']);
+  assert.deepEqual(realShape, ['gmail-smtp-in.l.google.com', 'alt1.gmail-smtp-in.l.google.com']);
+  const exchangeShape = parseMxAnswers({ Answer: [{ type: 15, exchange: 'aspmx.l.google.com.' }] });
+  assert.deepEqual(exchangeShape, ['aspmx.l.google.com']);
   assert.equal(detectProvider(['mail.protection.outlook.com']), 'Microsoft 365');
   assert.equal(detectProvider(['mx.zoho.com']), 'Zoho');
   assert.equal(detectProvider(['mx.customhost.net']), '');

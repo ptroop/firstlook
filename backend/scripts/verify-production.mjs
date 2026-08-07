@@ -27,11 +27,13 @@ await verifyLookupRoute(`${projectFunctionsBase}/contact-lookup`);
 console.log(`Production verified: ${coverage.sources.length} sources, ${jobs.jobs.length} matching jobs`);
 
 async function verifyEmailRoute(url) {
+  // gmail.com always has MX records; this is the regression guard that keeps
+  // the DoH parser honest against the real response shape.
   const response = await retryFetch(`${url}?email=someone%40gmail.com`);
   if (!response.ok) throw new Error(`email-verify returned HTTP ${response.status}`);
   const payload = await response.json();
-  if (typeof payload.status !== 'string' || !payload.status) {
-    throw new Error('email-verify response is invalid');
+  if (payload.status !== 'accepts_mail') {
+    throw new Error(`email-verify must resolve gmail.com, got status ${payload.status}`);
   }
 }
 

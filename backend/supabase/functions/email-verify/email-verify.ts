@@ -87,8 +87,14 @@ export function looksLikeEmail(email: string): boolean {
 export function parseMxAnswers(data: unknown): string[] {
   const answers = Array.isArray((data as { Answer?: unknown })?.Answer) ? (data as { Answer: Array<Record<string, unknown>> }).Answer : [];
   return answers
-    .filter((answer) => Number(answer.type) === 15 && typeof answer.exchange === 'string')
-    .map((answer) => String(answer.exchange).replace(/\.$/, '').toLowerCase());
+    .filter((answer) => Number(answer.type) === 15)
+    .map((answer) => {
+      // Google and Cloudflare return "5 gmail-smtp-in.l.google.com." in the
+      // `data` field (preference + host); some providers expose `exchange`.
+      const raw = String(answer.exchange || answer.data || '').trim();
+      return raw.replace(/^\d+\s+/, '').replace(/\.$/, '').toLowerCase();
+    })
+    .filter(Boolean);
 }
 
 export function detectProvider(mxHosts: string[]): string {
