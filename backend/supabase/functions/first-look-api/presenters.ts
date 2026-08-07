@@ -8,6 +8,7 @@ export interface JobRow {
   title: string;
   location: string;
   description: string;
+  experience_text: string;
   first_seen_at: string;
   last_seen_at: string;
   posted_at: string | null;

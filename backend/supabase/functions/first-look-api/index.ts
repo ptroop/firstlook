@@ -88,7 +88,7 @@ function isSeniorOrNonFinanceTitle(title: string): boolean {
 }
 
 async function getJobs(headers: Record<string, string>) {
-  const select = 'id,company,official_detail_url,official_apply_url,title,location,description,first_seen_at,last_seen_at,posted_at,match_tier,classification_method,location_status,finance_status,experience_status,minimum_years,maximum_years,classified_at';
+  const select = 'id,company,official_detail_url,official_apply_url,title,location,description,experience_text,first_seen_at,last_seen_at,posted_at,match_tier,classification_method,location_status,finance_status,experience_status,minimum_years,maximum_years,classified_at';
   // Strict 0-2 feed: DB prefilter keeps confirmed zero_to_two rows plus rows the
   // classifier stored as ambiguous ("at least 1", "2+", blank wording) so the
   // in-memory re-parse below can promote the qualifying ones, then every row is
@@ -101,9 +101,11 @@ async function getJobs(headers: Record<string, string>) {
       && classifyFinance({ title: row.title, jobCategory: '', description: row.description }).status !== 'unrelated')
     // Re-parse every row once and serve the confirmed band, so ambiguous rows
     // whose wording qualifies ("at least 1", "2+") surface with accurate
-    // experience evidence while stale/senior wording cannot reach the UI.
+    // experience evidence while stale/senior wording cannot reach the UI. The
+    // structured experience_text (extracted by the connector at scan time) is
+    // included because some ATS feeds keep the experience band only there.
     .map((row) => {
-      const parsed = parseExperience(`${row.title}\n${row.description}`);
+      const parsed = parseExperience(`${row.title}\n${row.experience_text || ''}\n${row.description}`);
       if (!isStrictZeroToTwoExperience(parsed)) return null;
       // Guard stored year columns too, in case classification lags the parser.
       if (row.minimum_years !== null && (row.minimum_years < 0 || row.minimum_years > 2)) return null;
