@@ -24,6 +24,7 @@ import {
   MICROSOFT_CONFIG, HSBC_CONFIG,
   PIRAMAL_CONFIG, PINE_LABS_CONFIG, ICRA_CONFIG, RCV_FIRECRAWL_WAVES, createFirecrawlConnector
 } from './firecrawl.ts';
+import { createOfficialPageConnector } from './official-page.ts';
 
 
 const UNSUPPORTED_COMPANIES: string[] = [];
@@ -114,6 +115,10 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     ...RCV_FIRECRAWL_WAVES.flatMap((wave, waveIndex) => wave.flatMap(config => [
       createFirecrawlConnector(config, FIRECRAWL_API_KEY, 'watch', fetch, `rcv-firecrawl-wave-${waveIndex + 1}-watch`),
       createFirecrawlConnector(config, FIRECRAWL_API_KEY, 'reconcile', fetch, `rcv-firecrawl-wave-${waveIndex + 1}-reconcile`),
+    ])),
+    ...RCV_FIRECRAWL_WAVES.flatMap((wave, waveIndex) => wave.flatMap(config => [
+      createOfficialPageConnector(config, fetch, 'watch', `rcv-official-page-wave-${waveIndex + 1}-watch`),
+      createOfficialPageConnector(config, fetch, 'reconcile', `rcv-official-page-wave-${waveIndex + 1}-reconcile`),
     ])),
   ];
 }

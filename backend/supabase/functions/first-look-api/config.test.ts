@@ -14,6 +14,7 @@ test('bounds scan settings and disables incomplete OpenRouter configuration', ()
   });
 
   assert.equal(config.detailBatchSize, 100);
+  assert.equal(config.detailConcurrency, 4);
   assert.equal(config.requestTimeoutMs, 5_000);
   assert.equal(config.connectorConcurrency, 4);
   assert.equal(config.deferredAuditLimit, 3);

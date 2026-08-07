@@ -96,6 +96,7 @@ export async function runSourceAwareScan(
   connectors: OfficialJobConnector[],
   store: SourceAwareStore,
   request: ConnectorRunRequest & {
+    detailConcurrency?: number;
     deferredAuditLimit?: number;
     openRouter?: OpenRouterConfig | null;
     classifierFetch?: typeof fetch;
@@ -140,9 +141,21 @@ export async function runSourceAwareScan(
       const hydrationErrors: string[] = [];
       const canonicalCandidates = await store.findCanonicalCandidates(connector.company);
 
-      for (const listing of batch) {
+      const hydratedBatch = await mapWithConcurrency(batch, request.detailConcurrency ?? 1, async (listing) => {
         try {
-          const observation = await connector.hydrate(listing, request);
+          return { listing, observation: await connector.hydrate(listing, request), error: null };
+        } catch (error) {
+          return { listing, observation: null, error: boundedError(error, listing.sourceExternalId) };
+        }
+      });
+
+      for (const hydrated of hydratedBatch) {
+        const { listing, observation } = hydrated;
+        if (!observation) {
+          hydrationErrors.push(hydrated.error || `${listing.sourceExternalId}: detail hydration failed`);
+          continue;
+        }
+        try {
           const sourceId = await store.persistObservation(runId, observation, startedAt);
           await store.markInventoryHydrated(
             connector.connectorId,
@@ -299,6 +312,28 @@ export async function runSourceAwareScan(
     unsupportedCount: diagnostics.filter((item) => item.status === 'unsupported').length,
     diagnostics,
   };
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  requestedConcurrency: number,
+  worker: (value: T) => Promise<R>,
+): Promise<R[]> {
+  if (values.length === 0) return [];
+  const concurrency = Math.max(1, Math.min(8, Math.floor(requestedConcurrency) || 1));
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+
+  async function consume(): Promise<void> {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(values[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, () => consume()));
+  return results;
 }
 
 function classificationCache(store: SourceAwareStore): OpenRouterCache | undefined {

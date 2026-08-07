@@ -44,16 +44,16 @@ export const ICRA_CONFIG: FirecrawlConfig = {
   careerSearchUrl: 'https://www.icra.in/Home/Careers',
 };
 
-const RCV_FIRECRAWL_CONFIGS: FirecrawlConfig[] = [
-  { companyName: 'BCG', connectorIdPrefix: 'bcg', careerSearchUrl: 'https://careers.bcg.com/' },
+export const RCV_FIRECRAWL_CONFIGS: FirecrawlConfig[] = [
+  { companyName: 'BCG', connectorIdPrefix: 'bcg', careerSearchUrl: 'https://careers.bcg.com/global/en/locations/india/000000000000000' },
   { companyName: 'BCG Expand', connectorIdPrefix: 'bcg-expand', careerSearchUrl: 'https://careers.bcg.com/global/en/teams/expand' },
-  { companyName: 'McKinsey', connectorIdPrefix: 'mckinsey', careerSearchUrl: 'https://www.mckinsey.com/careers/search-jobs' },
+  { companyName: 'McKinsey', connectorIdPrefix: 'mckinsey', careerSearchUrl: 'https://www.mckinsey.com/careers/search-jobs/en' },
   { companyName: 'Bain / Capability Network', connectorIdPrefix: 'bain-capability-network', careerSearchUrl: 'https://www.bain.com/careers/' },
   { companyName: 'Kearney', connectorIdPrefix: 'kearney', careerSearchUrl: 'https://www.kearney.com/careers' },
   { companyName: 'Alvarez & Marsal', connectorIdPrefix: 'alvarez-marsal', careerSearchUrl: 'https://www.alvarezandmarsal.com/careers' },
   { companyName: 'ZS', connectorIdPrefix: 'zs', careerSearchUrl: 'https://www.zs.com/careers' },
   { companyName: 'BNY', connectorIdPrefix: 'bny', careerSearchUrl: 'https://www.bny.com/corporate/global/en/careers.html' },
-  { companyName: 'MSCI', connectorIdPrefix: 'msci', careerSearchUrl: 'https://www.msci.com/careers' },
+  { companyName: 'MSCI', connectorIdPrefix: 'msci', careerSearchUrl: 'https://careers.msci.com/job-search?production__mscicare2201__sort-rank%5BrefinementList%5D%5Btown_city_country%5D%5B0%5D=Mumbai%20%7C%20India' },
   { companyName: 'CRISIL', connectorIdPrefix: 'crisil', careerSearchUrl: 'https://www.crisil.com/en/home/careers.html' },
   { companyName: 'CARE Ratings', connectorIdPrefix: 'care-ratings', careerSearchUrl: 'https://www.careratings.com/careers' },
   { companyName: 'TresVista', connectorIdPrefix: 'tresvista', careerSearchUrl: 'https://www.tresvista.com/careers/' },

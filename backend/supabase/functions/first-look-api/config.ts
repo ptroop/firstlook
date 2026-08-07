@@ -7,6 +7,7 @@ export interface OpenRouterConfig {
 
 export interface RuntimeConfig {
   detailBatchSize: number;
+  detailConcurrency: number;
   requestTimeoutMs: number;
   connectorConcurrency: number;
   deferredAuditLimit: number;
@@ -28,7 +29,8 @@ export function loadRuntimeConfig(env: Record<string, string | undefined>): Runt
   }
 
   return {
-    detailBatchSize: integer(env.DETAIL_BATCH_SIZE, 25, 1, 100),
+    detailBatchSize: integer(env.DETAIL_BATCH_SIZE, 50, 1, 100),
+    detailConcurrency: integer(env.DETAIL_CONCURRENCY, 4, 1, 8),
     requestTimeoutMs: integer(env.REQUEST_TIMEOUT_MS, 20_000, 5_000, 60_000),
     connectorConcurrency: integer(env.CONNECTOR_CONCURRENCY, 3, 1, 8),
     deferredAuditLimit: integer(env.DEFERRED_AUDIT_LIMIT, 2, 0, 10),
@@ -47,4 +49,3 @@ function integer(value: string | undefined, fallback: number, minimum: number, m
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(maximum, Math.max(minimum, parsed));
 }
-

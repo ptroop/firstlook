@@ -52,6 +52,7 @@ Deno.serve(async (request) => {
       const result = await runSourceAwareScan(connectors, createSourceAwareStore(supabaseClient()), {
         runType: scanRequest.runType,
         detailBatchSize: config.detailBatchSize,
+        detailConcurrency: config.detailConcurrency,
         deferredAuditLimit: config.deferredAuditLimit,
         openRouter: config.openRouter,
         now: new Date(),

@@ -51,7 +51,8 @@ test('registers American Express watch and reconciliation groups', () => {
 });
 
 test('reports coverage only for implemented official connectors', () => {
-  assert.deepEqual(supportedOfficialConnectorIds(), [
+  const ids = supportedOfficialConnectorIds();
+  const expectedExistingIds = [
     'moodys-official-india',
     'deshaw-official-india',
     'citi-official-india',
@@ -124,7 +125,9 @@ test('reports coverage only for implemented official connectors', () => {
     'motilal-oswal-firecrawl-india',
     'edelweiss-firecrawl-india',
     'zerodha-firecrawl-india'
-  ]);
+  ];
+  for (const id of expectedExistingIds) assert.ok(ids.includes(id), `missing connector ${id}`);
+  assert.equal(ids.filter((id) => id.endsWith('-official-page-india')).length, 31);
 });
 
 test('registers Workday connectors for the original and RCV companies', () => {
@@ -155,5 +158,16 @@ test('registers Firecrawl connectors for 5 companies', () => {
   for (const prefix of firecrawlPrefixes) {
     const subset = connectors.filter((c) => c.connectorId === `${prefix}-firecrawl-india`);
     assert.deepEqual(subset.map(c => c.scanGroup), [`${prefix}-firecrawl-india-watch`, `${prefix}-firecrawl-india-reconcile`]);
+  }
+});
+
+test('registers quota-free official-page discovery for every Firecrawl fallback company', () => {
+  const connectors = createOfficialConnectorRegistry();
+  const pageConnectors = connectors.filter((connector) => connector.connectorId.endsWith('-official-page-india'));
+  assert.equal(new Set(pageConnectors.map((connector) => connector.connectorId)).size, 31);
+  for (let wave = 1; wave <= 4; wave += 1) {
+    const expectedCount = wave < 4 ? 10 : 1;
+    assert.equal(connectors.filter((connector) => connector.scanGroup === `rcv-official-page-wave-${wave}-watch`).length, expectedCount);
+    assert.equal(connectors.filter((connector) => connector.scanGroup === `rcv-official-page-wave-${wave}-reconcile`).length, expectedCount);
   }
 });

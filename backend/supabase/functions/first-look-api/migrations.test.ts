@@ -50,6 +50,10 @@ const rcvAtsSchedule = readFileSync(
   new URL('../../migrations/20260806000001_add_rcv_ats_schedules.sql', import.meta.url),
   'utf8',
 );
+const rcvOfficialPageSchedule = readFileSync(
+  new URL('../../migrations/20260807000000_add_rcv_official_page_waves.sql', import.meta.url),
+  'utf8',
+);
 const firecrawlQuotaGuard = readFileSync(
   new URL('../../migrations/20260806000002_disable_firecrawl_cron_by_default.sql', import.meta.url),
   'utf8',
@@ -203,6 +207,17 @@ test('adds structured RCV ATS schedules before the Firecrawl fallback', () => {
 test('disables unattended Firecrawl cron jobs by default', () => {
   assert.match(firecrawlQuotaGuard, /jobname like 'first-look-%firecrawl-%'/i);
   assert.match(firecrawlQuotaGuard, /cron\.unschedule\(j\)/i);
+});
+
+test('schedules quota-free official-page RCV waves separately from Firecrawl', () => {
+  for (const group of [
+    'rcv-official-page-wave-1-watch', 'rcv-official-page-wave-2-watch',
+    'rcv-official-page-wave-3-watch', 'rcv-official-page-wave-4-watch',
+    'rcv-official-page-wave-1-reconcile', 'rcv-official-page-wave-2-reconcile',
+    'rcv-official-page-wave-3-reconcile', 'rcv-official-page-wave-4-reconcile',
+  ]) assert.match(rcvOfficialPageSchedule, new RegExp(`'${group}'`));
+  assert.match(rcvOfficialPageSchedule, /invoke_first_look_rcv_official_page_scan/);
+  assert.doesNotMatch(rcvOfficialPageSchedule, /firecrawl/i);
 });
 
 test('push worker stores credentials in the RLS-locked secrets table, not Vault', () => {
