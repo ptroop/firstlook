@@ -50,6 +50,9 @@ const matchesEmpty = document.querySelector('#matches-empty');
 const matchesMeta = document.querySelector('#matches-meta');
 const coverageList = document.querySelector('#coverage-list');
 const coverageMeta = document.querySelector('#coverage-meta');
+const candidateSection = document.querySelector('#candidate-section');
+const candidateList = document.querySelector('#candidate-list');
+const candidateMeta = document.querySelector('#candidate-meta');
 const toast = document.querySelector('#toast');
 const refreshButton = document.querySelector('#refresh-feed');
 const cvProfile = document.querySelector('#cv-profile');
@@ -74,12 +77,14 @@ const VAPID_PUBLIC_KEY = window.JOB_MONITOR_VAPID_PUBLIC_KEY || '';
 const FIXTURE_MODE = new URLSearchParams(window.location.search).get('fixture') === '1';
 let toastTimer;
 let currentJobs = [];
+let currentCandidates = [];
 let latestCoverage = [];
 let latestSnapshotAt = null;
 let refreshInFlight = false;
 const CV_STORAGE_KEY = 'first-look-master-profile-v1';
 const CV_VERSIONS_STORAGE_KEY = 'first-look-profile-versions-v1';
 const CV_REVIEW_STORAGE_KEY = 'first-look-review-gate-v1';
+const CV_EVIDENCE_REVIEW_STORAGE_KEY = 'first-look-cv-evidence-review-v1';
 const COVER_LETTER_STORAGE_KEY = 'first-look-cover-letter-drafts-v1';
 const PORTAL_STORAGE_KEY = 'first-look-portal-listings-v1';
 const JOB_STATUS_STORAGE_KEY = 'first-look-job-status-v1';
@@ -200,6 +205,39 @@ function renderJobs(jobs) {
   }).join('');
 }
 
+function renderCandidates(candidates) {
+  currentCandidates = Array.isArray(candidates) ? candidates : [];
+  if (!candidateSection || !candidateList || !candidateMeta) return;
+  if (!currentCandidates.length) {
+    candidateSection.hidden = true;
+    candidateMeta.textContent = '';
+    candidateList.innerHTML = '';
+    return;
+  }
+
+  const byCompany = currentCandidates.reduce((groups, candidate) => {
+    const company = String(candidate.company || 'Employer').trim();
+    (groups[company] ||= []).push(candidate);
+    return groups;
+  }, {});
+  candidateSection.hidden = false;
+  candidateMeta.textContent = `${currentCandidates.length} awaiting detail checks`;
+  candidateList.innerHTML = Object.keys(byCompany).sort((a, b) => a.localeCompare(b)).map((company) => `
+    <div class="candidate-company">
+      <div class="candidate-company-heading"><strong>${escapeHtml(company)}</strong><span>${byCompany[company].length}</span></div>
+      ${byCompany[company].slice(0, 12).map((candidate) => {
+        const detailUrl = safeUrl(candidate.officialDetailUrl || candidate.sources?.[0]?.detailUrl || '');
+        const reasons = Array.isArray(candidate.candidateReasons) ? candidate.candidateReasons.slice(0, 3).join(' · ') : '';
+        return `<article class="candidate-card">
+          <div><h4>${escapeHtml(candidate.title)}</h4><p>${escapeHtml(candidate.location || 'India')}</p><div class="badge-row"><span class="badge badge-warning">Full JD pending</span><span class="badge">Official source</span></div>${reasons ? `<small>Why it was queued: ${escapeHtml(reasons)}</small>` : ''}</div>
+          ${detailUrl ? `<a class="text-button" href="${detailUrl}" target="_blank" rel="noreferrer">Review source</a>` : ''}
+        </article>`;
+      }).join('')}
+      ${byCompany[company].length > 12 ? `<p class="candidate-more">${byCompany[company].length - 12} more candidates are queued for this employer.</p>` : ''}
+    </div>
+  `).join('');
+}
+
 function profileText() {
   return cvProfile?.value.trim() || '';
 }
@@ -250,6 +288,27 @@ function loadReviewedDrafts() {
 }
 
 let reviewedDrafts = loadReviewedDrafts();
+
+function loadCvEvidenceReviews() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CV_EVIDENCE_REVIEW_STORAGE_KEY) || '{}');
+    return stored && typeof stored === 'object' ? stored : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+let cvEvidenceReviews = loadCvEvidenceReviews();
+
+function isCvEvidenceReviewed(jobId) {
+  return Boolean(cvEvidenceReviews[jobId]);
+}
+
+function setCvEvidenceReviewed(jobId, reviewed) {
+  if (reviewed) cvEvidenceReviews[jobId] = { at: new Date().toISOString() };
+  else delete cvEvidenceReviews[jobId];
+  try { localStorage.setItem(CV_EVIDENCE_REVIEW_STORAGE_KEY, JSON.stringify(cvEvidenceReviews)); } catch (_error) { /* private mode */ }
+}
 
 function isDraftReviewed(jobId) {
   return Boolean(reviewedDrafts[jobId]);
@@ -513,6 +572,7 @@ function renderCvMatches() {
     const canDraftCoverLetter = ['required', 'mentioned', 'optional'].includes(result.coverLetter.status);
     const draft = canDraftCoverLetter ? (coverLetterDrafts[jobId] || engine.buildCoverLetter(job, result, profile)) : '';
     const reviewed = isDraftReviewed(jobId);
+    const evidenceReviewed = isCvEvidenceReviewed(jobId);
     const verifyReport = canDraftCoverLetter && draft ? engine.verifyCoverLetter(draft, profile) : null;
     const verifyNote = verifyReport && !verifyReport.ok
       ? `<p class="cv-brief-warning">Verifier found ${verifyReport.unverified.length} line${verifyReport.unverified.length === 1 ? '' : 's'} not backed by the profile: ${escapeHtml(verifyReport.unverified.slice(0, 3).join(' · '))}. Edit or remove before exporting.</p>`
@@ -533,7 +593,7 @@ function renderCvMatches() {
     return `<article class="cv-result">
       <div class="cv-result-top"><div><h4>${escapeHtml(job.title)}</h4><p class="cv-result-company">${escapeHtml(job.company || '')}</p><p class="cv-result-location">${escapeHtml(job.location || 'Location not listed')}</p></div><span class="cv-score">${escapeHtml(score)}</span></div>
       <div class="cv-result-tags">${result.evidence.slice(0, 5).map(({ term }) => `<span class="badge">Supported: ${escapeHtml(term)}</span>`).join('')}${result.missing.slice(0, 5).map((term) => `<span class="badge badge-missing">Gap: ${escapeHtml(term)}</span>`).join('')}<span class="badge">Cover: ${escapeHtml(result.coverLetter.label)}</span></div>
-      <div class="cv-result-actions">${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${job.officialApplyUrl ? 'Apply direct' : 'Open role'}</a>` : ''}${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}<button class="text-button cv-brief-toggle" type="button" data-cv-job-id="${escapeAttribute(jobId)}">Show evidence brief</button>${coverButton}</div>
+      <div class="cv-result-actions">${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${job.officialApplyUrl ? 'Apply direct' : 'Open role'}</a>` : ''}${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}<button class="text-button cv-brief-toggle" type="button" data-cv-job-id="${escapeAttribute(jobId)}">Show evidence brief</button><label class="review-gate"><input class="cv-evidence-review" type="checkbox" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? ' checked' : ''} /> I reviewed the evidence brief</label><button class="text-button cv-tailored-export" type="button" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? '' : ' disabled'} title="${evidenceReviewed ? '' : 'Review the evidence brief first.'}">Export tailored CV</button>${coverButton}</div>
       <div class="cv-brief" id="cv-brief-${escapeAttribute(jobId)}" hidden>${buildCvBrief(job, result)}</div>
       ${coverLetterPanel}
     </article>`;
@@ -574,12 +634,15 @@ function renderCoverage(payload) {
     healthDot.className = 'health-dot ' + (hasErrors ? 'error' : (hasBacklog ? 'warning' : 'success'));
   }
 
-  coverageMeta.textContent = `${sources.length} verified ${sources.length === 1 ? 'source' : 'sources'}`;
+  const sourcesWithBacklog = sources.filter((source) => Number(source.candidateBacklog || 0) > 0).length;
+  const companiesWithRoles = new Set(currentJobs.map((job) => companyKey(job.company))).size;
+  coverageMeta.textContent = `${sources.length} verified sources · ${companiesWithRoles} companies publishing roles${sourcesWithBacklog ? ` · ${sourcesWithBacklog} with detail backlog` : ''}`;
   coverageList.innerHTML = sources.map((source) => {
     const status = source.latestStatus || 'unknown';
     const progress = source.reconcile || source.watch;
+    const backlog = Number(source.candidateBacklog || 0);
     const statusText = status === 'complete'
-      ? 'Current'
+      ? (backlog > 0 ? 'Current inventory · detail checks still queued' : 'Current inventory')
       : status === 'partial' || status === 'anomalous'
         ? 'Full scan incomplete - keeping prior listings'
         : status === 'failed'
@@ -588,7 +651,6 @@ function renderCoverage(payload) {
     const counts = progress && Number.isFinite(progress.listingsDiscovered)
       ? `${progress.listingsDiscovered}${Number.isFinite(progress.reportedTotal) ? ` of ${progress.reportedTotal}` : ''} summaries`
       : 'Count unavailable';
-    const backlog = Number(source.candidateBacklog || 0);
     return `
       <article class="coverage-item coverage-${escapeAttribute(status)}">
         <div><h4>${escapeHtml(source.company)}</h4><p>${escapeHtml(statusText)}</p></div>
@@ -622,18 +684,21 @@ function renderCompanyDirectory() {
           const source = latestCoverage.find((candidate) => sameCompany(candidate.company, company.name));
           const roles = currentJobs.filter((job) => sameCompany(job.company, company.name)).length;
           const sourceStatus = source?.latestStatus || '';
+          const sourceBacklog = Number(source?.candidateBacklog || 0);
           const sourceLabel = sourceStatus === 'complete'
-            ? 'Verified source'
+            ? sourceBacklog > 0 ? `Verified source · ${sourceBacklog} detail checks queued` : 'Verified source'
             : sourceStatus === 'failed'
               ? 'Source unavailable'
               : sourceStatus === 'partial' || sourceStatus === 'anomalous'
-                ? `Source ${sourceStatus}`
+                ? `Source ${sourceStatus} · roles withheld until reconciled`
                 : source
                   ? 'Source not checked'
-                  : 'No verified scan yet';
+                  : 'No verified connector yet';
           const roleLabel = roles > 0
             ? `${roles} matching role${roles === 1 ? '' : 's'}`
-            : 'No matching role in snapshot';
+            : sourceStatus === 'complete'
+              ? 'No strict 0–2 finance role in snapshot'
+              : 'No published role in snapshot';
           return `<article class="company-directory-card">
             <div><h4>${escapeHtml(company.name)}</h4><span class="company-source-status ${sourceStatus === 'complete' ? 'is-registered' : ''}">${escapeHtml(sourceLabel)} · ${escapeHtml(roleLabel)}</span></div>
             ${url ? `<a class="text-button" href="${url}" target="_blank" rel="noreferrer">Career page</a>` : ''}
@@ -813,6 +878,7 @@ async function loadData({ manual = false } = {}) {
   try {
     if (FIXTURE_MODE) {
       renderJobs([...fixture.jobs, ...portalListings]);
+      renderCandidates([]);
       renderCoverage(fixture.coverage);
       return;
     }
@@ -824,9 +890,10 @@ async function loadData({ manual = false } = {}) {
 
     const base = API_BASE.replace(/\/$/, '');
     const cacheBust = manual ? `?refresh=${Date.now()}` : '';
-    const [jobsResult, coverageResult] = await Promise.allSettled([
+    const [jobsResult, coverageResult, candidatesResult] = await Promise.allSettled([
       fetch(`${base}/jobs${cacheBust}`).then(requireJson),
       fetch(`${base}/coverage${cacheBust}`).then(requireJson),
+      fetch(`${base}/candidates${cacheBust}`).then(requireJson),
     ]);
     if (jobsResult.status === 'fulfilled') {
       latestSnapshotAt = jobsResult.value?.snapshotAt || null;
@@ -835,6 +902,8 @@ async function loadData({ manual = false } = {}) {
     } else showFeedState('Job feed unavailable', 'The monitor could not be reached. Try again shortly.', 'Connection error');
     if (coverageResult.status === 'fulfilled') renderCoverage(coverageResult.value);
     else showCoverageError();
+    if (candidatesResult.status === 'fulfilled') renderCandidates(candidatesResult.value?.candidates);
+    else renderCandidates([]);
     if (manual) showToast(jobsResult.status === 'fulfilled' || coverageResult.status === 'fulfilled'
       ? `Fetched the latest snapshot${latestSnapshotAt ? ` — feed updated ${formatAge(latestSnapshotAt)}` : ''}.`
       : 'Refresh failed; existing data was kept.');
@@ -947,6 +1016,39 @@ document.addEventListener('click', async (event) => {
     if (brief) {
       brief.hidden = !brief.hidden;
       briefToggle.textContent = brief.hidden ? 'Show tailoring brief' : 'Hide tailoring brief';
+    }
+    return;
+  }
+
+  const evidenceReview = event.target.closest('.cv-evidence-review');
+  if (evidenceReview) {
+    const jobId = evidenceReview.dataset.cvJobId || '';
+    setCvEvidenceReviewed(jobId, evidenceReview.checked);
+    const exportButton = evidenceReview.closest('.cv-result-actions')?.querySelector('.cv-tailored-export');
+    if (exportButton) {
+      exportButton.disabled = !evidenceReview.checked;
+      exportButton.title = evidenceReview.checked ? '' : 'Review the evidence brief first.';
+    }
+    showToast(evidenceReview.checked ? 'Evidence review recorded on this device.' : 'Evidence review gate cleared.');
+    return;
+  }
+
+  const tailoredExport = event.target.closest('.cv-tailored-export');
+  if (tailoredExport) {
+    if (tailoredExport.disabled) return;
+    const engine = cvEngine();
+    const profile = profileText();
+    const jobId = tailoredExport.dataset.cvJobId || '';
+    const job = currentJobs.find((candidate) => jobIdentity(candidate) === jobId);
+    if (!engine || !profile || !job) return;
+    try {
+      const analysis = engine.matchJob(job, profile);
+      const tailored = engine.buildTailoredProfile(job, analysis, profile);
+      const doc = engine.buildDocx({ profile: tailored.text, job, filename: 'first-look-tailored-cv' });
+      downloadBlob(doc.blob, doc.filename);
+      showToast('Exported a tailored ATS-readable CV using original profile lines only.');
+    } catch (_error) {
+      showToast('The tailored CV export failed on this browser.');
     }
     return;
   }

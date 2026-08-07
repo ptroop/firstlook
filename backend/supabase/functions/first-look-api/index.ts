@@ -15,7 +15,7 @@ import {
 } from './presenters.ts';
 import { runSourceAwareScan } from './scan.ts';
 import { isStrictZeroToTwoExperience, parseExperience } from './classification/experience.ts';
-import { classifyFinance, isNoiseTitle } from './classification/taxonomy.ts';
+import { classifyFinance, classifyLocation, isNoiseTitle } from './classification/taxonomy.ts';
 
 Deno.serve(async (request) => {
   const origin = request.headers.get('Origin');
@@ -28,6 +28,7 @@ Deno.serve(async (request) => {
   try {
     if (route.endsWith('/health')) return json({ ok: true, service: 'first-look-job-monitor' }, headers);
     if (route.endsWith('/jobs') && request.method === 'GET') return getJobs(headers);
+    if (route.endsWith('/candidates') && request.method === 'GET') return getCandidates(headers);
     if (route.endsWith('/job-status') && request.method === 'GET') return getJobStatus(url, headers);
     if (route.endsWith('/coverage') && request.method === 'GET') return getCoverage(headers);
     if (route.endsWith('/push/subscribe') && request.method === 'POST') return saveSubscription(request, headers);
@@ -115,6 +116,65 @@ async function getJobs(headers: Record<string, string>) {
     ...sources.map((source) => source.last_verified_at),
   ]);
   return json({ jobs: sortPresentedJobs(rows.map((row) => presentJob(row, sources, health))), snapshotAt }, headers);
+}
+
+async function getCandidates(headers: Record<string, string>) {
+  const select = 'connector_id,source_external_id,company,title,location,category,department,detail_url,last_seen_at,candidate_reasons';
+  const rows = (await supabaseClient().request(
+    `/rest/v1/source_inventory?active=eq.true&candidate_status=in.(hydrate,audit)&select=${select}&order=last_seen_at.desc&limit=2000`,
+  )) as CandidateInventoryRow[];
+
+  const candidates = rows
+    .filter((row) => {
+      const title = String(row.title || '').trim();
+      const location = String(row.location || '').trim();
+      if (!title || !row.detail_url || isNoiseTitle(title) || /\bsenior\b|\bmanager\b|\blead\b/i.test(title)) return false;
+      if (classifyLocation(location).status !== 'india') return false;
+      const metadata = `${title} ${row.category || ''} ${row.department || ''}`;
+      const finance = classifyFinance({ title, jobCategory: metadata, description: '' });
+      const earlyCareer = /\b(?:analyst|associate|officer|executive|specialist|research|trainee|apprentice|intern|graduate|coordinator|advisor)\b/i.test(title);
+      return finance.status !== 'unrelated' || earlyCareer;
+    })
+    .slice(0, 250)
+    .map((row) => ({
+      id: `candidate:${row.connector_id}:${row.source_external_id}`.slice(0, 180),
+      company: row.company,
+      title: row.title,
+      location: row.location || 'India',
+      description: '',
+      officialDetailUrl: row.detail_url,
+      officialApplyUrl: null,
+      officialVerified: true,
+      matchTier: 'possible',
+      eligibilityNote: 'Official role candidate found; full posting detail is still being checked for finance relevance and 0–2 years.',
+      candidateStatus: 'awaiting_detail',
+      candidateReasons: Array.isArray(row.candidate_reasons) ? row.candidate_reasons.slice(0, 8) : [],
+      newestVerificationAt: row.last_seen_at,
+      sources: [{
+        type: 'official_career',
+        name: `${row.company} Careers`,
+        listingUrl: row.detail_url,
+        detailUrl: row.detail_url,
+        applyUrl: null,
+        official: true,
+        verifiedAt: row.last_seen_at,
+      }],
+    }));
+
+  return json({ candidates, candidateBacklog: candidates.length, snapshotAt: newestDate(rows.map((row) => row.last_seen_at)) }, headers);
+}
+
+interface CandidateInventoryRow {
+  connector_id: string;
+  source_external_id: string;
+  company: string;
+  title: string;
+  location: string | null;
+  category: string | null;
+  department: string | null;
+  detail_url: string | null;
+  last_seen_at: string;
+  candidate_reasons: unknown;
 }
 
 function newestDate(values: Array<string | null>): string | null {

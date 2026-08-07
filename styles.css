@@ -394,6 +394,20 @@ h2 { margin-bottom: 8px; font-family: var(--serif); font-size: 32px; font-weight
 .cv-brief li + li { margin-top: 6px; }
 .cv-brief strong { font-weight: 600; }
 .cv-brief-warning { color: var(--warning); }
+.candidate-section { margin-top: 28px; padding: 22px; border: 1px solid var(--line); background: var(--surface); }
+.candidate-heading { display: flex; justify-content: space-between; gap: 20px; align-items: start; margin-bottom: 16px; }
+.candidate-heading h3 { margin: 0 0 6px; font-family: var(--serif); font-size: 22px; font-weight: 500; }
+.candidate-heading p { max-width: 720px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.candidate-list { display: grid; gap: 16px; }
+.candidate-company { border-top: 1px solid var(--line); padding-top: 12px; }
+.candidate-company-heading { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 13px; }
+.candidate-company-heading span { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.candidate-card { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid rgba(31, 34, 32, 0.08); }
+.candidate-card h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.candidate-card p { margin: 0 0 7px; color: var(--muted); font-size: 12px; }
+.candidate-card small { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; }
+.candidate-more { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.candidate-card .text-button { flex: 0 0 auto; }
 .cv-requirements { margin: 12px 0; border-top: 1px solid var(--line); }
 .cv-requirements summary { padding: 10px 0; cursor: pointer; color: var(--muted); font-size: 12px; }
 .cv-requirements ul { list-style: none; margin: 0; padding: 0; }

@@ -77,6 +77,12 @@ Open Supabase Dashboard > Edge Functions > Secrets and add:
 | `OPENROUTER_FALLBACK_MODELS` | Optional comma-separated concrete fallback slugs |
 | `OPENROUTER_PROMPT_VERSION` | Optional cache/version label; default is `job-classification-v1` |
 | `DETAIL_BATCH_SIZE` | Optional per-connector hydration cap; default is `25` |
+| `VAPID_SUBJECT` | Contact for the push service, e.g. `mailto:you@example.com` or an `https:` URL |
+| `VAPID_PUBLIC_KEY` | Base64url P-256 public key; also published in the frontend `index.html` |
+| `VAPID_PRIVATE_KEY` | Base64url P-256 private key. Never commit or paste into chat |
+| `PUSH_TOKEN` | Long random token; must equal the Vault `first_look_push_token` secret below |
+
+Generate a matching VAPID keypair once with `npx.cmd tsx scripts/generate-vapid-keys.mjs` (writes a gitignored `.env.vapid.local` with `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and a fresh `PUSH_TOKEN`, and verifies the pair against the real Web Push module). Edit `VAPID_SUBJECT` in the generated file to a real `mailto:` or `https:` contact before pasting the values into Supabase — the subject is a JWT claim only and can be changed later without regenerating the keys. The generator refuses to overwrite an existing `.env.vapid.local` (pass `--force` only when rotating), because the public key may already be published in `index.html`. The public key is not secret and goes into `window.JOB_MONITOR_VAPID_PUBLIC_KEY` in `index.html`; the private key and `PUSH_TOKEN` stay in Supabase only.
 
 Do not paste the OpenRouter key into chat, SQL, GitHub, `index.html`, or `config.toml`. Supabase supplies `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to the deployed function.
 
@@ -94,6 +100,18 @@ select vault.create_secret('YOUR-LONG-RANDOM-SCAN-TOKEN', 'first_look_scan_token
 ```
 
 The Vault token must exactly match the `SCAN_TOKEN` Edge Function secret. Then apply `007_source_scan_schedules.sql`, `010_goldman_scan_schedule.sql`, `20260803171004_add_blackrock_barclays_schedules.sql`, `20260803180128_add_razorpay_schedule.sql`, `20260805000000_add_greenhouse_phase2_schedules.sql`, `20260806000000_add_rcv_firecrawl_waves.sql`, `20260806000001_add_rcv_ats_schedules.sql`, and `20260806000002_disable_firecrawl_cron_by_default.sql`. These create staggered jobs for structured ATS connectors and remove unattended Firecrawl polling. Each invocation also drains a bounded portion of the candidate-detail backlog, with never-hydrated and oldest-hydrated inventory first.
+
+Migration `20260806000003_push_notification_outbox.sql` creates the notification outbox, an RLS-locked credentials table (`public.first_look_secrets`), and a two-minute cron (`first-look-push-worker`) that drains it. The worker credentials are plain inserts — the Vault extension is not available on every Supabase plan, so the cron helper reads them from this locked table instead:
+
+```sql
+insert into public.first_look_secrets(name, secret_value) values
+  ('first_look_push_url', 'https://YOUR-PROJECT.supabase.co/functions/v1/first-look-api/push/send'),
+  ('first_look_push_token', 'YOUR-PUSH-TOKEN')
+on conflict (name) do update
+  set secret_value = excluded.secret_value, updated_at = now();
+```
+
+RLS is enabled on `first_look_secrets` with zero policies, so anonymous and authenticated PostgREST roles can never read or write it; only the cron helper (security definer, owner `postgres`) can. `first_look_push_token` must exactly match the `PUSH_TOKEN` Edge Function secret, and `first_look_push_url` must point at the `/push/send` route. Until both rows exist the cron skips silently, so enabling alerts is a safe two-step: add the four Edge Function secrets (deploy), then insert the two rows (delivery starts on the next cron tick). New exact-match jobs are enqueued during scans; the worker sends one deduplicated message per job and subscription, prunes dead subscriptions, and never rolls back a saved vacancy.
 
 `FIRECRAWL_API_KEY` is only needed for the fallback wave connectors. The six RCV Workday candidates and Paytm Lever candidate use public structured feeds and do not consume Firecrawl quota. To run a fallback deliberately, invoke one group after reviewing quota, for example:
 
@@ -145,4 +163,4 @@ order by connector_id, candidate_status;
 
 Treat `partial`, `failed`, and `anomalous` runs as coverage failures, not zero-job results. Complete reconciliation uses two consecutive complete misses before closing inventory, sources, or jobs. This prevents a transient ATS failure from erasing live roles.
 
-The public routes are `/health`, `/jobs`, and `/coverage`. `/scan` requires the bearer token. CV matching, evidence-only cover-letter drafting, and the optional review-first form-fill helper are frontend/local-browser features; no profile data, credentials, cookies, or submitted application data is sent to this backend.
+The public routes are `/health`, `/jobs`, `/candidates`, and `/coverage`. `/candidates` exposes official source-inventory rows awaiting bounded detail hydration; it deliberately withholds them from `/jobs` until finance relevance, India location, 0–2 experience, and a role-level Apply URL are verified. `/scan` requires the bearer token. CV matching, evidence-only cover-letter drafting, tailored CV selection, and the optional review-first form-fill helper are frontend/local-browser features; no profile data, credentials, cookies, or submitted application data is sent to this backend.

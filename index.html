@@ -45,7 +45,7 @@
             <h2>CV match</h2>
             <span class="section-meta" id="cv-meta">Private on this device</span>
           </div>
-          <p class="section-intro">Upload your resume once, then see which open roles fit. Every match cites your profile text; drafts stay local.</p>
+          <p class="section-intro">Upload your resume once, then see which open roles fit. Evidence briefs cite your profile text; tailored CVs select original lines only and drafts stay local.</p>
           <div class="cv-workspace">
             <div class="cv-editor">
               <div class="resume-dropzone" id="resume-dropzone">
@@ -56,7 +56,7 @@
                 <p class="dropzone-help">Drop it here, or <label class="text-button" for="cv-file">browse files</label>. Plain text, Markdown and HTML profiles are also accepted.</p>
               </div>
               <label class="field-label" for="cv-profile">Master profile</label>
-              <p class="field-help">Review the extracted text, then edit if needed.</p>
+              <p class="field-help">Review the extracted text, then edit if needed. The evaluator may select or reorder your lines, but it does not invent achievements, employers or qualifications.</p>
               <textarea id="cv-profile" class="cv-textarea" rows="16" placeholder="Example:&#10;MBA, Finance — 2026&#10;&#10;Experience&#10;• Built a financial model...&#10;&#10;Skills&#10;Excel, SQL, Power BI"></textarea>
               <div class="cv-controls">
                 <label class="button" for="cv-file">Import .pdf, .txt, .md or .html</label>
@@ -119,6 +119,16 @@
             </div>
           </div>
           <div class="job-list" id="job-list" hidden></div>
+          <section class="candidate-section" id="candidate-section" hidden aria-labelledby="candidate-heading">
+            <div class="candidate-heading">
+              <div>
+                <h3 id="candidate-heading">Official roles still being checked</h3>
+                <p>These are real employer-source pages found in the inventory. They are not counted as matches until the full posting confirms India, finance relevance, experience and a role-level application path.</p>
+              </div>
+              <span class="section-meta" id="candidate-meta"></span>
+            </div>
+            <div class="candidate-list" id="candidate-list" aria-live="polite"></div>
+          </section>
         </section>
       </main>
 
