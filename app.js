@@ -5,6 +5,7 @@ const fixture = {
       description: 'Requires strong skills in Python, SQL, and Financial Modeling.',
       applyUrl: 'https://citi.wd5.myworkdayjobs.com/job/123/apply', applySourceType: 'official_career',
       officialVerified: true, matchTier: 'exact', eligibilityNote: null,
+      postedAt: new Date(Date.now() - 2 * 86400000).toISOString(), firstSeenAt: new Date(Date.now() - 3 * 86400000).toISOString(),
       newestVerificationAt: new Date(Date.now() - 18 * 60 * 1000).toISOString(), sourceHealthState: 'complete',
       sources: [
         { type: 'official_career', name: 'Citi Careers', listingUrl: 'https://jobs.citi.com/job/123', official: true, verifiedAt: new Date().toISOString() },
@@ -16,6 +17,7 @@ const fixture = {
       description: 'Experience with Excel and Tableau is a must.',
       applyUrl: 'https://www.linkedin.com/jobs/view/456', applySourceType: 'linkedin', officialVerified: false,
       verificationNote: 'Official listing not yet verified', matchTier: 'exact', eligibilityNote: null,
+      postedAt: new Date(Date.now() - 40 * 86400000).toISOString(), firstSeenAt: new Date(Date.now() - 40 * 86400000).toISOString(),
       newestVerificationAt: new Date(Date.now() - 42 * 60 * 1000).toISOString(), sourceHealthState: 'unknown',
       sources: [{ type: 'linkedin', name: 'LinkedIn', listingUrl: 'https://www.linkedin.com/jobs/view/456', official: false, verifiedAt: new Date().toISOString() }],
     },
@@ -24,6 +26,7 @@ const fixture = {
       description: 'Looking for experts in SQL, Excel, and VBA.',
       applyUrl: 'https://careers.moodys.com/en/job/789', applySourceType: 'official_career', officialVerified: true,
       matchTier: 'possible', eligibilityNote: 'Experience or relevance unconfirmed',
+      postedAt: new Date(Date.now() - 12 * 86400000).toISOString(), firstSeenAt: new Date(Date.now() - 12 * 86400000).toISOString(),
       newestVerificationAt: new Date(Date.now() - 75 * 60 * 1000).toISOString(), sourceHealthState: 'complete',
       sources: [{ type: 'official_career', name: "Moody's Careers", listingUrl: 'https://careers.moodys.com/en/job/789', official: true, verifiedAt: new Date().toISOString() }],
     },
@@ -32,6 +35,7 @@ const fixture = {
       description: 'Looking for experts in SQL, Python.',
       applyUrl: 'https://careers.moodys.com/en/job/790', applySourceType: 'official_career', officialVerified: true,
       matchTier: 'possible', eligibilityNote: 'Experience or relevance unconfirmed',
+      postedAt: new Date(Date.now() - 45 * 86400000).toISOString(), firstSeenAt: new Date(Date.now() - 45 * 86400000).toISOString(),
       newestVerificationAt: new Date(Date.now() - 75 * 60 * 1000).toISOString(), sourceHealthState: 'complete',
       sources: [{ type: 'official_career', name: "Moody's Careers", listingUrl: 'https://careers.moodys.com/en/job/790', official: true, verifiedAt: new Date().toISOString() }],
     },
@@ -95,6 +99,7 @@ const JOB_STATUS_STORAGE_KEY = 'first-look-job-status-v1';
 const JOB_STATUS_TTL_MS = 30 * 60 * 1000;
 let autoCheckedTopRoles = false;
 let selectedApplicationKitId = null;
+let feedRecencyDays = 0;
 const SKILL_KEYWORDS = [
   'Python', 'SQL', 'Excel', 'AWS', 'Financial Modeling', 'Tableau', 
   'Power BI', 'Machine Learning', 'C++', 'Java', 'Bloomberg', 'R', 
@@ -114,8 +119,53 @@ function extractSkills(text) {
   return skills.slice(0, 5);
 }
 
+function jobListedAt(job) {
+  return job?.postedAt || job?.firstSeenAt || '';
+}
+
+function jobListedTimestamp(job) {
+  const parsed = Date.parse(jobListedAt(job));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function jobListedDays(job) {
+  const timestamp = jobListedTimestamp(job);
+  if (!timestamp) return null;
+  if (timestamp > Date.now()) return null; // future-dated employer post (clock skew/typo): treat as unknown
+  return Math.floor((Date.now() - timestamp) / 86400000);
+}
+
+function formatListedAge(value) {
+  const timestamp = Date.parse(value || '');
+  if (!Number.isFinite(timestamp)) return 'date unknown';
+  const days = Math.max(0, Math.floor((Date.now() - timestamp) / 86400000));
+  if (days < 2) return 'just now';
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months === 1 ? '' : 's'} ago`;
+  const years = Math.floor(days / 365) || 1;
+  return `${years} year${years === 1 ? '' : 's'} ago`;
+}
+
+function visibleFeedJobs() {
+  if (!feedRecencyDays) return currentJobs;
+  return currentJobs.filter((job) => {
+    const days = jobListedDays(job);
+    return days === null || days <= feedRecencyDays;
+  });
+}
+
+function renderFeedFilter() {
+  const container = document.querySelector('#feed-filter');
+  if (!container) return;
+  container.querySelectorAll('.feed-recency').forEach((button) => {
+    button.classList.toggle('is-active', Number(button.dataset.days || 0) === feedRecencyDays);
+  });
+}
+
 function renderJobs(jobs) {
   currentJobs = Array.isArray(jobs) ? jobs : [];
+  renderFeedFilter();
   renderCompanyDirectory();
   renderCvMatches();
   renderApplicationWorkspace();
@@ -124,17 +174,31 @@ function renderJobs(jobs) {
     return;
   }
 
+  const visible = visibleFeedJobs();
+  if (!visible.length) {
+    showFeedState(`No roles listed in the last ${feedRecencyDays} days`, 'Widen the recency filter to see older verified roles.', `${jobs.length} roles in snapshot · filter: last ${feedRecencyDays} days`);
+    return;
+  }
+
   matchesEmpty.hidden = true;
   jobList.hidden = false;
-  matchesMeta.textContent = `${jobs.length} ${jobs.length === 1 ? 'role' : 'roles'}${latestSnapshotAt ? ` · feed updated ${formatAge(latestSnapshotAt)}` : ''}`;
+  const filteredLabel = feedRecencyDays && visible.length !== jobs.length ? ` of ${jobs.length}` : '';
+  matchesMeta.textContent = `${visible.length}${filteredLabel} ${visible.length === 1 ? 'role' : 'roles'}${latestSnapshotAt ? ` · feed updated ${formatAge(latestSnapshotAt)}` : ''}`;
 
   const byCompany = {};
-  for (const job of jobs) {
+  for (const job of visible) {
     if (!byCompany[job.company]) byCompany[job.company] = [];
     byCompany[job.company].push(job);
   }
+  for (const company of Object.keys(byCompany)) {
+    byCompany[company].sort((left, right) => jobListedTimestamp(right) - jobListedTimestamp(left));
+  }
 
-  const sortedCompanies = Object.keys(byCompany).sort((a, b) => a.localeCompare(b));
+  const sortedCompanies = Object.keys(byCompany).sort((left, right) => {
+    const newestLeft = Math.max(...byCompany[left].map(jobListedTimestamp));
+    const newestRight = Math.max(...byCompany[right].map(jobListedTimestamp));
+    return newestRight - newestLeft || left.localeCompare(right);
+  });
 
   jobList.innerHTML = sortedCompanies.map(company => {
     const companyJobs = byCompany[company];
@@ -155,7 +219,11 @@ function renderJobs(jobs) {
       const applyUrl = directApplyUrl(job);
       const roleUrl = roleReviewUrl(job);
       const applyLabel = job.officialApplyUrl ? 'Apply direct' : 'Open role';
+      const listedAt = jobListedAt(job);
+      const listedDays = jobListedDays(job);
+      const newBadge = listedDays !== null && listedDays <= 7 ? '<span class="badge badge-new">New</span>' : '';
       const statusBadges = [
+        `${newBadge}`,
         `<span class="badge badge-match">${job.matchTier === 'exact' ? 'Strong match' : 'Check match'}</span>`,
         job.experienceYears ? `<span class="badge">Experience ${escapeHtml(formatExperienceRange(job.experienceYears))}</span>` : '',
         job.officialVerified
@@ -187,7 +255,7 @@ function renderJobs(jobs) {
             ${note ? `<p class="job-note">${escapeHtml(note)}</p>` : ''}
           </div>
           <div class="job-actions">
-            <span class="verified-time">Verified ${escapeHtml(formatAge(job.newestVerificationAt))}</span>
+            <span class="verified-time">${listedAt ? `Listed ${escapeHtml(formatListedAge(listedAt))} · ` : ''}Verified ${escapeHtml(formatAge(job.newestVerificationAt))}</span>
             <span class="job-status-area" data-status-job-id="${escapeAttribute(jobId)}">${statusBadgeHtml(jobId)}<button class="text-button job-status-check" type="button" data-status-job-id="${escapeAttribute(jobId)}">Check if open</button></span>
             <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Prepare kit</button>
             ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${applyLabel}</a>` : '<span class="apply-unavailable">Direct Apply link pending</span>'}
@@ -1298,7 +1366,8 @@ function renderCvMatches() {
     cvResults.innerHTML = '<div class="cv-empty"><h3>No profile yet.</h3><p>Upload or paste your resume above.</p></div>';
     return;
   }
-  if (!currentJobs.length) {
+  const pool = visibleFeedJobs();
+  if (!pool.length) {
     cvResultsMeta.textContent = 'No open roles yet';
     cvResults.innerHTML = '<div class="cv-empty"><h3>No open roles yet.</h3><p>Your profile is saved; matches appear when the feed returns roles.</p></div>';
     return;
@@ -1309,10 +1378,10 @@ function renderCvMatches() {
     cvResults.innerHTML = '<div class="cv-empty"><h3>Evaluation is unavailable.</h3><p>Reload the page so the local evaluator can load.</p></div>';
     return;
   }
-  const ranked = currentJobs.map((job) => ({ job, result: engine.matchJob(job, profile) }))
+  const ranked = pool.map((job) => ({ job, result: engine.matchJob(job, profile) }))
     .sort((left, right) => (right.result.score ?? -1) - (left.result.score ?? -1))
     .slice(0, 10);
-  cvResultsMeta.textContent = `Top ${ranked.length} of ${currentJobs.length} roles`;
+  cvResultsMeta.textContent = `Top ${ranked.length} of ${pool.length} roles${feedRecencyDays ? ` · last ${feedRecencyDays} days` : ''}`;
   cvResults.innerHTML = ranked.map(({ job, result }) => {
     const applyUrl = directApplyUrl(job);
     const roleUrl = roleReviewUrl(job);
@@ -1760,6 +1829,13 @@ document.addEventListener('click', async (event) => {
 
   const viewTrigger = event.target.closest('[data-view]');
   if (viewTrigger) navigate(viewTrigger.dataset.view);
+
+  const feedRecency = event.target.closest('.feed-recency');
+  if (feedRecency) {
+    feedRecencyDays = Number(feedRecency.dataset.days || 0);
+    renderJobs(currentJobs);
+    return;
+  }
 
   const applicationKitOpen = event.target.closest('.application-kit-open, .application-kit-select');
   if (applicationKitOpen) {

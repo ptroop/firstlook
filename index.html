@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>First Look - finance roles</title>
-    <link rel="stylesheet" href="./styles.css?v=9" />
+    <link rel="stylesheet" href="./styles.css?v=11" />
 
   </head>
   <body>
@@ -134,9 +134,9 @@
         <section class="content-section" id="matches" data-section="matches">
           <div class="section-heading">
             <h2>Open roles</h2>
-            <div class="section-heading-actions"><span class="section-meta" id="matches-meta">Loading</span><button class="text-button" id="refresh-feed" type="button">Refresh now</button></div>
+            <div class="section-heading-actions"><span class="section-meta" id="matches-meta">Loading</span><div class="feed-filter" id="feed-filter" role="group" aria-label="Listing recency filter"><button type="button" class="feed-recency is-active" data-days="0">Any age</button><button type="button" class="feed-recency" data-days="7">Last 7 days</button><button type="button" class="feed-recency" data-days="30">Last 30 days</button></div><button class="text-button" id="refresh-feed" type="button">Refresh now</button></div>
           </div>
-          <p class="section-intro refresh-note">Refresh now fetches the latest published snapshot from the monitor. It does not bypass connector schedules or make an unauthenticated crawl.</p>
+          <p class="section-intro refresh-note">Sorted by newest listing first. “Listed” is the employer-published date when available, otherwise our first sighting; “Verified” is the last scan that confirmed the role is still open. Refresh now fetches the latest published snapshot from the monitor.</p>
           <div class="portal-intake">
             <div>
               <strong>Portal discovery</strong>
@@ -223,6 +223,6 @@
     <script src="./hiring-signal.js?v=1"></script>
     <script src="./auth.js?v=1"></script>
     <script src="./outreach-corpus.js?v=1"></script>
-    <script src="./app.js?v=15"></script>
+    <script src="./app.js?v=17"></script>
   </body>
 </html>
