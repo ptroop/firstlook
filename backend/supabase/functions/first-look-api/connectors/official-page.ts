@@ -93,7 +93,7 @@ function parseJsonLdListings(html: string, config: OfficialPageConfig, connector
     .filter((listing): listing is InventoryListing => listing !== null);
 }
 
-function parseJsonLdPostings(html: string): Array<Record<string, any>> {
+export function parseJsonLdPostings(html: string): Array<Record<string, any>> {
   const postings: Array<Record<string, any>> = [];
   for (const match of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
     try {
@@ -188,7 +188,7 @@ function toListing(posting: Record<string, any>, config: OfficialPageConfig, con
   };
 }
 
-function findApplyUrl(html: string, detailUrl: string): string | null {
+export function findApplyUrl(html: string, detailUrl: string): string | null {
   for (const match of html.matchAll(/<a\b([^>]*?)href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
     const label = htmlToText(match[3]);
     const href = absoluteUrl(match[2], detailUrl);
@@ -209,7 +209,7 @@ function isGenericCareerUrl(value: string): boolean {
   }
 }
 
-function jsonLdLocation(value: unknown): string {
+export function jsonLdLocation(value: unknown): string {
   const values = Array.isArray(value) ? value : [value];
   return values.map((item) => {
     if (typeof item === 'string') return item;
@@ -224,15 +224,15 @@ function jsonLdLocation(value: unknown): string {
   }).filter(Boolean).join(' / ');
 }
 
-function extractBodyText(html: string): string {
+export function extractBodyText(html: string): string {
   return htmlToText(html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')).slice(0, 20_000);
 }
 
-function htmlToText(value: string): string {
+export function htmlToText(value: string): string {
   return decodeHtml(value.replace(/<br\s*\/?\s*>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 }
 
-function decodeHtml(value: string): string {
+export function decodeHtml(value: string): string {
   return value
     .replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
     .replace(/&nbsp;|&#160;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
@@ -273,11 +273,11 @@ function stableJobId(value: string): string {
   return value.replace(/^https?:\/\//i, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').slice(-180);
 }
 
-function extractExperience(description: string): string {
+export function extractExperience(description: string): string {
   return description.match(/[^.]*\b(?:\d+\s*(?:-|to)\s*\d+\s+years?|\d+\+?\s+years?|freshers?|no prior experience)[^.]*\.?/i)?.[0]?.trim() || '';
 }
 
-function parseDate(value: string): string | null {
+export function parseDate(value: string): string | null {
   const timestamp = Date.parse(value);
   return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }

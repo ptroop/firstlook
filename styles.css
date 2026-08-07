@@ -338,6 +338,22 @@ h2 { margin-bottom: 8px; font-family: var(--serif); font-size: 32px; font-weight
 .portal-intake strong { display: block; margin-bottom: 3px; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
 .portal-intake p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 
+.role-link-intake { margin: -10px 0 32px; padding: 14px 16px; border: 1px solid var(--line); background: var(--surface); }
+.role-link-intake > div:first-child { margin-bottom: 12px; }
+.role-link-intake strong { display: block; margin-bottom: 3px; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+.role-link-intake p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.role-link-form { display: grid; gap: 10px; }
+.role-link-form input[type="url"] { width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #fff; color: var(--ink); font-family: var(--sans); font-size: 14px; }
+.role-link-form input[type="url"]:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+.role-link-preview { margin-top: 14px; }
+.role-link-card { padding: 16px; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--paper); }
+.role-link-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 6px; }
+.role-link-card-head h4 { margin: 0 0 4px; font: 500 18px/1.2 var(--serif); }
+.role-link-fields { display: grid; gap: 12px; margin-top: 14px; }
+.role-link-fields input { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #fff; color: var(--ink); font-family: var(--sans); font-size: 14px; }
+.role-link-fields input:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+.role-link-error { margin: 0; padding: 12px 14px; border: 1px solid var(--line); background: var(--surface); color: var(--warning); font-size: 13px; }
+
 /* CV workspace */
 .cv-workspace { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 56px; }
 .cv-editor { min-width: 0; }

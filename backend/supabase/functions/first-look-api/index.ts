@@ -16,6 +16,7 @@ import {
 import { runSourceAwareScan } from './scan.ts';
 import { isStrictZeroToTwoExperience, parseExperience } from './classification/experience.ts';
 import { classifyFinance, classifyLocation, isNoiseTitle } from './classification/taxonomy.ts';
+import { extractJobLink } from './job-link.ts';
 
 Deno.serve(async (request) => {
   const origin = request.headers.get('Origin');
@@ -30,6 +31,7 @@ Deno.serve(async (request) => {
     if (route.endsWith('/jobs') && request.method === 'GET') return getJobs(headers);
     if (route.endsWith('/candidates') && request.method === 'GET') return getCandidates(headers);
     if (route.endsWith('/job-status') && request.method === 'GET') return getJobStatus(url, headers);
+    if (route.endsWith('/job-link') && request.method === 'GET') return getJobLink(url, headers);
     if (route.endsWith('/coverage') && request.method === 'GET') return getCoverage(headers);
     if (route.endsWith('/push/subscribe') && request.method === 'POST') return saveSubscription(request, headers);
     if (route.endsWith('/push/send') && request.method === 'POST') return sendPushWorker(request, headers);
@@ -185,6 +187,52 @@ function newestDate(values: Array<string | null>): string | null {
     .filter((timestamp) => Number.isFinite(timestamp))
     .sort((left, right) => right - left);
   return parsed.length > 0 ? new Date(parsed[0]).toISOString() : null;
+}
+
+const jobLinkCooldown = new Map<string, number>();
+const JOB_LINK_COOLDOWN_MS = 20_000;
+const JOB_LINK_GLOBAL_PER_MINUTE = 60;
+const JOB_LINK_IP_PER_MINUTE = 20;
+const jobLinkRecent: number[] = [];
+const jobLinkRecentByIp = new Map<string, number[]>();
+
+// Public, keyless role-link import. SSRF-safe fetch is inside extractJobLink;
+// this handler only guards volume so the route is not a free fetch proxy.
+async function getJobLink(url: URL, headers: Record<string, string>) {
+  const rawUrl = url.searchParams.get('url') || '';
+  const now = Date.now();
+  const cooldownKey = rawUrl.slice(0, 512);
+  const lastChecked = jobLinkCooldown.get(cooldownKey);
+  if (lastChecked && now - lastChecked < JOB_LINK_COOLDOWN_MS) {
+    return json({ error: 'That link was checked very recently; try again shortly.' }, headers, 429);
+  }
+  while (jobLinkRecent.length && now - jobLinkRecent[0] < 60_000) jobLinkRecent.shift();
+  if (jobLinkRecent.length >= JOB_LINK_GLOBAL_PER_MINUTE) {
+    return json({ error: 'Import limit reached for this minute; try again shortly.' }, headers, 429);
+  }
+  jobLinkRecent.push(now);
+  if (jobLinkRecentByIp.size > 5000) jobLinkRecentByIp.clear();
+  const clientIp = requestIp(headers) || 'unknown';
+  const ipTimes = (jobLinkRecentByIp.get(clientIp) || []).filter((stamp) => now - stamp < 60_000);
+  if (ipTimes.length >= JOB_LINK_IP_PER_MINUTE) {
+    return json({ error: 'Too many imports from this address; try again shortly.' }, headers, 429);
+  }
+  ipTimes.push(now);
+  jobLinkRecentByIp.set(clientIp, ipTimes);
+
+  try {
+    const result = await extractJobLink(rawUrl);
+    jobLinkCooldown.set(cooldownKey, now);
+    return json({ ok: true, ...result }, headers);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not import that role link';
+    return json({ ok: false, error: message }, headers, 422);
+  }
+}
+
+function requestIp(headers: Record<string, string>): string {
+  const forwarded = headers['x-forwarded-for'];
+  return forwarded ? forwarded.split(',')[0].trim() : '';
 }
 
 const jobStatusCooldown = new Map<string, number>();

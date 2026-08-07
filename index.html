@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>First Look - finance roles</title>
-    <link rel="stylesheet" href="./styles.css?v=11" />
+    <link rel="stylesheet" href="./styles.css?v=12" />
 
   </head>
   <body>
@@ -149,6 +149,18 @@
             </div>
           </div>
 
+          <div class="role-link-intake">
+            <div>
+              <strong>Paste a role link</strong>
+              <p>Paste any employer job posting link. The monitor fetches it, extracts the role, and drafts a reviewable listing you can tailor a CV and cover letter for — if the posting asks for one.</p>
+            </div>
+            <form class="role-link-form" id="role-link-form">
+              <label class="field-label" for="role-link-url">Role posting URL<input id="role-link-url" type="url" required maxlength="2048" placeholder="https://jobs.employer.com/…" /></label>
+              <div class="cv-controls"><button class="button button-dark" type="submit">Fetch role</button><button class="text-button" id="clear-role-links" type="button">Clear imported roles</button></div>
+            </form>
+            <div class="role-link-preview" id="role-link-preview" aria-live="polite"></div>
+          </div>
+
 
           <div class="empty-state" id="matches-empty" aria-live="polite">
             <div>
@@ -223,6 +235,6 @@
     <script src="./hiring-signal.js?v=1"></script>
     <script src="./auth.js?v=1"></script>
     <script src="./outreach-corpus.js?v=1"></script>
-    <script src="./app.js?v=17"></script>
+    <script src="./app.js?v=18"></script>
   </body>
 </html>

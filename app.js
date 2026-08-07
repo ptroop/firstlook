@@ -95,6 +95,7 @@ const CV_REVIEW_STORAGE_KEY = 'first-look-review-gate-v1';
 const CV_EVIDENCE_REVIEW_STORAGE_KEY = 'first-look-cv-evidence-review-v1';
 const COVER_LETTER_STORAGE_KEY = 'first-look-cover-letter-drafts-v1';
 const PORTAL_STORAGE_KEY = 'first-look-portal-listings-v1';
+const ROLE_LINK_STORAGE_KEY = 'first-look-role-links-v1';
 const JOB_STATUS_STORAGE_KEY = 'first-look-job-status-v1';
 const JOB_STATUS_TTL_MS = 30 * 60 * 1000;
 let autoCheckedTopRoles = false;
@@ -222,8 +223,10 @@ function renderJobs(jobs) {
       const listedAt = jobListedAt(job);
       const listedDays = jobListedDays(job);
       const newBadge = listedDays !== null && listedDays <= 7 ? '<span class="badge badge-new">New</span>' : '';
+      const isRoleLink = String(job.id || '').startsWith('link_');
       const statusBadges = [
         `${newBadge}`,
+        isRoleLink ? '<span class="badge badge-warning">Pasted link</span>' : '',
         `<span class="badge badge-match">${job.matchTier === 'exact' ? 'Strong match' : 'Check match'}</span>`,
         job.experienceYears ? `<span class="badge">Experience ${escapeHtml(formatExperienceRange(job.experienceYears))}</span>` : '',
         job.officialVerified
@@ -1093,6 +1096,7 @@ function loadCoverLetterDrafts() {
 
 let coverLetterDrafts = loadCoverLetterDrafts();
 let portalListings = loadPortalListings();
+let roleLinkDrafts = loadRoleLinkDrafts();
 
 function loadReviewedDrafts() {
   try {
@@ -1330,6 +1334,127 @@ function simpleHash(value) {
 
 function savePortalListings() {
   try { localStorage.setItem(PORTAL_STORAGE_KEY, JSON.stringify(portalListings)); } catch (_error) { showToast('This browser blocked local portal storage.'); }
+}
+
+function loadRoleLinkDrafts() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(ROLE_LINK_STORAGE_KEY) || '[]');
+    if (!Array.isArray(stored)) return [];
+    return stored.filter((item) => item && typeof item === 'object' && item.title && item.company);
+  } catch (_error) {
+    return [];
+  }
+}
+
+function saveRoleLinkDrafts() {
+  try { localStorage.setItem(ROLE_LINK_STORAGE_KEY, JSON.stringify(roleLinkDrafts)); } catch (_error) { showToast('This browser blocked local role-link storage.'); }
+}
+
+function roleLinkSourceLabel(source) {
+  return ({ jsonld: 'Structured posting data', meta: 'Page metadata', title: 'Page title only' })[source] || 'Extracted from the page';
+}
+
+function roleLinkConfidenceTone(confidence) {
+  return ({ high: 'ok', medium: 'warn', low: 'warn' })[confidence] || 'muted';
+}
+
+async function fetchRoleLink(url) {
+  if (!API_BASE) { showToast('The monitor backend is not connected.'); return; }
+  const preview = document.querySelector('#role-link-preview');
+  if (!preview) return;
+  const submitButton = document.querySelector('#role-link-form button[type="submit"]');
+  if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Fetching…'; }
+  try {
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/job-link?url=${encodeURIComponent(url)}`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error || `Import failed (${response.status})`);
+    renderRoleLinkPreview(payload);
+    showToast('Role extracted. Review every field before adding it.');
+  } catch (error) {
+    preview.innerHTML = `<p class="role-link-error">${escapeHtml(error instanceof Error ? error.message : 'Could not fetch that role link.')}</p>`;
+  } finally {
+    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Fetch role'; }
+  }
+}
+
+let lastRoleLinkExtract = null;
+
+function renderRoleLinkPreview(extract) {
+  lastRoleLinkExtract = extract || null;
+  const preview = document.querySelector('#role-link-preview');
+  if (!preview) return;
+  const sourceLabel = roleLinkSourceLabel(extract.source);
+  const tone = roleLinkConfidenceTone(extract.confidence);
+  preview.innerHTML = `
+    <article class="role-link-card">
+      <div class="role-link-card-head">
+        <div><h4>Extracted role</h4><span class="section-meta">${escapeHtml(sourceLabel)} · <span class="badge verdict-${tone}">${escapeHtml(extract.confidence)} confidence</span></span></div>
+        <a class="text-button" href="${escapeAttribute(extract.detailUrl)}" target="_blank" rel="noreferrer">Open original</a>
+      </div>
+      <p class="privacy-note">${escapeHtml(extract.note || '')} Not an official First Look verification — confirm the role on the employer site before applying.</p>
+      <div class="role-link-fields">
+        <label class="field-label">Title<input id="role-link-title" maxlength="200" value="${escapeAttribute(extract.title)}" /></label>
+        <label class="field-label">Company<input id="role-link-company" maxlength="120" value="${escapeAttribute(extract.company)}" /></label>
+        <label class="field-label">Location<input id="role-link-location" maxlength="160" value="${escapeAttribute(extract.location)}" placeholder="India" /></label>
+        <label class="field-label" for="role-link-description">Requirements text <span class="field-help">Used locally to tailor your CV and decide whether a cover letter is expected.</span></label>
+        <textarea id="role-link-description" class="application-kit-textarea" rows="10">${escapeHtml(extract.description || '')}</textarea>
+      </div>
+      <div class="cv-controls">
+        <button class="button button-dark" type="button" id="role-link-confirm">Add role &amp; prepare kit</button>
+        <button class="text-button" type="button" id="role-link-discard">Discard</button>
+      </div>
+    </article>`;
+}
+
+function confirmRoleLink() {
+  const title = document.querySelector('#role-link-title')?.value.trim() || '';
+  const company = document.querySelector('#role-link-company')?.value.trim() || '';
+  if (!title || !company) { showToast('Add a title and company for the role.'); return; }
+  const url = document.querySelector('#role-link-url')?.value.trim() || '';
+  // Prefer the server's canonical (post-redirect) detail URL and extracted
+  // apply path over the raw pasted input.
+  const detailUrl = lastRoleLinkExtract?.detailUrl || url;
+  const applyUrl = lastRoleLinkExtract?.applyUrl || '';
+  const listing = {
+    id: `link_${simpleHash(detailUrl || url || title)}`,
+    company,
+    title,
+    location: document.querySelector('#role-link-location')?.value.trim() || 'India',
+    description: document.querySelector('#role-link-description')?.value || '',
+    applyUrl,
+    officialApplyUrl: '',
+    officialDetailUrl: detailUrl,
+    officialVerified: false,
+    verificationNote: 'Pasted role link; confirm the role and Apply path on the employer site.',
+    matchTier: 'possible',
+    firstSeenAt: new Date().toISOString(),
+    newestVerificationAt: new Date().toISOString(),
+    sourceHealthState: 'unknown',
+    sources: [{ type: 'other', name: 'Pasted role link', listingUrl: detailUrl, detailUrl, applyUrl, official: false, verifiedAt: new Date().toISOString() }],
+  };
+  const byId = new Map(roleLinkDrafts.map((item) => [item.id, item]));
+  byId.set(listing.id, listing);
+  roleLinkDrafts = [...byId.values()];
+  saveRoleLinkDrafts();
+  document.querySelector('#role-link-preview')?.replaceChildren();
+  document.querySelector('#role-link-form')?.reset();
+  renderJobs([...currentJobs.filter((job) => !String(job.id || '').startsWith('link_')), ...roleLinkDrafts]);
+  prepareApplicationKit(listing.id);
+  showToast('Role added locally. The kit is ready — tailor your CV and cover letter from the CV match panel.');
+}
+
+function discardRoleLink() {
+  lastRoleLinkExtract = null;
+  const preview = document.querySelector('#role-link-preview');
+  if (preview) preview.replaceChildren();
+  document.querySelector('#role-link-form')?.reset();
+}
+
+function clearRoleLinkDrafts() {
+  roleLinkDrafts = [];
+  saveRoleLinkDrafts();
+  renderJobs(currentJobs.filter((job) => !String(job.id || '').startsWith('link_')));
+  showToast('Imported role links cleared from this device.');
 }
 
 function saveCoverLetterDraft(jobId, value) {
@@ -1697,7 +1822,7 @@ async function loadData({ manual = false } = {}) {
   }
   try {
     if (FIXTURE_MODE) {
-      renderJobs([...fixture.jobs, ...portalListings]);
+      renderJobs([...fixture.jobs, ...portalListings, ...roleLinkDrafts]);
       renderCandidates([]);
       renderCoverage(fixture.coverage);
       return;
@@ -1717,7 +1842,7 @@ async function loadData({ manual = false } = {}) {
     ]);
     if (jobsResult.status === 'fulfilled') {
       latestSnapshotAt = jobsResult.value?.snapshotAt || null;
-      renderJobs([...(Array.isArray(jobsResult.value.jobs) ? jobsResult.value.jobs : []), ...portalListings]);
+      renderJobs([...(Array.isArray(jobsResult.value.jobs) ? jobsResult.value.jobs : []), ...portalListings, ...roleLinkDrafts]);
       autoCheckTopRoles();
     } else showFeedState('Job feed unavailable', 'The monitor could not be reached. Try again shortly.', 'Connection error');
     if (coverageResult.status === 'fulfilled') renderCoverage(coverageResult.value);
@@ -2208,6 +2333,22 @@ document.querySelector('#clear-portal-listings')?.addEventListener('click', () =
   savePortalListings();
   renderJobs(currentJobs.filter((job) => !String(job.id || '').startsWith('portal_')));
   showToast('Imported portal listings cleared from this device.');
+});
+document.querySelector('#role-link-form')?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const url = document.querySelector('#role-link-url')?.value.trim() || '';
+  if (!url) { showToast('Paste a role posting URL first.'); return; }
+  fetchRoleLink(url);
+});
+document.querySelector('#clear-role-links')?.addEventListener('click', clearRoleLinkDrafts);
+document.addEventListener('click', (event) => {
+  if (event.target.closest('#role-link-confirm')) {
+    confirmRoleLink();
+    return;
+  }
+  if (event.target.closest('#role-link-discard')) {
+    discardRoleLink();
+  }
 });
 cvProfile?.addEventListener('input', () => {
   if (cvMeta) cvMeta.textContent = 'Unsaved changes';
