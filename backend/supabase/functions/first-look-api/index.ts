@@ -29,6 +29,10 @@ Deno.serve(async (request) => {
   try {
     if (route.endsWith('/health')) return json({ ok: true, service: 'first-look-job-monitor' }, headers);
     if (route.endsWith('/jobs') && request.method === 'GET') return getJobs(headers);
+    if (route.endsWith('/roles') && request.method === 'GET') return getAllRoles(headers);
+    if (route.endsWith('/resume') && request.method === 'POST') return saveResumeCopy(request, headers);
+    if (route.endsWith('/resume/list') && request.method === 'GET') return listResumeCopies(request, headers);
+    if (route.endsWith('/resume/download') && request.method === 'GET') return downloadResumeCopy(request, url, headers);
     if (route.endsWith('/candidates') && request.method === 'GET') return getCandidates(headers);
     if (route.endsWith('/job-status') && request.method === 'GET') return getJobStatus(url, headers);
     if (route.endsWith('/job-link') && request.method === 'GET') return getJobLink(url, headers);
@@ -79,8 +83,161 @@ function corsHeaders(origin: string | null) {
     'Access-Control-Allow-Origin': isAllowed ? origin : (allowedOrigins[0] || '*'),
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Expose-Headers': 'Content-Disposition',
     'Content-Type': 'application/json',
   };
+}
+
+const RESUME_BUCKET = 'resume-intake';
+const RESUME_MAX_BYTES = 10 * 1024 * 1024;
+const RESUME_TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  txt: 'text/plain',
+  md: 'text/markdown',
+  html: 'text/html',
+};
+
+interface ResumeUser {
+  id: string;
+  email: string;
+}
+
+type ResumeAuth = { user: ResumeUser } | { response: Response };
+
+async function authenticateResumeUser(request: Request, headers: Record<string, string>): Promise<ResumeAuth> {
+  const token = request.headers.get('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const baseUrl = Deno.env.get('SUPABASE_URL')?.replace(/\/+$/, '');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!token || !baseUrl || !serviceKey) return { response: json({ error: 'Unauthorized' }, headers, 401) };
+
+  const response = await fetch(`${baseUrl}/auth/v1/user`, {
+    headers: { apikey: serviceKey, Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) return { response: json({ error: 'Unauthorized' }, headers, 401) };
+  const user = await response.json() as { id?: unknown; email?: unknown };
+  if (typeof user.id !== 'string' || typeof user.email !== 'string' || !user.email.trim()) {
+    return { response: json({ error: 'Unauthorized' }, headers, 401) };
+  }
+  return { user: { id: user.id, email: user.email.trim().toLowerCase() } };
+}
+
+async function authenticateResumeAdmin(request: Request, headers: Record<string, string>): Promise<ResumeAuth> {
+  const auth = await authenticateResumeUser(request, headers);
+  if ('response' in auth) return auth;
+  const admins = (Deno.env.get('RESUME_ADMIN_EMAILS') || '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+  if (!admins.includes(auth.user.email)) return { response: json({ error: 'Forbidden' }, headers, 403) };
+  return auth;
+}
+
+function storagePath(path: string): string | null {
+  const value = String(path || '').trim();
+  if (!/^resume-intake\/[a-zA-Z0-9._-]+$/.test(value) || value.includes('..')) return null;
+  return value;
+}
+
+async function storageApiRequest(path: string, options: RequestInit = {}): Promise<Response> {
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const baseUrl = Deno.env.get('SUPABASE_URL')?.replace(/\/+$/, '');
+  if (!serviceKey || !baseUrl) throw new Error('Storage is not configured');
+  return fetch(`${baseUrl}/storage/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      ...(options.headers || {}),
+    },
+  });
+}
+
+async function storageRequest(path: string, options: RequestInit = {}): Promise<Response> {
+  return storageApiRequest(`object/${RESUME_BUCKET}/${path
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/')}`, options);
+}
+
+function resumeFilename(path: string): string {
+  const raw = path.split('/').pop() || 'resume';
+  return raw.replace(/^\d+-[0-9a-f-]{36}-/i, '').replace(/[^a-zA-Z0-9._ -]/g, '_').slice(0, 120) || 'resume';
+}
+
+async function saveResumeCopy(request: Request, headers: Record<string, string>) {
+  const auth = await authenticateResumeUser(request, headers);
+  if ('response' in auth) return auth.response;
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength > RESUME_MAX_BYTES + 64_000) return json({ error: 'Resume is too large' }, headers, 413);
+
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch (_error) {
+    return json({ error: 'Upload could not be read' }, headers, 400);
+  }
+  const file = form.get('file');
+  if (!(file instanceof File)) return json({ error: 'Choose a resume file' }, headers, 400);
+  if (file.size <= 0 || file.size > RESUME_MAX_BYTES) return json({ error: 'Resume must be between 1 byte and 10 MB' }, headers, 413);
+
+  const extension = file.name.toLowerCase().split('.').pop() || '';
+  const contentType = RESUME_TYPES[extension];
+  if (!contentType) return json({ error: 'Use PDF, DOCX, TXT, MD or HTML' }, headers, 415);
+  const safeStem = file.name
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9._ -]/g, '_')
+    .trim()
+    .slice(0, 80) || 'resume';
+  const path = `resume-intake/${Date.now()}-${crypto.randomUUID()}-${safeStem}.${extension}`;
+  const response = await storageRequest(path, {
+    method: 'POST',
+    headers: { 'Content-Type': contentType, 'x-upsert': 'false' },
+    body: await file.arrayBuffer(),
+  });
+  if (!response.ok) {
+    console.error(`Resume storage upload failed with HTTP ${response.status} for ${auth.user.id}`);
+    return json({ error: 'Resume could not be saved' }, headers, 502);
+  }
+  return json({ saved: true, name: resumeFilename(path) }, headers, 201);
+}
+
+async function listResumeCopies(request: Request, headers: Record<string, string>) {
+  const auth = await authenticateResumeAdmin(request, headers);
+  if ('response' in auth) return auth.response;
+  const response = await storageApiRequest(`object/list/${RESUME_BUCKET}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prefix: '', limit: 100, offset: 0, sortBy: { column: 'created_at', order: 'desc' } }),
+  });
+  if (!response.ok) return json({ error: 'Resume inbox is unavailable' }, headers, 502);
+  const objects = await response.json() as Array<{ name?: unknown; created_at?: unknown; updated_at?: unknown; metadata?: unknown }>;
+  const copies = (Array.isArray(objects) ? objects : [])
+    .filter((item) => typeof item.name === 'string')
+    .map((item) => {
+      const name = String(item.name).replace(/^resume-intake\//, '');
+      const path = storagePath(`resume-intake/${name}`);
+      return path ? {
+        path,
+        name: resumeFilename(path),
+        createdAt: typeof item.created_at === 'string' ? item.created_at : (typeof item.updated_at === 'string' ? item.updated_at : null),
+      } : null;
+    })
+    .filter((item): item is { path: string; name: string; createdAt: string | null } => Boolean(item));
+  return json({ copies }, headers);
+}
+
+async function downloadResumeCopy(request: Request, url: URL, headers: Record<string, string>) {
+  const auth = await authenticateResumeAdmin(request, headers);
+  if ('response' in auth) return auth.response;
+  const path = storagePath(url.searchParams.get('path') || '');
+  if (!path) return json({ error: 'Invalid resume path' }, headers, 400);
+  const response = await storageRequest(path);
+  if (!response.ok || !response.body) return json({ error: 'Resume not found' }, headers, response.status === 404 ? 404 : 502);
+  const downloadHeaders = new Headers(headers);
+  downloadHeaders.set('Content-Type', response.headers.get('Content-Type') || 'application/octet-stream');
+  downloadHeaders.set('Content-Disposition', `attachment; filename="${resumeFilename(path).replace(/"/g, '')}"`);
+  return new Response(response.body, { status: 200, headers: downloadHeaders });
 }
 
 function isSeniorOrNonFinanceTitle(title: string): boolean {
@@ -132,6 +289,49 @@ async function getJobs(headers: Record<string, string>) {
     ...sources.map((source) => source.last_verified_at),
   ]);
   return json({ jobs: sortPresentedJobs(rows.map((row) => presentJob(row, sources, health))), snapshotAt }, headers);
+}
+
+async function getAllRoles(headers: Record<string, string>) {
+  const select = 'connector_id,source_external_id,company,title,location,detail_url,last_seen_at,candidate_status,candidate_reasons';
+  const pageSize = 1000;
+  const rows: InventoryRoleRow[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const page = (await supabaseClient().request(
+      `/rest/v1/source_inventory?active=eq.true&select=${select}&order=last_seen_at.desc&limit=${pageSize}&offset=${offset}`,
+    )) as InventoryRoleRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  const roles = rows
+    .filter((row) => row.title?.trim() && row.detail_url?.trim())
+    .map((row) => ({
+      id: `inventory:${row.connector_id}:${row.source_external_id}`.slice(0, 180),
+      company: row.company,
+      title: row.title,
+      location: row.location || 'Location not listed',
+      description: '',
+      officialDetailUrl: row.detail_url,
+      officialApplyUrl: null,
+      officialVerified: true,
+      matchTier: 'not_targeted',
+      inventoryRole: true,
+      inventoryStatus: row.candidate_status,
+      candidateReasons: Array.isArray(row.candidate_reasons) ? row.candidate_reasons.slice(0, 8) : [],
+      firstSeenAt: row.last_seen_at,
+      newestVerificationAt: row.last_seen_at,
+      sources: [{
+        type: 'official_career',
+        name: `${row.company} Careers`,
+        listingUrl: row.detail_url,
+        detailUrl: row.detail_url,
+        applyUrl: null,
+        official: true,
+        verifiedAt: row.last_seen_at,
+      }],
+    }));
+
+  return json({ roles, snapshotAt: newestDate(rows.map((row) => row.last_seen_at)) }, headers);
 }
 
 async function getCandidates(headers: Record<string, string>) {
@@ -190,6 +390,18 @@ interface CandidateInventoryRow {
   department: string | null;
   detail_url: string | null;
   last_seen_at: string;
+  candidate_reasons: unknown;
+}
+
+interface InventoryRoleRow {
+  connector_id: string;
+  source_external_id: string;
+  company: string;
+  title: string;
+  location: string | null;
+  detail_url: string;
+  last_seen_at: string;
+  candidate_status: string;
   candidate_reasons: unknown;
 }
 

@@ -57,7 +57,6 @@ waves. The URLs below are discovery pages, not direct role links.
 | Evalueserve | [Careers](https://www.evalueserve.com/careers/) | Discover public role endpoint |
 | Acuity Knowledge Partners | [Careers](https://www.acuitykp.com/careers/) | Discover public role endpoint |
 | SG Analytics | [Careers](https://www.sganalytics.com/careers/) | Discover public role endpoint |
-| EY GDS | [India careers](https://www.ey.com/en_in/careers) | Identify the current country search/API and distinguish GDS finance roles |
 | GT Bharat | [Careers](https://www.grantthornton.in/careers/) | Identify India search/API and filter advisory finance roles |
 | HDFC Bank | [Careers](https://www.hdfcbank.com/personal/about-us/careers) | Confirm employer-owned applicant system; do not use third-party HDFC client pages |
 | ICICI Bank | [ICICI Careers](https://www.icicicareers.com/) | Verify public role search and direct application route |
@@ -66,7 +65,6 @@ waves. The URLs below are discovery pages, not direct role links.
 | IDFC First | [Careers](https://www.idfcfirstbank.com/about-us/careers) | Verify public role search and direct application route |
 | Bajaj Finserv | [Careers](https://www.bajajfinserv.in/careers) | Verify public role search and direct application route |
 | Tata Capital | [Careers](https://www.tatacapital.com/careers.html) | Verify public role search and direct application route |
-| CRED | [Openings](https://careers.cred.club/openings) | Inspect public page data; do not assume the shell is a feed until role IDs are extracted |
 | HDFC AMC | [Careers](https://www.hdfcfund.com/about-us/careers) | Verify the AMC entity and public role search |
 | ICICI Pru AMC | [Careers](https://www.icicipruamc.com/careers) | Verify the AMC entity and public role search |
 | Motilal Oswal | [Careers](https://www.motilaloswalgroup.com/careers) | Verify group/entity and public role search |
@@ -75,8 +73,12 @@ waves. The URLs below are discovery pages, not direct role links.
 
 The first seven rows are the best custom-search candidates because the official
 sites expose distinct India careers paths. CRISIL is the strongest immediate
-ATS investigation because its careers surface is a public Zwayam portal. None
-of these rows is promoted to “supported” until the connector contract passes.
+ATS investigation because its careers surface is a public Zwayam portal. CRED
+and EY GDS are no longer in this queue: CRED runs on the public Lever postings
+feed (`api.lever.co/v0/postings/cred`) and EY GDS on an India-filtered Yello
+job board (`eyglobal.yello.co`), both verified live and connected through
+quota-free official connectors. None of the remaining rows is promoted to
+“supported” until the connector contract passes.
 
 ## Portal policy
 

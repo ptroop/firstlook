@@ -63,6 +63,8 @@ test('reports coverage only for implemented official connectors', () => {
     'groww-official-india',
     'phonepe-official-india',
     'paytm-official-india',
+    'cred-official-india',
+    'ey-gds-official-india',
     'kpmg-official-india',
     'amex-official-india',
     'jpmorgan-official-india',

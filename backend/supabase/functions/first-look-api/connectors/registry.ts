@@ -19,7 +19,8 @@ import { createSpGlobalConnector } from './spglobal.ts';
 import { createDeloitteConnector } from './deloitte.ts';
 import { createAmazonConnector } from './amazon.ts';
 import { createSiemensConnector } from './siemens.ts';
-import { PAYTM_LEVER_CONFIG, createLeverConnector } from './lever.ts';
+import { PAYTM_LEVER_CONFIG, CRED_LEVER_CONFIG, createLeverConnector } from './lever.ts';
+import { EY_GDS_YELLO_CONFIG, createYelloConnector } from './yello.ts';
 import {
   MICROSOFT_CONFIG, HSBC_CONFIG,
   PIRAMAL_CONFIG, PINE_LABS_CONFIG, ICRA_CONFIG, RCV_FIRECRAWL_WAVES, createFirecrawlConnector
@@ -59,6 +60,10 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createGreenhouseConnector(PHONEPE_CONFIG, fetch, 'phonepe-reconcile'),
     createLeverConnector(PAYTM_LEVER_CONFIG, fetch, 'paytm-watch'),
     createLeverConnector(PAYTM_LEVER_CONFIG, fetch, 'paytm-reconcile'),
+    createLeverConnector(CRED_LEVER_CONFIG, fetch, 'cred-watch'),
+    createLeverConnector(CRED_LEVER_CONFIG, fetch, 'cred-reconcile'),
+    createYelloConnector(EY_GDS_YELLO_CONFIG, fetch, 'watch', 'ey-gds-watch'),
+    createYelloConnector(EY_GDS_YELLO_CONFIG, fetch, 'reconcile', 'ey-gds-reconcile'),
     createOracleConnector(KPMG_CONFIG, fetch, 'kpmg-watch'),
     createOracleConnector(KPMG_CONFIG, fetch, 'kpmg-reconcile'),
     createOracleConnector(AMEX_CONFIG, fetch, 'amex-watch'),

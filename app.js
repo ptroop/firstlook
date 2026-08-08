@@ -54,13 +54,14 @@ const matchesEmpty = document.querySelector('#matches-empty');
 const matchesMeta = document.querySelector('#matches-meta');
 const coverageList = document.querySelector('#coverage-list');
 const coverageMeta = document.querySelector('#coverage-meta');
-const candidateSection = document.querySelector('#candidate-section');
-const candidateList = document.querySelector('#candidate-list');
-const candidateMeta = document.querySelector('#candidate-meta');
 const toast = document.querySelector('#toast');
 const refreshButton = document.querySelector('#refresh-feed');
 const cvProfile = document.querySelector('#cv-profile');
 const cvFile = document.querySelector('#cv-file');
+const downloadResumeButton = document.querySelector('#download-resume');
+const saveResumeCopyButton = document.querySelector('#save-resume-copy');
+const resumeInboxToggle = document.querySelector('#resume-inbox-toggle');
+const resumeInbox = document.querySelector('#resume-inbox');
 const cvResults = document.querySelector('#cv-results');
 const cvResultsMeta = document.querySelector('#cv-results-meta');
 const cvMeta = document.querySelector('#cv-meta');
@@ -88,7 +89,7 @@ const VAPID_PUBLIC_KEY = window.JOB_MONITOR_VAPID_PUBLIC_KEY || '';
 const FIXTURE_MODE = new URLSearchParams(window.location.search).get('fixture') === '1';
 let toastTimer;
 let currentJobs = [];
-let currentCandidates = [];
+let importedResumeFile = null;
 let latestCoverage = [];
 let latestSnapshotAt = null;
 let refreshInFlight = false;
@@ -104,6 +105,7 @@ const JOB_STATUS_TTL_MS = 30 * 60 * 1000;
 let autoCheckedTopRoles = false;
 let selectedApplicationKitId = null;
 let feedRecencyDays = 0;
+let feedCompanyFilter = '';
 const SKILL_KEYWORDS = [
   'Python', 'SQL', 'Excel', 'AWS', 'Financial Modeling', 'Tableau', 
   'Power BI', 'Machine Learning', 'C++', 'Java', 'Bloomberg', 'R', 
@@ -152,16 +154,65 @@ function formatListedAge(value) {
 }
 
 function visibleFeedJobs() {
-  if (!feedRecencyDays) return currentJobs;
-  return currentJobs.filter((job) => {
+  const companyFiltered = feedCompanyFilter
+    ? currentJobs.filter((job) => companyKey(job.company) === feedCompanyFilter)
+    : currentJobs;
+  if (!feedRecencyDays) return companyFiltered;
+  return companyFiltered.filter((job) => {
     const days = jobListedDays(job);
     return days === null || days <= feedRecencyDays;
   });
 }
 
+function normalizeInventoryRole(role) {
+  const detailUrl = role?.officialDetailUrl || role?.sources?.[0]?.detailUrl || '';
+  return {
+    ...role,
+    id: role?.id || `inventory:${role?.company || 'employer'}:${role?.title || 'role'}:${role?.location || ''}`,
+    description: role?.description || '',
+    firstSeenAt: role?.firstSeenAt || role?.newestVerificationAt || '',
+    postedAt: role?.postedAt || null,
+    officialDetailUrl: detailUrl,
+    officialApplyUrl: role?.officialApplyUrl || null,
+    officialVerified: true,
+    matchTier: role?.matchTier || 'not_targeted',
+    inventoryRole: true,
+    eligibilityNote: null,
+    verificationNote: null,
+  };
+}
+
+function feedJobKey(job) {
+  const sourceUrl = job?.officialDetailUrl || job?.officialApplyUrl || job?.sources?.[0]?.detailUrl || '';
+  if (sourceUrl) return `url:${sourceUrl}`;
+  return `role:${companyKey(job?.company)}|${String(job?.title || '').trim().toLowerCase()}|${String(job?.location || '').trim().toLowerCase()}`;
+}
+
+function mergeFeedJobs(jobs, inventoryRoles) {
+  const merged = [];
+  const seen = new Set();
+  for (const job of [...(Array.isArray(jobs) ? jobs : []), ...(Array.isArray(inventoryRoles) ? inventoryRoles.map(normalizeInventoryRole) : [])]) {
+    const key = feedJobKey(job);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(job);
+  }
+  return merged;
+}
+
 function renderFeedFilter() {
   const container = document.querySelector('#feed-filter');
   if (!container) return;
+  const companySelect = document.querySelector('#feed-company-filter');
+  if (companySelect) {
+    const companies = [...new Map(currentJobs
+      .filter((job) => job?.company)
+      .map((job) => [companyKey(job.company), String(job.company).trim()]))]
+      .sort((left, right) => left[1].localeCompare(right[1]));
+    if (feedCompanyFilter && !companies.some(([key]) => key === feedCompanyFilter)) feedCompanyFilter = '';
+    companySelect.innerHTML = `<option value="">All companies</option>${companies.map(([key, name]) => `<option value="${escapeAttribute(key)}">${escapeHtml(name)}</option>`).join('')}`;
+    companySelect.value = feedCompanyFilter;
+  }
   container.querySelectorAll('.feed-recency').forEach((button) => {
     button.classList.toggle('is-active', Number(button.dataset.days || 0) === feedRecencyDays);
   });
@@ -178,6 +229,11 @@ function renderJobs(jobs) {
     return;
   }
 
+  if (!profileText()) {
+    showFeedState('Upload your resume to rank roles', 'Your ranked feed starts after you save a resume.', `${jobs.length} roles ready`);
+    return;
+  }
+
   const visible = visibleFeedJobs();
   if (!visible.length) {
     showFeedState(`No roles listed in the last ${feedRecencyDays} days`, 'Widen the recency filter to see older verified roles.', `${jobs.length} roles in snapshot · filter: last ${feedRecencyDays} days`);
@@ -189,23 +245,8 @@ function renderJobs(jobs) {
   const filteredLabel = feedRecencyDays && visible.length !== jobs.length ? ` of ${jobs.length}` : '';
   matchesMeta.textContent = `${visible.length}${filteredLabel} ${visible.length === 1 ? 'role' : 'roles'}${latestSnapshotAt ? ` · feed updated ${formatAge(latestSnapshotAt)}` : ''}`;
 
-  const byCompany = {};
-  for (const job of visible) {
-    if (!byCompany[job.company]) byCompany[job.company] = [];
-    byCompany[job.company].push(job);
-  }
-  for (const company of Object.keys(byCompany)) {
-    byCompany[company].sort((left, right) => jobListedTimestamp(right) - jobListedTimestamp(left));
-  }
-
-  const sortedCompanies = Object.keys(byCompany).sort((left, right) => {
-    const newestLeft = Math.max(...byCompany[left].map(jobListedTimestamp));
-    const newestRight = Math.max(...byCompany[right].map(jobListedTimestamp));
-    return newestRight - newestLeft || left.localeCompare(right);
-  });
-
-  // Tsenta-style resume-aware scoring: match % is expensive per role, so scores
-  // are memoized against the saved profile and only recomputed when it changes.
+  // Resume-aware scoring is memoized against the saved profile and only
+  // recomputed when the profile changes.
   const profileFingerprint = (() => {
     const profile = profileText();
     return profile ? simpleHash(profile) : '';
@@ -236,21 +277,12 @@ function renderJobs(jobs) {
     }
   }
 
-  jobList.innerHTML = sortedCompanies.map(company => {
-    const companyJobs = byCompany[company];
-    const headerHtml = `
-      <div class="company-category-header" onclick="this.parentElement.classList.toggle('is-expanded')">
-        <div class="company-category-info">
-          <h3>${escapeHtml(company)}</h3>
-          <span class="vacancy-count">${companyJobs.length} ${companyJobs.length === 1 ? 'vacancy' : 'vacancies'}</span>
-        </div>
-        <div class="company-category-chevron">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-        </div>
-      </div>
-    `;
+  const ranked = [...visible].sort((left, right) => {
+    const scoreDifference = (jobMatchScore(right) ?? -1) - (jobMatchScore(left) ?? -1);
+    return scoreDifference || jobListedTimestamp(right) - jobListedTimestamp(left) || String(left.company || '').localeCompare(String(right.company || ''));
+  });
 
-    const jobsHtml = companyJobs.map(job => {
+  jobList.innerHTML = ranked.map(job => {
       const sources = Array.isArray(job.sources) ? job.sources : [];
       const applyUrl = directApplyUrl(job);
       const roleUrl = roleReviewUrl(job);
@@ -266,8 +298,8 @@ function renderJobs(jobs) {
       const statusBadges = [
         `${newBadge}`,
         isRoleLink ? '<span class="badge badge-warning">Pasted link</span>' : '',
+        job.inventoryRole ? '<span class="badge">Source listing</span>' : '',
         matchBadge,
-        `<span class="badge badge-match">${job.matchTier === 'exact' ? 'Strong match' : 'Check match'}</span>`,
         job.experienceYears ? `<span class="badge">Experience ${escapeHtml(formatExperienceRange(job.experienceYears))}</span>` : '',
         job.officialVerified
           ? '<span class="badge">Official source</span>'
@@ -286,12 +318,15 @@ function renderJobs(jobs) {
         return `<a href="${url}" target="_blank" rel="noreferrer"><span>${escapeHtml(source.name || sourceLabel(source.type))}</span><small>${source.official ? 'Official' : 'Portal'} / ${escapeHtml(formatAge(source.verifiedAt))}</small></a>`;
       }).join('');
       const note = job.eligibilityNote || job.verificationNote;
+      const primaryUrl = applyUrl || roleUrl;
+      const primaryLabel = applyUrl ? applyLabel : 'Open role';
 
       const jobId = jobIdentity(job);
       return `
         <article class="job-card" data-job-id="${escapeAttribute(jobId)}">
           <div class="job-main">
             <h3>${escapeHtml(job.title)}</h3>
+            <p class="job-company">${escapeHtml(job.company || 'Employer not listed')}</p>
             <p class="job-location">${escapeHtml(job.location || 'Location not listed')}</p>
             <div class="badge-row">${statusBadges}</div>
             ${skillsHtml}
@@ -301,7 +336,7 @@ function renderJobs(jobs) {
             <span class="verified-time">${listedAt ? `Listed ${escapeHtml(formatListedAge(listedAt))} · ` : ''}Verified ${escapeHtml(formatAge(job.newestVerificationAt))}</span>
             <span class="job-status-area" data-status-job-id="${escapeAttribute(jobId)}">${statusBadgeHtml(jobId)}<button class="text-button job-status-check" type="button" data-status-job-id="${escapeAttribute(jobId)}">Check if open</button></span>
             <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Prepare kit</button>
-            ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${applyLabel}</a>` : '<span class="apply-unavailable">Direct Apply link pending</span>'}
+            ${primaryUrl ? `<a class="button button-accent" href="${primaryUrl}" target="_blank" rel="noreferrer">${primaryLabel}</a>` : ''}
             ${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}
           </div>
           <details class="source-details">
@@ -312,48 +347,6 @@ function renderJobs(jobs) {
       `;
     }).join('');
 
-    return `
-      <div class="company-category">
-        ${headerHtml}
-        <div class="company-jobs-list">
-          ${jobsHtml}
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function renderCandidates(candidates) {
-  currentCandidates = Array.isArray(candidates) ? candidates : [];
-  if (!candidateSection || !candidateList || !candidateMeta) return;
-  if (!currentCandidates.length) {
-    candidateSection.hidden = true;
-    candidateMeta.textContent = '';
-    candidateList.innerHTML = '';
-    return;
-  }
-
-  const byCompany = currentCandidates.reduce((groups, candidate) => {
-    const company = String(candidate.company || 'Employer').trim();
-    (groups[company] ||= []).push(candidate);
-    return groups;
-  }, {});
-  candidateSection.hidden = false;
-  candidateMeta.textContent = `${currentCandidates.length} awaiting detail checks`;
-  candidateList.innerHTML = Object.keys(byCompany).sort((a, b) => a.localeCompare(b)).map((company) => `
-    <div class="candidate-company">
-      <div class="candidate-company-heading"><strong>${escapeHtml(company)}</strong><span>${byCompany[company].length}</span></div>
-      ${byCompany[company].slice(0, 12).map((candidate) => {
-        const detailUrl = safeUrl(candidate.officialDetailUrl || candidate.sources?.[0]?.detailUrl || '');
-        const reasons = Array.isArray(candidate.candidateReasons) ? candidate.candidateReasons.slice(0, 3).join(' · ') : '';
-        return `<article class="candidate-card">
-          <div><h4>${escapeHtml(candidate.title)}</h4><p>${escapeHtml(candidate.location || 'India')}</p><div class="badge-row"><span class="badge badge-warning">Full JD pending</span><span class="badge">Official source</span></div>${reasons ? `<small>Why it was queued: ${escapeHtml(reasons)}</small>` : ''}</div>
-          ${detailUrl ? `<a class="text-button" href="${detailUrl}" target="_blank" rel="noreferrer">Review source</a>` : ''}
-        </article>`;
-      }).join('')}
-      ${byCompany[company].length > 12 ? `<p class="candidate-more">${byCompany[company].length - 12} more candidates are queued for this employer.</p>` : ''}
-    </div>
-  `).join('');
 }
 
 function profileText() {
@@ -370,7 +363,7 @@ function renderCvQuality() {
   const profile = profileText();
   if (!engine || !profile) {
     cvQualityMeta.textContent = 'No profile yet';
-    cvQualityList.innerHTML = '<p class="cv-quality-empty">A local readability check, not an employer ATS score.</p>';
+    cvQualityList.innerHTML = '<p class="cv-quality-empty">Local readability check.</p>';
     return;
   }
   const result = engine.scoreResume(profile);
@@ -507,7 +500,7 @@ function renderApplicationWorkspace() {
       <label class="field-label" for="application-kit-notes">Notes <span class="field-help">Keep decisions, missing documents and follow-up context here.</span></label>
       <textarea id="application-kit-notes" class="application-kit-textarea" rows="4" placeholder="Next action...">${escapeHtml(selected.notes)}</textarea>
       <div class="application-contact-block">
-        <div class="application-kit-subheading"><h4>Recruiter / referral evidence</h4><span class="section-meta">Lookup stays opt-in and server-side; you send the email.</span></div>
+        <div class="application-kit-subheading"><h4>Recruiter / referral</h4><span class="section-meta">Verified contacts only.</span></div>
         <div class="application-kit-contact-grid">
           <label class="field-label">Name<input id="application-contact-name" value="${escapeAttribute(contact.name)}" maxlength="160" /></label>
           <label class="field-label">Role<input id="application-contact-title" value="${escapeAttribute(contact.title)}" maxlength="180" placeholder="Recruiter, alumnus..." /></label>
@@ -530,7 +523,7 @@ function renderApplicationWorkspace() {
         <p class="privacy-note">Do not infer an address. Save only a public or user-provided contact and retain its source.</p>
       </div>
       <div class="application-outreach-block">
-        <div class="application-kit-subheading"><h4>Cold email draft</h4><span class="section-meta">Built from the role and your matched evidence. First Look never sends email.</span></div>
+        <div class="application-kit-subheading"><h4>Cold email</h4><span class="section-meta">Draft only.</span></div>
         <p class="outreach-evidence">${outreachHint}</p>
         <textarea id="application-outreach-draft" class="application-kit-textarea" rows="8" placeholder="Hi [Name],&#10;&#10;I applied for the [role] at [company] and wanted to introduce myself...">${escapeHtml(selected.outreachDraft)}</textarea>
         <label class="review-gate"><input class="outreach-review" type="checkbox"${outreachReviewed ? ' checked' : ''} /> I reviewed every line of this draft against my profile before sending.</label>
@@ -541,10 +534,10 @@ function renderApplicationWorkspace() {
           <button class="text-button" type="button" id="application-outreach-sent">${selected.outreachSentAt ? `Sent ${escapeHtml(formatAge(selected.outreachSentAt))} — undo` : 'Mark as sent'}</button>
         </div>
         ${resultRow}
-        <p class="privacy-note">Keep the first message to 4-5 lines and ask for a brief chat, not a job. One or two polite follow-ups, 5-7 days apart, is the research-backed ceiling. Marking a send as delivered or replied teaches the app the employer's email pattern — your own private corpus.</p>
+        <p class="privacy-note">Keep it to 4–5 lines. Never invent evidence.</p>
       </div>
       <div class="application-followups">
-        <div class="application-kit-subheading"><h4>Follow-up tracker</h4><span class="section-meta">Add after you send the first message.</span></div>
+        <div class="application-kit-subheading"><h4>Follow-ups</h4><span class="section-meta">After outreach.</span></div>
         <div class="follow-up-list" id="application-followup-list">${followUpRows || '<p class="cv-quality-empty">No follow-ups yet.</p>'}</div>
         <div class="follow-up-add">
           <input id="application-followup-at" type="date" aria-label="Follow-up date" />
@@ -977,7 +970,7 @@ function renderHiringSignals() {
   const signals = window.FirstLookHiringSignals?.all() || [];
   if (meta) meta.textContent = `${signals.length} saved ${signals.length === 1 ? 'signal' : 'signals'} · unverified`;
   if (!signals.length) {
-    list.innerHTML = '<p class="cv-quality-empty">No signals saved yet. Capture a “we are hiring” post you want to review later — it is never treated as a verified role.</p>';
+    list.innerHTML = '<p class="cv-quality-empty">No signals saved yet. Capture a “we are hiring” post to review later.</p>';
     return;
   }
   list.innerHTML = signals.map((signal) => `
@@ -1012,7 +1005,7 @@ function addHiringSignal() {
   store.add({ sourceType, postUrl, company, title, contactName, contactEmail, note });
   document.querySelector('#hiring-signal-form')?.reset();
   renderHiringSignals();
-  showToast('Hiring signal saved as unverified. Confirm the role on the employer site before outreach.');
+  showToast('Hiring signal saved as unverified. Confirm on the employer site before outreach.');
 }
 
 function removeHiringSignal(id) {
@@ -1403,7 +1396,7 @@ async function fetchRoleLink(url) {
   const preview = document.querySelector('#role-link-preview');
   if (!preview) return;
   const submitButton = document.querySelector('#role-link-form button[type="submit"]');
-  if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Fetching…'; }
+  if (submitButton) { submitButton.disabled = true; submitButton.setAttribute('aria-busy', 'true'); }
   try {
     const response = await fetch(`${API_BASE.replace(/\/$/, '')}/job-link?url=${encodeURIComponent(url)}`);
     const payload = await response.json().catch(() => ({}));
@@ -1413,7 +1406,7 @@ async function fetchRoleLink(url) {
   } catch (error) {
     preview.innerHTML = `<p class="role-link-error">${escapeHtml(error instanceof Error ? error.message : 'Could not fetch that role link.')}</p>`;
   } finally {
-    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Fetch role'; }
+    if (submitButton) { submitButton.disabled = false; submitButton.removeAttribute('aria-busy'); }
   }
 }
 
@@ -1510,13 +1503,13 @@ function saveCoverLetterDraft(jobId, value) {
 function buildCvBrief(job, result) {
   const evidence = result.evidence.length
     ? `<ul>${result.evidence.map(({ term, excerpt }) => `<li><strong>${escapeHtml(term)}</strong> — “${escapeHtml(excerpt)}”</li>`).join('')}</ul>`
-    : '<p>No matching evidence line was found in the saved profile.</p>';
+    : '<p>No matching evidence.</p>';
   const requirements = result.requirements.length
     ? `<details class="cv-requirements"><summary>Requirement evidence (${result.requirements.length})</summary><ul>${result.requirements.map((item) => { const statusLabel = item.status === 'supported' ? 'Supported' : item.status === 'context' ? 'Context' : 'Gap'; return `<li class="requirement-${item.status}"><strong>${statusLabel}</strong> ${escapeHtml(item.label)}${item.excerpt ? `<small>Evidence: ${escapeHtml(item.excerpt)}</small>` : ''}</li>`; }).join('')}</ul></details>`
-    : '<p>Role requirements are not scoreable from the available posting text.</p>';
+    : '<p>Requirements unavailable.</p>';
   const reviewPoints = result.missing.length
     ? `<p class="cv-brief-warning">Hard gaps to review: ${escapeHtml(result.missing.join(', '))}. Add nothing unless your existing experience, coursework or project work supports it.</p>`
-    : '<p>No hard evidence gaps were detected in the available requirements.</p>';
+    : '<p>No hard evidence gaps found.</p>';
   const score = result.score === null ? 'Not scoreable' : `${result.score}/100 evidence match`;
   const eligibility = job.matchTier ? `<p>Monitor eligibility: <strong>${escapeHtml(job.matchTier)}</strong>${job.eligibilityNote ? ` — ${escapeHtml(job.eligibilityNote)}` : ''}</p>` : '';
   return `<p><strong>${escapeHtml(score)}</strong> · confidence: ${escapeHtml(result.confidence)}. This is evidence matching, not a hiring prediction.</p>${eligibility}<p>Use only evidence already present in your profile for <strong>${escapeHtml(job.title)}</strong>.</p>${evidence}${requirements}${reviewPoints}`;
@@ -1527,20 +1520,20 @@ function renderCvMatches() {
   const profile = profileText();
   renderCvQuality();
   if (!profile) {
-    cvResultsMeta.textContent = 'No profile yet';
-    cvResults.innerHTML = '<div class="cv-empty"><h3>No profile yet.</h3><p>Upload or paste your resume above.</p></div>';
+    cvResultsMeta.textContent = 'Add resume';
+    cvResults.innerHTML = '<div class="cv-empty"><h3>Add your resume.</h3></div>';
     return;
   }
   const pool = visibleFeedJobs();
   if (!pool.length) {
-    cvResultsMeta.textContent = 'No open roles yet';
-    cvResults.innerHTML = '<div class="cv-empty"><h3>No open roles yet.</h3><p>Your profile is saved; matches appear when the feed returns roles.</p></div>';
+    cvResultsMeta.textContent = 'No roles';
+    cvResults.innerHTML = '<div class="cv-empty"><h3>No roles yet.</h3></div>';
     return;
   }
   const engine = cvEngine();
   if (!engine) {
     cvResultsMeta.textContent = 'CV evaluator unavailable';
-    cvResults.innerHTML = '<div class="cv-empty"><h3>Evaluation is unavailable.</h3><p>Reload the page so the local evaluator can load.</p></div>';
+    cvResults.innerHTML = '<div class="cv-empty"><h3>Evaluation unavailable.</h3></div>';
     return;
   }
   const ranked = pool.map((job) => ({ job, result: engine.matchJob(job, profile) }))
@@ -1562,10 +1555,10 @@ function renderCvMatches() {
     const coverLetterPanel = canDraftCoverLetter && draft
       ? `<div class="cover-letter-panel" id="cover-letter-panel-${escapeAttribute(jobId)}" hidden>
           <p class="cover-status"><strong>Cover letter: ${escapeHtml(result.coverLetter.label)}</strong>${result.coverLetter.evidence ? ` — ${escapeHtml(result.coverLetter.evidence)}` : ''}</p>
-          <label class="field-label" for="cover-letter-${escapeAttribute(jobId)}">Conservative evidence-backed draft</label>
+          <label class="field-label" for="cover-letter-${escapeAttribute(jobId)}">Draft</label>
           <textarea class="cover-letter-textarea" id="cover-letter-${escapeAttribute(jobId)}" rows="13">${escapeHtml(draft)}</textarea>
           ${verifyNote}
-          <label class="review-gate"><input class="cover-letter-review" type="checkbox" data-cover-job-id="${escapeAttribute(jobId)}"${reviewed ? ' checked' : ''} /> I reviewed every line of this draft against my profile before use.</label>
+          <label class="review-gate"><input class="cover-letter-review" type="checkbox" data-cover-job-id="${escapeAttribute(jobId)}"${reviewed ? ' checked' : ''} /> I reviewed this draft.</label>
           <div class="cv-controls"><button class="button button-dark cover-letter-save" type="button" data-cover-job-id="${escapeAttribute(jobId)}">Save draft</button><button class="text-button cover-letter-copy" type="button" data-cover-job-id="${escapeAttribute(jobId)}"${reviewed ? '' : ' disabled'} title="${reviewed ? '' : 'Tick the review checkbox first.'}">Copy draft</button><button class="text-button cover-letter-export" type="button" data-cover-job-id="${escapeAttribute(jobId)}"${reviewed && (!verifyReport || verifyReport.ok) ? '' : ' disabled'} title="${reviewed ? (verifyReport && !verifyReport.ok ? 'Fix unverified lines first.' : '') : 'Tick the review checkbox first.'}">Export .docx</button></div>
           <p class="privacy-note">Local draft only. Review every line; unmatched requirements are not filled in and no metrics or experience were invented.</p>
         </div>`
@@ -1585,16 +1578,126 @@ function renderCvMatches() {
 function loadStoredProfile() {
   if (!cvProfile) return;
   try { cvProfile.value = localStorage.getItem(CV_STORAGE_KEY) || ''; } catch (_error) { /* private mode */ }
+  syncResumeDownload();
   renderCvMatches();
+}
+
+function syncResumeDownload() {
+  const hasResume = Boolean(importedResumeFile || profileText());
+  if (downloadResumeButton) downloadResumeButton.hidden = !hasResume;
+  if (saveResumeCopyButton) saveResumeCopyButton.hidden = !hasResume;
+}
+
+function downloadResume() {
+  const source = importedResumeFile || new Blob([profileText()], { type: 'text/plain;charset=utf-8' });
+  const filename = importedResumeFile?.name || 'resume.txt';
+  const url = URL.createObjectURL(source);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('Resume downloaded.');
+}
+
+function resumeAuthHeaders() {
+  const headers = {};
+  const token = window.FirstLookAuth?.sessionToken?.();
+  if (window.SUPABASE_ANON_KEY) headers.apikey = window.SUPABASE_ANON_KEY;
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+function requireResumeAuth() {
+  if (window.FirstLookAuth?.currentUser?.()) return true;
+  showToast('Sign in first.');
+  document.querySelector('#application-auth-bar')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return false;
+}
+
+async function saveResumeCopy() {
+  if (!API_BASE || !requireResumeAuth()) return;
+  const profile = profileText();
+  const source = importedResumeFile || (profile ? new Blob([profile], { type: 'text/plain' }) : null);
+  if (!source) { showToast('Add a resume first.'); return; }
+  const form = new FormData();
+  form.append('file', source, importedResumeFile?.name || 'resume.txt');
+  if (saveResumeCopyButton) { saveResumeCopyButton.disabled = true; saveResumeCopyButton.textContent = 'Saving…'; }
+  try {
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume`, {
+      method: 'POST',
+      headers: resumeAuthHeaders(),
+      body: form,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Upload failed (${response.status})`);
+    if (cvMeta) cvMeta.textContent = 'Copy saved';
+    showToast('Copy saved.');
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Copy could not be saved.');
+  } finally {
+    if (saveResumeCopyButton) { saveResumeCopyButton.disabled = false; saveResumeCopyButton.textContent = 'Save copy'; }
+  }
+}
+
+function renderResumeInboxCopies(copies) {
+  if (!resumeInbox) return;
+  if (!copies.length) {
+    resumeInbox.innerHTML = '<p class="cv-quality-empty">No copies yet.</p>';
+    return;
+  }
+  resumeInbox.innerHTML = copies.map((copy) => `
+    <div class="resume-inbox-row">
+      <div><strong>${escapeHtml(copy.name)}</strong><small>${escapeHtml(copy.createdAt ? formatAge(copy.createdAt) : 'Date unavailable')}</small></div>
+      <button class="text-button resume-inbox-download" type="button" data-resume-path="${escapeAttribute(copy.path)}">Download</button>
+    </div>`).join('');
+}
+
+async function loadResumeInbox() {
+  if (!resumeInbox || !API_BASE || !requireResumeAuth()) return;
+  resumeInbox.hidden = false;
+  resumeInbox.innerHTML = '<p class="cv-quality-empty">Loading…</p>';
+  try {
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume/list`, { headers: resumeAuthHeaders() });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(response.status === 403 ? 'Inbox access is restricted.' : (payload.error || 'Inbox unavailable.'));
+    renderResumeInboxCopies(Array.isArray(payload.copies) ? payload.copies : []);
+  } catch (error) {
+    resumeInbox.innerHTML = `<p class="cv-quality-empty">${escapeHtml(error instanceof Error ? error.message : 'Inbox unavailable.')}</p>`;
+  }
+}
+
+async function downloadResumeCopy(path) {
+  if (!API_BASE || !requireResumeAuth()) return;
+  try {
+    const query = new URLSearchParams({ path });
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume/download?${query}`, { headers: resumeAuthHeaders() });
+    if (!response.ok) throw new Error('Resume download failed.');
+    const blob = await response.blob();
+    const filename = (response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]) || 'resume';
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Resume download failed.');
+  }
 }
 
 function saveProfile() {
   if (!cvProfile) return;
   const value = profileText();
   try { localStorage.setItem(CV_STORAGE_KEY, value); } catch (_error) { showToast('This browser blocked local profile storage.'); return; }
-  cvMeta.textContent = value ? 'Saved on this device' : 'Private on this device';
-  renderCvMatches();
-  showToast(value ? 'Profile saved on this device.' : 'Profile cleared.');
+  cvMeta.textContent = value ? 'Saved locally' : 'Local';
+  syncResumeDownload();
+  renderJobs(currentJobs);
+  showToast(value ? 'Profile saved.' : 'Profile cleared.');
 }
 
 function renderCoverage(payload) {
@@ -1610,23 +1713,20 @@ function renderCoverage(payload) {
   }
 
   const hasErrors = sources.some(s => s.latestStatus === 'failed' || s.latestStatus === 'anomalous');
-  const hasBacklog = sources.some(s => Number(s.candidateBacklog || 0) > 0);
   const healthDot = document.getElementById('health-dot');
   if (healthDot) {
-    healthDot.className = 'health-dot ' + (hasErrors ? 'error' : (hasBacklog ? 'warning' : 'success'));
+    healthDot.className = 'health-dot ' + (hasErrors ? 'error' : 'success');
   }
 
-  const sourcesWithBacklog = sources.filter((source) => Number(source.candidateBacklog || 0) > 0).length;
   const companiesWithRoles = new Set(currentJobs.map((job) => companyKey(job.company))).size;
-  coverageMeta.textContent = `${sources.length} verified sources · ${companiesWithRoles} companies publishing roles${sourcesWithBacklog ? ` · ${sourcesWithBacklog} with detail backlog` : ''}`;
+  coverageMeta.textContent = `${sources.length} verified sources · ${companiesWithRoles} companies publishing roles`;
   coverageList.innerHTML = sources.map((source) => {
     const status = source.latestStatus || 'unknown';
     const progress = source.reconcile || source.watch;
-    const backlog = Number(source.candidateBacklog || 0);
     const statusText = status === 'complete'
-      ? (backlog > 0 ? 'Current inventory · detail checks still queued' : 'Current inventory')
+      ? 'Current inventory'
       : status === 'partial' || status === 'anomalous'
-        ? 'Full scan incomplete - keeping prior listings'
+        ? 'Partial scan · prior roles retained'
         : status === 'failed'
           ? 'Source unavailable - keeping prior listings'
           : 'Not checked';
@@ -1636,7 +1736,7 @@ function renderCoverage(payload) {
     return `
       <article class="coverage-item coverage-${escapeAttribute(status)}">
         <div><h4>${escapeHtml(source.company)}</h4><p>${escapeHtml(statusText)}</p></div>
-        <div class="coverage-counts"><span>${escapeHtml(counts)}</span><small>${backlog > 0 ? `${backlog} details queued` : 'Details current'}</small></div>
+        <div class="coverage-counts"><span>${escapeHtml(counts)}</span><small>Official source</small></div>
       </article>
     `;
   }).join('');
@@ -1659,7 +1759,7 @@ function renderCompanyDirectory() {
   const registryMeta = window.RCV_REGISTRY_META || {};
   const planningLabel = registryMeta.planningTargetLabel || 'RCV planned targets';
   const normalizedLabel = registryMeta.normalizedEmployerLabel || `${catalog.length} normalized employers`;
-  companiesMeta.textContent = `${prefix} employers - ${planningLabel} - ${normalizedLabel} - ${liveRoleCount} with matching roles in the current snapshot`;
+  companiesMeta.textContent = `${prefix} employers - ${planningLabel} - ${normalizedLabel} - ${liveRoleCount} with roles in the current snapshot`;
   companyDirectory.innerHTML = Object.entries(groups).map(([segment, companies]) => `
     <section class="company-group">
       <div class="company-group-heading"><h3>${escapeHtml(segment)}</h3><span>${companies.length}</span></div>
@@ -1669,21 +1769,20 @@ function renderCompanyDirectory() {
           const source = latestCoverage.find((candidate) => sameCompany(candidate.company, company.name));
           const roles = currentJobs.filter((job) => sameCompany(job.company, company.name)).length;
           const sourceStatus = source?.latestStatus || '';
-          const sourceBacklog = Number(source?.candidateBacklog || 0);
           const sourceLabel = sourceStatus === 'complete'
-            ? sourceBacklog > 0 ? `Verified source · ${sourceBacklog} detail checks queued` : 'Verified source'
+            ? 'Verified source'
             : sourceStatus === 'failed'
               ? 'Source unavailable'
-              : sourceStatus === 'partial' || sourceStatus === 'anomalous'
-                ? `Source ${sourceStatus} · roles withheld until reconciled`
+            : sourceStatus === 'partial' || sourceStatus === 'anomalous'
+                ? `Source ${sourceStatus} · available roles shown`
                 : source
                   ? 'Source not checked'
                   : 'No verified connector yet';
           const roleLabel = roles > 0
-            ? `${roles} matching role${roles === 1 ? '' : 's'}`
+            ? `${roles} role${roles === 1 ? '' : 's'} in snapshot`
             : sourceStatus === 'complete'
               ? 'No strict 0–2 finance role in snapshot'
-              : 'No published role in snapshot';
+              : 'No role in current snapshot';
           return `<article class="company-directory-card">
             <div><h4>${escapeHtml(company.name)}</h4><span class="company-source-status ${sourceStatus === 'complete' ? 'is-registered' : ''}">${escapeHtml(sourceLabel)} · ${escapeHtml(roleLabel)}</span></div>
             ${url ? `<a class="text-button" href="${url}" target="_blank" rel="noreferrer">Career page</a>` : ''}
@@ -1816,23 +1915,25 @@ async function extractPdfText(file) {
 
 async function importFileIntoProfile(file) {
   if (!file || !cvProfile) return;
+  importedResumeFile = file;
+  syncResumeDownload();
   if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-    if (cvMeta) cvMeta.textContent = 'Reading PDF…';
+    if (cvMeta) cvMeta.textContent = 'Reading…';
     try {
       const text = await extractPdfText(file);
       if (text.length < 40) {
-        showToast('No readable text found. This PDF may be a scanned image — paste your profile instead.');
-        if (cvMeta) cvMeta.textContent = 'PDF had no readable text';
+        showToast('No readable text found.');
+        if (cvMeta) cvMeta.textContent = 'PDF unreadable';
         return;
       }
       cvProfile.value = text;
-      if (cvMeta) cvMeta.textContent = 'Imported from PDF — save to keep it';
+      if (cvMeta) cvMeta.textContent = 'Imported';
       renderCvMatches();
-      showToast(`Extracted ${text.length} characters from ${file.name}.`);
+      showToast('Resume imported.');
     } catch (error) {
       console.error('PDF import failed', error);
-      showToast('That PDF could not be read. Paste your profile as text instead.');
-      if (cvMeta) cvMeta.textContent = 'PDF import failed';
+      showToast('PDF import failed.');
+      if (cvMeta) cvMeta.textContent = 'Import failed';
     }
     return;
   }
@@ -1843,8 +1944,9 @@ async function importFileIntoProfile(file) {
   } else {
     cvProfile.value = raw;
   }
-  if (cvMeta) cvMeta.textContent = 'Imported — save to keep it';
+  if (cvMeta) cvMeta.textContent = 'Imported';
   renderCvMatches();
+  showToast('Resume imported.');
 }
 
 function showToast(message) {
@@ -1858,12 +1960,11 @@ async function loadData({ manual = false } = {}) {
   if (manual) {
     if (refreshInFlight) return;
     refreshInFlight = true;
-    if (refreshButton) { refreshButton.disabled = true; refreshButton.textContent = 'Refreshing…'; }
+    if (refreshButton) { refreshButton.disabled = true; refreshButton.setAttribute('aria-busy', 'true'); }
   }
   try {
     if (FIXTURE_MODE) {
       renderJobs([...fixture.jobs, ...portalListings, ...roleLinkDrafts]);
-      renderCandidates([]);
       renderCoverage(fixture.coverage);
       return;
     }
@@ -1875,27 +1976,29 @@ async function loadData({ manual = false } = {}) {
 
     const base = API_BASE.replace(/\/$/, '');
     const cacheBust = manual ? `?refresh=${Date.now()}` : '';
-    const [jobsResult, coverageResult, candidatesResult] = await Promise.allSettled([
+    const [jobsResult, coverageResult, rolesResult] = await Promise.allSettled([
       fetch(`${base}/jobs${cacheBust}`).then(requireJson),
       fetch(`${base}/coverage${cacheBust}`).then(requireJson),
-      fetch(`${base}/candidates${cacheBust}`).then(requireJson),
+      fetch(`${base}/roles${cacheBust}`).then(requireJson),
     ]);
-    if (jobsResult.status === 'fulfilled') {
-      latestSnapshotAt = jobsResult.value?.snapshotAt || null;
-      renderJobs([...(Array.isArray(jobsResult.value.jobs) ? jobsResult.value.jobs : []), ...portalListings, ...roleLinkDrafts]);
+    if (jobsResult.status === 'fulfilled' || rolesResult.status === 'fulfilled') {
+      latestSnapshotAt = jobsResult.status === 'fulfilled'
+        ? (jobsResult.value?.snapshotAt || null)
+        : (rolesResult.value?.snapshotAt || null);
+      const jobs = jobsResult.status === 'fulfilled' && Array.isArray(jobsResult.value.jobs) ? jobsResult.value.jobs : [];
+      const roles = rolesResult.status === 'fulfilled' && Array.isArray(rolesResult.value?.roles) ? rolesResult.value.roles : [];
+      renderJobs([...mergeFeedJobs(jobs, roles), ...portalListings, ...roleLinkDrafts]);
       autoCheckTopRoles();
     } else showFeedState('Job feed unavailable', 'The monitor could not be reached. Try again shortly.', 'Connection error');
     if (coverageResult.status === 'fulfilled') renderCoverage(coverageResult.value);
     else showCoverageError();
-    if (candidatesResult.status === 'fulfilled') renderCandidates(candidatesResult.value?.candidates);
-    else renderCandidates([]);
-    if (manual) showToast(jobsResult.status === 'fulfilled' || coverageResult.status === 'fulfilled'
-      ? `Fetched the latest snapshot${latestSnapshotAt ? ` — feed updated ${formatAge(latestSnapshotAt)}` : ''}.`
+    if (manual) showToast(jobsResult.status === 'fulfilled' || coverageResult.status === 'fulfilled' || rolesResult.status === 'fulfilled'
+      ? `Snapshot updated${latestSnapshotAt ? ` · ${formatAge(latestSnapshotAt)}` : ''}.`
       : 'Refresh failed; existing data was kept.');
   } finally {
     if (manual) {
       refreshInFlight = false;
-      if (refreshButton) { refreshButton.disabled = false; refreshButton.textContent = 'Refresh now'; }
+      if (refreshButton) { refreshButton.disabled = false; refreshButton.removeAttribute('aria-busy'); }
     }
   }
 }
@@ -2345,8 +2448,27 @@ document.addEventListener('click', async (event) => {
 });
 
 document.querySelector('#save-profile')?.addEventListener('click', saveProfile);
+downloadResumeButton?.addEventListener('click', downloadResume);
+saveResumeCopyButton?.addEventListener('click', saveResumeCopy);
+resumeInboxToggle?.addEventListener('click', () => {
+  if (!resumeInbox) return;
+  resumeInbox.hidden = !resumeInbox.hidden;
+  if (!resumeInbox.hidden) loadResumeInbox();
+});
+resumeInbox?.addEventListener('click', (event) => {
+  const button = event.target.closest('.resume-inbox-download');
+  if (button) downloadResumeCopy(button.dataset.resumePath || '');
+});
+document.addEventListener('change', (event) => {
+  if (event.target.closest('#feed-company-filter')) {
+    feedCompanyFilter = event.target.value || '';
+    renderJobs(currentJobs);
+  }
+});
 document.querySelector('#clear-profile')?.addEventListener('click', () => {
   if (cvProfile) cvProfile.value = '';
+  importedResumeFile = null;
+  syncResumeDownload();
   saveProfile();
 });
 refreshButton?.addEventListener('click', () => loadData({ manual: true }));
@@ -2392,6 +2514,7 @@ document.addEventListener('click', (event) => {
 });
 cvProfile?.addEventListener('input', () => {
   if (cvMeta) cvMeta.textContent = 'Unsaved changes';
+  syncResumeDownload();
   renderCvQuality();
 });
 cvFile?.addEventListener('change', () => {
@@ -2456,6 +2579,7 @@ renderHiringSignals();
 window.FirstLookAuth?.onAuthChange(() => {
   renderAuthBar();
   renderApplicationWorkspace();
+  if (!window.FirstLookAuth.currentUser() && resumeInbox) resumeInbox.hidden = true;
 });
 renderCompanyDirectory();
 renderProfileVersions();

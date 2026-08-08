@@ -33,7 +33,7 @@ The original proposal below is now superseded where it conflicts with the deploy
 - Verified: 156 backend tests pass; the deployed function has live smoke coverage for S&P Global, Deloitte, and Siemens.
 - Still requiring source-by-source validation: the remaining Workday boards whose tenants return 404/422/maintenance responses, plus generic Firecrawl sources that return no role links. They must remain anomalous/failed rather than being shown as healthy.
 
-The registry now contains 72 connector identities. Product health remains scan-history driven: a registered source is not presented as current until its inventory, detail hydration and Apply URL checks reconcile successfully. Structured ATS candidates are preferred; Firecrawl remains a fallback for the unresolved custom portals.
+The registry now contains 110 connector identities (including 36 quota-free official-page discovery connectors and the new CRED Lever / EY GDS Yello feeds). Product health remains scan-history driven: a registered source is not presented as current until its inventory, detail hydration and Apply URL checks reconcile successfully. Structured ATS candidates are preferred; Firecrawl remains a fallback for the unresolved custom portals.
 
 ## Root Cause Analysis
 

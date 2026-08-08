@@ -35,6 +35,15 @@ export const PAYTM_LEVER_CONFIG: LeverConfig = {
   site: 'paytm',
 };
 
+// Verified live 2026-08-07: careers.cred.club is Lever-hosted and
+// api.lever.co/v0/postings/cred?mode=json returns 6 India postings.
+export const CRED_LEVER_CONFIG: LeverConfig = {
+  connectorId: 'cred-official-india',
+  company: 'CRED',
+  sourceName: 'CRED Careers',
+  site: 'cred',
+};
+
 export function createLeverConnector(
   config: LeverConfig,
   fetcher: JobFetch = fetch,

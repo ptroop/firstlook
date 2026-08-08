@@ -85,10 +85,13 @@ Open Supabase Dashboard > Edge Functions > Secrets and add:
 | `VAPID_PUBLIC_KEY` | Base64url P-256 public key; also published in the frontend `index.html` |
 | `VAPID_PRIVATE_KEY` | Base64url P-256 private key. Never commit or paste into chat |
 | `PUSH_TOKEN` | Long random token; must equal the Vault `first_look_push_token` secret below |
+| `RESUME_ADMIN_EMAILS` | Comma-separated Supabase Auth emails allowed to list and download private resume copies |
 
 Generate a matching VAPID keypair once with `npx.cmd tsx scripts/generate-vapid-keys.mjs` (writes a gitignored `.env.vapid.local` with `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and a fresh `PUSH_TOKEN`, and verifies the pair against the real Web Push module). Edit `VAPID_SUBJECT` in the generated file to a real `mailto:` or `https:` contact before pasting the values into Supabase — the subject is a JWT claim only and can be changed later without regenerating the keys. The generator refuses to overwrite an existing `.env.vapid.local` (pass `--force` only when rotating), because the public key may already be published in `index.html`. The public key is not secret and goes into `window.JOB_MONITOR_VAPID_PUBLIC_KEY` in `index.html`; the private key and `PUSH_TOKEN` stay in Supabase only.
 
 Do not paste the OpenRouter key into chat, SQL, GitHub, `index.html`, or `config.toml`. Supabase supplies `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to the deployed function.
+
+The `20260808000000_add_private_resume_intake.sql` migration creates a private `resume-intake` bucket capped at 10 MB. The browser uploads only through the Edge Function with a user access token; the service role key stays in Supabase. Set `RESUME_ADMIN_EMAILS` to the operator's signed-in Auth email before deploying. The inbox never exposes a public or signed download URL.
 
 ## Vault and schedules
 

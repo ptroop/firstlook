@@ -8,7 +8,7 @@ All 60 employers in the PDF registry are now present in the website's Company di
 
 ## Company coverage
 
-The PDF names roughly 70 employers. All 60 employers in the website directory now have a source candidate. The registry currently has 72 connector identities: the original verified/source-specific set, Groww and PhonePe through Greenhouse, seven RCV employers through structured Workday/Lever feeds, and a bounded Firecrawl fallback queue for the remaining custom portals. Source health still depends on successful inventory/detail reconciliation.
+The PDF names roughly 70 employers. All 60 employers in the website directory now have a source candidate. The registry currently has 110 connector identities: the original verified/source-specific set, Groww and PhonePe through Greenhouse, 19 employers on the Workday CXS adapter, Paytm and CRED on public Lever postings feeds, EY GDS on an India-filtered Yello job board, a bounded Firecrawl fallback queue for the remaining custom portals, and 36 quota-free official-page discovery connectors. Source health still depends on successful inventory/detail reconciliation.
 
 The PDF companies already represented include Moody's, Citi, Goldman Sachs, Barclays, S&P Global, Morningstar, ICRA, Deloitte, KPMG India, PwC, American Express, Wells Fargo, Deutsche Bank, Bank of America, NatWest, JPMorgan, Morgan Stanley, Razorpay, Pine Labs, HSBC and Microsoft, plus several companies covered by source-specific connectors outside the PDF list.
 
@@ -18,10 +18,12 @@ The main PDF names still requiring Firecrawl fallback or further ATS discovery a
 - Banks and card networks: BNY. State Street, Northern Trust, Mastercard and Visa now use verified Workday feed candidates.
 - Data, ratings and indices: MSCI, CRISIL and CARE Ratings. FactSet and Bloomberg now use verified Workday feed candidates.
 - Research KPOs: TresVista, The Smart Cube, Evalueserve, Acuity Knowledge Partners, SG Analytics.
-- Advisory and Indian finance: EY GDS, GT Bharat, HDFC Bank, ICICI Bank, Axis Bank, Kotak, IDFC First, Bajaj Finserv, Tata Capital.
-- Fintech, AMC and broking: CRED, Groww, PhonePe, HDFC AMC, ICICI Pru AMC, Motilal Oswal, Edelweiss and Zerodha. Paytm now uses a public Lever postings feed.
+- Advisory and Indian finance: GT Bharat, HDFC Bank, ICICI Bank, Axis Bank, Kotak, IDFC First, Bajaj Finserv, Tata Capital.
+- Fintech, AMC and broking: HDFC AMC, ICICI Pru AMC, Motilal Oswal, Edelweiss and Zerodha. Groww and PhonePe use Greenhouse, and Paytm and CRED now use public Lever postings feeds.
 
-These remain a validation queue, not healthy coverage claims. The next safest wave is official ATS discovery for the custom portals (BCG, McKinsey, Bain/BCN, EY GDS, the KPOs and Indian banks) followed by fixture/count/detail/apply verification. Firecrawl is deliberately limited to this fallback queue, is not used for employers with a stable structured feed, and is disabled for unattended cron polling by default. Do not turn a career-page link or a PDF URL pattern into a connector until the source contract passes.
+CRED and EY GDS have graduated out of the fallback queue: CRED is served by the public Lever postings feed and EY GDS by an India-filtered Yello job board, both verified live on 2026-08-07 through quota-free official connectors.
+
+These remain a validation queue, not healthy coverage claims. The next safest wave is official ATS discovery for the custom portals (BCG, McKinsey, Bain/BCN, the KPOs and Indian banks) followed by fixture/count/detail/apply verification. Firecrawl is deliberately limited to this fallback queue, is not used for employers with a stable structured feed, and is disabled for unattended cron polling by default. Do not turn a career-page link or a PDF URL pattern into a connector until the source contract passes.
 
 ## Evidence-first CV and cover-letter approach
 

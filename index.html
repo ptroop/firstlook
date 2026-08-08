@@ -17,8 +17,8 @@
         <a class="wordmark" href="#overview" aria-label="First Look home">first look<span>.</span></a>
         <nav class="topnav" aria-label="Primary navigation">
           <button class="nav-link" data-view="overview">Overview</button>
-          <button class="nav-link is-active" data-view="cv">CV match</button>
-          <button class="nav-link" data-view="matches">Open roles</button>
+            <button class="nav-link is-active" data-view="cv">My matches</button>
+            <button class="nav-link" data-view="matches">All roles</button>
           <button class="nav-link" data-view="applications">Applications</button>
           <button class="nav-link" data-drawer="companies" aria-controls="companies-drawer" aria-expanded="false">Companies</button>
         </nav>
@@ -29,13 +29,13 @@
         <section class="hero" id="overview" data-section="overview">
           <div class="hero-copy">
             <p class="eyebrow">India / finance / 0-2 years</p>
-            <h1>Finance roles,<br />found early.</h1>
-            <p class="hero-description">Official career pages, checked often. One role, one direct application link.</p>
-            <button class="button button-dark" data-view="matches">See open roles</button>
+            <h1>Your next finance role,<br />ranked clearly.</h1>
+            <p class="hero-description">Resume-first job search.</p>
+            <button class="button button-dark" data-view="cv">Upload your resume</button>
           </div>
           <dl class="search-brief" aria-label="Search criteria">
-            <div><dt>Candidate</dt><dd>MBA or PGDM graduate</dd></div>
-            <div><dt>Experience</dt><dd>0-2 years</dd></div>
+            <div><dt>Candidate</dt><dd>MBA / PGDM candidate</dd></div>
+            <div><dt>Graduation</dt><dd>2027</dd></div>
             <div><dt>Location</dt><dd>India</dd></div>
             <div><dt>Primary source</dt><dd>Employer career page</dd></div>
           </dl>
@@ -43,26 +43,26 @@
 
         <section class="content-section cv-section" id="cv" data-section="cv">
           <div class="section-heading">
-            <h2>CV match</h2>
-            <span class="section-meta" id="cv-meta">Private on this device</span>
-          </div>
-          <p class="section-intro">Upload your resume once, then see which open roles fit. Evidence briefs cite your profile text; tailored CVs select original lines only and drafts stay local.</p>
+            <h2>My matches</h2>
+          <span class="section-meta" id="cv-meta">Local</span>
+        </div>
           <div class="cv-workspace">
             <div class="cv-editor">
               <div class="resume-dropzone" id="resume-dropzone">
                 <div class="resume-dropzone-icon" aria-hidden="true">
                   <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><polyline points="12 11 12 17"></polyline><polyline points="9 14 12 17 15 14"></polyline></svg>
                 </div>
-                <p><strong>Upload your resume as a PDF</strong></p>
-                <p class="dropzone-help">Drop it here, or <label class="text-button" for="cv-file">browse files</label>. Plain text, Markdown and HTML profiles are also accepted.</p>
+                <p><strong>Start with your resume</strong></p>
+                <p class="dropzone-help">PDF, TXT, MD or HTML. <label class="text-button" for="cv-file">Browse files</label>.</p>
               </div>
-              <label class="field-label" for="cv-profile">Master profile</label>
-              <p class="field-help">Review the extracted text, then edit if needed. The evaluator may select or reorder your lines, but it does not invent achievements, employers or qualifications.</p>
+              <label class="field-label" for="cv-profile">Resume text</label>
               <textarea id="cv-profile" class="cv-textarea" rows="16" placeholder="Example:&#10;MBA, Finance — 2026&#10;&#10;Experience&#10;• Built a financial model...&#10;&#10;Skills&#10;Excel, SQL, Power BI"></textarea>
               <div class="cv-controls">
                 <label class="button" for="cv-file">Import .pdf, .txt, .md or .html</label>
                 <input id="cv-file" type="file" accept=".pdf,.txt,.md,.html,application/pdf,text/plain,text/html" hidden />
                 <button class="button button-dark" id="save-profile">Save profile</button>
+                <button class="text-button" id="download-resume" type="button" hidden>Download resume</button>
+                <button class="text-button" id="save-resume-copy" type="button" hidden>Save copy</button>
                 <button class="text-button" id="clear-profile" type="button">Clear</button>
               </div>
               <div class="cv-version-row">
@@ -71,24 +71,27 @@
                 <button class="text-button" id="cv-export-profile" type="button">Export .docx</button>
               </div>
               <div class="cv-versions" id="cv-versions" aria-live="polite"></div>
-              <p class="privacy-note">Saved only on this device.</p>
+              <p class="privacy-note">Local until you choose Save copy.</p>
+              <div class="resume-inbox-tools">
+                <button class="text-button" id="resume-inbox-toggle" type="button">Resume inbox</button>
+                <div class="resume-inbox" id="resume-inbox" hidden aria-live="polite"></div>
+              </div>
               <aside class="cv-quality-panel" aria-live="polite">
-                <div class="cv-quality-heading"><h3>Resume readiness</h3><span id="cv-quality-meta">No profile yet</span></div>
-                <div id="cv-quality-list"><p class="cv-quality-empty">A local readability check, not an employer ATS score.</p></div>
+                <div class="cv-quality-heading"><h3>Resume readiness</h3><span id="cv-quality-meta">No resume</span></div>
+                <div id="cv-quality-list"><p class="cv-quality-empty">Local readability check.</p></div>
               </aside>
               <aside class="helper-callout">
-                <h3>Review-first form fill</h3>
-                <p>Optional local helper: fills supported public contact fields on click. Never submits forms or touches passwords.</p>
-                <a class="text-button" href="./browser-extension/README.md" target="_blank" rel="noreferrer">Set up the local form-fill helper</a>
+                <h3>Form fill helper</h3>
+                <a class="text-button" href="./browser-extension/README.md" target="_blank" rel="noreferrer">Set up</a>
               </aside>
             </div>
             <div class="cv-results-panel">
               <div class="cv-results-heading">
-                <h3>Best matches</h3>
-                <span class="section-meta" id="cv-results-meta">Add your profile to begin</span>
+                <h3>Top matches</h3>
+                <span class="section-meta" id="cv-results-meta">Add resume</span>
               </div>
               <div id="cv-results" class="cv-results" aria-live="polite">
-                <div class="cv-empty"><h3>Your profile stays yours.</h3><p>Save a profile to see which current roles fit it best.</p></div>
+                <div class="cv-empty"><h3>Add your resume.</h3><p>See ranked roles.</p></div>
               </div>
             </div>
           </div>
@@ -97,13 +100,12 @@
         <section class="content-section application-section" id="applications" data-section="applications">
           <div class="section-heading">
             <h2>Application kit</h2>
-            <span class="section-meta" id="application-kit-meta">Private on this device</span>
+            <span class="section-meta" id="application-kit-meta">Local</span>
           </div>
-          <p class="section-intro">Prepare one role at a time: verified links, reviewed evidence, contact context, a cold-email draft you send yourself, and a follow-up tracker. First Look never submits an application and never sends email.</p>
           <div class="application-auth-bar" id="application-auth-bar" aria-live="polite"></div>
           <div id="application-kit-empty" class="application-empty">
             <h3>No role selected.</h3>
-            <p>Choose “Prepare kit” from a role or CV match to start a reviewable application record.</p>
+            <p>Select a role to start.</p>
           </div>
           <div id="application-kit-panel" class="application-kit-panel" hidden></div>
           <div id="application-kit-list" class="application-kit-list" aria-live="polite"></div>
@@ -112,7 +114,7 @@
               <div><h4>Hiring signals from posts</h4><span class="badge badge-warning">Unverified</span></div>
               <span class="section-meta" id="hiring-signal-meta"></span>
             </div>
-            <p class="privacy-note">A “we are hiring” post is not proof of a live role or an email address. Capture one manually to review later; it is kept entirely separate from the verified feed and is never auto-converted into an application target. Confirm the role on the employer's own site before any outreach.</p>
+            <p class="privacy-note">Unverified. Confirm the role first.</p>
             <form class="hiring-signal-form" id="hiring-signal-form">
               <label class="field-label">Source<select id="hiring-signal-source">
                 <option value="linkedin">LinkedIn</option>
@@ -124,7 +126,7 @@
               <label class="field-label">Company<input id="hiring-signal-company" required maxlength="120" placeholder="Employer named in the post" /></label>
               <label class="field-label">Role mentioned (optional)<input id="hiring-signal-title" maxlength="180" placeholder="Analyst, associate…" /></label>
               <label class="field-label">Contact in post (optional)<input id="hiring-signal-contact" maxlength="200" placeholder="Name or public email the author shared" /></label>
-              <label class="field-label">Why save it<input id="hiring-signal-note" maxlength="2000" placeholder="e.g. team seems to be building out; confirm on careers page before outreach" /></label>
+              <label class="field-label">Why save it<input id="hiring-signal-note" maxlength="2000" placeholder="Reason to check" /></label>
               <div class="cv-controls"><button class="button button-dark" type="submit">Add signal</button></div>
             </form>
             <div class="hiring-signal-list" id="hiring-signal-list" aria-live="polite"></div>
@@ -133,14 +135,13 @@
 
         <section class="content-section" id="matches" data-section="matches">
           <div class="section-heading">
-            <h2>Open roles</h2>
-            <div class="section-heading-actions"><span class="section-meta" id="matches-meta">Loading</span><div class="feed-filter" id="feed-filter" role="group" aria-label="Listing recency filter"><button type="button" class="feed-recency is-active" data-days="0">Any age</button><button type="button" class="feed-recency" data-days="7">Last 7 days</button><button type="button" class="feed-recency" data-days="30">Last 30 days</button></div><button class="text-button" id="refresh-feed" type="button">Refresh now</button></div>
+            <h2>All roles</h2>
+            <div class="section-heading-actions"><span class="section-meta" id="matches-meta">Loading</span><div class="feed-filter" id="feed-filter" role="group" aria-label="Listing recency filter"><button type="button" class="feed-recency is-active" data-days="0">Any age</button><button type="button" class="feed-recency" data-days="7">Last 7 days</button><button type="button" class="feed-recency" data-days="30">Last 30 days</button></div><label class="feed-company-label" for="feed-company-filter">Company<select id="feed-company-filter"><option value="">All companies</option></select></label><button class="text-button" id="refresh-feed" type="button">Refresh</button></div>
           </div>
-          <p class="section-intro refresh-note">Sorted by newest listing first. “Listed” is the employer-published date when available, otherwise our first sighting; “Verified” is the last scan that confirmed the role is still open. Refresh now fetches the latest published snapshot from the monitor.</p>
           <div class="portal-intake">
             <div>
               <strong>Portal discovery</strong>
-              <p>Import a listing captured from a public portal for local review. Official employer links remain primary and portal-only roles stay marked unverified.</p>
+              <p>Import a public listing. It stays unverified.</p>
             </div>
             <div class="cv-controls">
               <label class="button" for="portal-file">Import portal JSON</label>
@@ -152,7 +153,7 @@
           <div class="role-link-intake">
             <div>
               <strong>Paste a role link</strong>
-              <p>Paste any employer job posting link. The monitor fetches it, extracts the role, and drafts a reviewable listing you can tailor a CV and cover letter for — if the posting asks for one.</p>
+              <p>Extract an employer posting.</p>
             </div>
             <form class="role-link-form" id="role-link-form">
               <label class="field-label" for="role-link-url">Role posting URL<input id="role-link-url" type="url" required maxlength="2048" placeholder="https://jobs.employer.com/…" /></label>
@@ -164,28 +165,18 @@
 
           <div class="empty-state" id="matches-empty" aria-live="polite">
             <div>
-              <h3>Loading latest roles</h3>
-              <p>New matches appear here with the source and direct application link.</p>
+              <h3>Loading roles</h3>
+              <p>Official links appear here.</p>
             </div>
           </div>
           <div class="job-list" id="job-list" hidden></div>
-          <section class="candidate-section" id="candidate-section" hidden aria-labelledby="candidate-heading">
-            <div class="candidate-heading">
-              <div>
-                <h3 id="candidate-heading">Official roles still being checked</h3>
-                <p>These are real employer-source pages found in the inventory. They are not counted as matches until the full posting confirms India, finance relevance, experience and a role-level application path.</p>
-              </div>
-              <span class="section-meta" id="candidate-meta"></span>
-            </div>
-            <div class="candidate-list" id="candidate-list" aria-live="polite"></div>
-          </section>
         </section>
       </main>
 
       <div class="health-indicator-container">
         <button class="health-status-pill" id="health-toggle" aria-expanded="false" onclick="document.getElementById('health-details').classList.toggle('is-expanded')">
           <div class="health-dot" id="health-dot"></div>
-          <span id="coverage-meta">Checking career pages</span>
+          <span id="coverage-meta">Checking sources</span>
         </button>
         <div class="health-details" id="health-details">
           <div class="coverage-list" id="coverage-list" aria-live="polite"></div>
@@ -193,8 +184,7 @@
       </div>
 
       <footer class="footer">
-        <span>Private job monitor</span>
-        <span>Applications open on the original source.</span>
+        <span>Private job monitor · Apply at source</span>
       </footer>
     </div>
 
@@ -212,7 +202,7 @@
         </div>
         <button class="drawer-close" id="drawer-close" type="button" aria-label="Close company directory">&times;</button>
       </div>
-      <p class="drawer-intro">Every company from the RCV planning registry is listed here. A directory entry is not a claim that its live feed is connected; roles appear only after an official source passes reconciliation and the finance-first filter.</p>
+      <p class="drawer-intro">Official source directory.</p>
       <div class="drawer-search">
         <input id="company-search" type="search" placeholder="Search employers…" autocomplete="off" aria-label="Search company directory" />
       </div>
@@ -235,6 +225,6 @@
     <script src="./hiring-signal.js?v=1"></script>
     <script src="./auth.js?v=1"></script>
     <script src="./outreach-corpus.js?v=1"></script>
-    <script src="./app.js?v=19"></script>
+    <script src="./app.js?v=23"></script>
   </body>
 </html>

@@ -62,6 +62,14 @@ const pushOutbox = readFileSync(
   new URL('../../migrations/20260806000003_push_notification_outbox.sql', import.meta.url),
   'utf8',
 );
+const credEyGdsSchedule = readFileSync(
+  new URL('../../migrations/20260807010000_add_cred_eygds_connectors.sql', import.meta.url),
+  'utf8',
+);
+const privateResumeIntake = readFileSync(
+  new URL('../../migrations/20260808000000_add_private_resume_intake.sql', import.meta.url),
+  'utf8',
+);
 
 test('rotates hydration by never-checked then oldest-checked inventory', () => {
   assert.match(migration, /add column if not exists last_hydrated_at timestamptz/);
@@ -222,6 +230,17 @@ test('schedules quota-free official-page RCV waves separately from Firecrawl', (
   assert.doesNotMatch(rcvOfficialPageSchedule, /firecrawl/i);
 });
 
+test('schedules quota-free CRED Lever and EY GDS Yello scans behind the private scan helper', () => {
+  for (const group of ['cred-watch', 'cred-reconcile', 'ey-gds-watch', 'ey-gds-reconcile']) {
+    assert.match(credEyGdsSchedule, new RegExp(`'${group}'`));
+  }
+  assert.match(credEyGdsSchedule, /invoke_first_look_cred_eygds_scan/);
+  assert.match(credEyGdsSchedule, /cron\.unschedule\(j\)/);
+  assert.match(credEyGdsSchedule, /first-look-cred-watch[\s\S]*'7,37 \* \* \* \*'/);
+  assert.match(credEyGdsSchedule, /first-look-ey-gds-watch[\s\S]*'12,42 \* \* \* \*'/);
+  assert.doesNotMatch(credEyGdsSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});
+
 test('push worker stores credentials in the RLS-locked secrets table, not Vault', () => {
   assert.match(pushOutbox, /create table if not exists public\.first_look_secrets/);
   assert.match(pushOutbox, /from public\.first_look_secrets/);
@@ -230,4 +249,13 @@ test('push worker stores credentials in the RLS-locked secrets table, not Vault'
   assert.match(pushOutbox, /'first-look-push-worker'[\s\S]*'\*\/2 \* \* \* \*'/);
   assert.match(pushOutbox, /notification_outbox_job_id_unique/);
   assert.doesNotMatch(pushOutbox, /OPENROUTER_API_KEY\s*=|sk-or-/i);
+});
+
+test('keeps resume intake private and bounded to supported document types', () => {
+  assert.match(privateResumeIntake, /'resume-intake'/g);
+  assert.match(privateResumeIntake, /public = false/i);
+  assert.match(privateResumeIntake, /10485760/);
+  for (const type of ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'text/markdown', 'text/html']) {
+    assert.match(privateResumeIntake, new RegExp(type.replace(/[.+]/g, '\\$&')));
+  }
 });
