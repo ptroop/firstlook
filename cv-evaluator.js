@@ -73,8 +73,16 @@
   const ACTION_VERBS = /\b(?:built|created|designed|developed|implemented|automated|analysed|analyzed|improved|reduced|increased|delivered|managed|led|coordinated|launched|researched|modelled|modeled|validated|optimised|optimized|supported|owned|streamlined|measured|trained)\b/i;
   const QUANTIFIED = /(?:\b\d+(?:\.\d+)?\s?%|[$₹€£]\s?[\d,]+|\b\d+(?:\.\d+)?\s?(?:x|users?|customers?|projects?|hours?|days?|months?|years?|items?|records?|pages?)\b|\b(?:million|thousand|crore|lakh)\b)/i;
 
+  const NORMALIZE_CACHE = new Map();
   function text(value) { return String(value || '').replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim(); }
-  function normalize(value) { return text(value).toLowerCase().replace(/[^a-z0-9+#.&%/-]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function normalize(value) {
+    const raw = text(value);
+    if (NORMALIZE_CACHE.has(raw)) return NORMALIZE_CACHE.get(raw);
+    const normalized = raw.toLowerCase().replace(/[^a-z0-9+#.&%/-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (NORMALIZE_CACHE.size >= 4096) NORMALIZE_CACHE.clear();
+    NORMALIZE_CACHE.set(raw, normalized);
+    return normalized;
+  }
   function unique(values) { return [...new Set(values.filter(Boolean))]; }
   function escapeRegex(value) { return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
   function termVariants(term) { return TERM_ALIASES[term] || [term]; }
