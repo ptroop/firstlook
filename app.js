@@ -168,6 +168,24 @@ function visibleFeedJobs() {
   });
 }
 
+function profileMatchTerms(parsedProfile) {
+  if (!parsedProfile) return [];
+  const fallbackTerms = String(parsedProfile.text || '').toLowerCase().match(/[a-z][a-z0-9+#.&/-]{3,}/g) || [];
+  return [...new Set([...(parsedProfile.skills || []), ...fallbackTerms]
+    .map((term) => String(term).toLowerCase())
+    .filter((term) => term && !/^(about|after|before|from|have|into|over|that|their|these|this|those|using|with|your)$/.test(term)))].slice(0, 40);
+}
+
+function fastProfileMatchScore(job, parsedProfile) {
+  const terms = profileMatchTerms(parsedProfile);
+  if (!terms.length) return null;
+  const title = String(job?.title || '').toLowerCase();
+  const haystack = `${title} ${String(job?.description || '').toLowerCase()}`;
+  const matched = terms.reduce((total, term) => total + (haystack.includes(term) ? 1 : 0), 0);
+  const titleMatched = terms.reduce((total, term) => total + (title.includes(term) ? 1 : 0), 0);
+  return Math.min(100, Math.round(((matched + titleMatched) / Math.max(terms.length, 1)) * 100));
+}
+
 function normalizeInventoryRole(role) {
   const detailUrl = role?.officialDetailUrl || role?.sources?.[0]?.detailUrl || '';
   return {
@@ -266,19 +284,12 @@ function renderJobs(jobs) {
   }
 
   function jobMatchScore(job) {
-    const engine = cvEngine();
-    if (!engine || !parsedProfileForScoring) return null;
+    if (!parsedProfileForScoring) return null;
     const jobId = jobIdentity(job);
     if (matchScoreCache.has(jobId)) return matchScoreCache.get(jobId);
-    try {
-      const result = engine.matchJob(job, parsedProfileForScoring);
-      const score = typeof result?.score === 'number' ? result.score : null;
-      matchScoreCache.set(jobId, score);
-      return score;
-    } catch (_error) {
-      matchScoreCache.set(jobId, null);
-      return null;
-    }
+    const score = fastProfileMatchScore(job, parsedProfileForScoring);
+    matchScoreCache.set(jobId, score);
+    return score;
   }
 
   const ranked = [...visible].sort((left, right) => {
@@ -297,7 +308,7 @@ function renderJobs(jobs) {
       const isRoleLink = String(job.id || '').startsWith('link_');
       const matchScore = jobMatchScore(job);
       const matchBadge = matchScore !== null
-        ? `<span class="badge badge-score" title="Evidence-based match with your saved profile">${matchScore}% match</span>`
+        ? `<span class="badge badge-score" title="Fast screening overlap with your resume; see My matches for evidence">${matchScore}% screening</span>`
         : '';
       const statusBadges = [
         `${newBadge}`,
@@ -1542,10 +1553,7 @@ async function renderCvMatches() {
     return;
   }
   const parsedProfile = typeof engine.parseProfile === 'function' ? engine.parseProfile(profile) : profile;
-  const fallbackTerms = String(parsedProfile.text || '').toLowerCase().match(/[a-z][a-z0-9+#.&/-]{3,}/g) || [];
-  const profileTerms = [...new Set([...(parsedProfile.skills || []), ...fallbackTerms]
-    .map((term) => String(term).toLowerCase())
-    .filter((term) => term && !/^(about|after|before|from|have|into|over|that|their|these|this|those|using|with|your)$/.test(term)))].slice(0, 40);
+  const profileTerms = profileMatchTerms(parsedProfile);
   const candidateJobs = pool.length > 20
     ? pool.map((job) => {
       const title = String(job.title || '').toLowerCase();
