@@ -85,6 +85,7 @@ let companySearchTerm = '';
 let matchScoreCache = new Map();
 let matchScoreCacheProfile = '';
 let parsedProfileForScoring = null;
+let cvMatchGeneration = 0;
 let pdfJsPromise = null;
 const API_BASE = window.JOB_MONITOR_API || '';
 const VAPID_PUBLIC_KEY = window.JOB_MONITOR_VAPID_PUBLIC_KEY || '';
@@ -1518,7 +1519,8 @@ function buildCvBrief(job, result) {
   return `<p><strong>${escapeHtml(score)}</strong> · confidence: ${escapeHtml(result.confidence)}. This is evidence matching, not a hiring prediction.</p>${eligibility}<p>Use only evidence already present in your profile for <strong>${escapeHtml(job.title)}</strong>.</p>${evidence}${requirements}${reviewPoints}`;
 }
 
-function renderCvMatches() {
+async function renderCvMatches() {
+  const generation = ++cvMatchGeneration;
   if (!cvResults || !cvResultsMeta) return;
   const profile = profileText();
   renderCvQuality();
@@ -1539,9 +1541,22 @@ function renderCvMatches() {
     cvResults.innerHTML = '<div class="cv-empty"><h3>Evaluation unavailable.</h3></div>';
     return;
   }
-  const ranked = pool.map((job) => ({ job, result: engine.matchJob(job, profile) }))
-    .sort((left, right) => (right.result.score ?? -1) - (left.result.score ?? -1))
-    .slice(0, 10);
+  const parsedProfile = typeof engine.parseProfile === 'function' ? engine.parseProfile(profile) : profile;
+  cvResultsMeta.textContent = 'Matching';
+  const ranked = [];
+  const chunkSize = 200;
+  for (let offset = 0; offset < pool.length; offset += chunkSize) {
+    const end = Math.min(offset + chunkSize, pool.length);
+    for (let index = offset; index < end; index += 1) {
+      const job = pool[index];
+      ranked.push({ job, result: engine.matchJob(job, parsedProfile) });
+    }
+    if (generation !== cvMatchGeneration) return;
+    if (end < pool.length) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  if (generation !== cvMatchGeneration) return;
+  ranked.sort((left, right) => (right.result.score ?? -1) - (left.result.score ?? -1));
+  ranked.splice(10);
   cvResultsMeta.textContent = `Top ${ranked.length} of ${pool.length} roles${feedRecencyDays ? ` · last ${feedRecencyDays} days` : ''}`;
   cvResults.innerHTML = ranked.map(({ job, result }) => {
     const applyUrl = directApplyUrl(job);
