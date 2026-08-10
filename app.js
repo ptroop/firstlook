@@ -1936,7 +1936,7 @@ async function extractPdfText(file) {
     if (line.trim()) lines.push(line.trimEnd());
     pages.push(lines.join('\n'));
   }
-  await doc.destroy();
+  await documentTask.destroy();
   return pages.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
