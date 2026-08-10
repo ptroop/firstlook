@@ -516,9 +516,36 @@ async function getCoverage(headers: Record<string, string>) {
   const connectorIds = supportedOfficialConnectorIds().map(encodeURIComponent).join(',');
   const rows = (await supabaseClient().request(`/rest/v1/source_scan_runs?connector_id=in.(${connectorIds})&select=${select}&order=finished_at.desc&limit=300`)) as CoverageRow[];
   return json({
-    sources: presentCoverage(rows),
+    sources: presentCoverageWithRegistry(rows),
     portalGaps: { portalOnlyJobs: 0, note: 'Portal ingestion is not configured in this release' },
   }, headers);
+}
+
+function presentCoverageWithRegistry(rows: CoverageRow[]) {
+  const sources = new Map(presentCoverage(rows).map((source) => [source.connectorId, {
+    ...source,
+    registered: true,
+  }]));
+  for (const connector of createOfficialConnectorRegistry()) {
+    const existing = sources.get(connector.connectorId);
+    if (existing) continue;
+    sources.set(connector.connectorId, {
+      connectorId: connector.connectorId,
+      company: connector.company,
+      sourceType: 'official_career',
+      registered: true,
+      latestStatus: null,
+      latestHydrationStatus: null,
+      lastCompleteWatchAt: null,
+      lastCompleteReconcileAt: null,
+      reportedTotal: null,
+      candidateBacklog: 0,
+      watch: null,
+      reconcile: null,
+      anomalySummary: 'No scan recorded for this connector yet',
+    });
+  }
+  return [...sources.values()].sort((left, right) => left.company.localeCompare(right.company));
 }
 
 async function saveSubscription(request: Request, headers: Record<string, string>) {

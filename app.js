@@ -1962,10 +1962,11 @@ function renderCoverage(payload) {
     return;
   }
 
-  const hasErrors = sources.some(s => s.latestStatus === 'failed' || s.latestStatus === 'anomalous');
+  const hasErrors = sources.some((source) => source.latestStatus === 'failed' || source.latestStatus === 'anomalous');
+  const hasWarnings = sources.some((source) => !source.latestStatus || source.latestHydrationStatus !== 'complete' || source.latestStatus === 'partial');
   const healthDot = document.getElementById('health-dot');
   if (healthDot) {
-    healthDot.className = 'health-dot ' + (hasErrors ? 'error' : 'success');
+    healthDot.className = 'health-dot ' + (hasErrors ? 'error' : hasWarnings ? 'warning' : 'success');
   }
 
   const inventoryCount = currentJobs.filter((job) => job.inventoryRole).length;
@@ -1977,7 +1978,9 @@ function renderCoverage(payload) {
       ? 'Current'
       : status === 'partial' || status === 'anomalous'
         ? 'Partial · roles retained'
-        : status === 'failed'
+      : !source.latestStatus && source.registered
+        ? 'Connector registered · no scan yet'
+      : status === 'failed'
           ? 'Unavailable · roles retained'
           : 'Not checked';
     const counts = progress && Number.isFinite(progress.listingsDiscovered)
@@ -2025,6 +2028,8 @@ function renderCompanyDirectory() {
               ? 'Source unavailable'
             : sourceStatus === 'partial' || sourceStatus === 'anomalous'
                 ? `Source ${sourceStatus} · available roles shown`
+                : source?.registered
+                  ? 'Connector registered · no scan yet'
                 : source
                   ? 'Source not checked'
                   : 'No verified connector yet';
