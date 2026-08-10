@@ -56,3 +56,14 @@ test('does not promote an official detail page without a role-level Apply URL', 
   const result = await connector.enumerate({ runType: 'watch', detailBatchSize: 10, now: new Date() });
   await assert.rejects(connector.hydrate(result.listings[0], { runType: 'watch', detailBatchSize: 10, now: new Date() }), /direct Apply URL/i);
 });
+
+test('discovers role URLs embedded in client-rendered career data', async () => {
+  const fetcher = async (url: string) => new Response(url === config.careerSearchUrl
+    ? '<script>window.jobs = [{"jobUrl":"/india/jobs/789/investment-analyst"}]</script>'
+    : 'missing', { status: url === config.careerSearchUrl ? 200 : 404 });
+  const connector = createOfficialPageConnector(config, fetcher, 'watch');
+  const result = await connector.enumerate({ runType: 'watch', detailBatchSize: 10, now: new Date() });
+  assert.equal(result.listings.length, 1);
+  assert.equal(result.listings[0].detailUrl, 'https://careers.example.com/india/jobs/789/investment-analyst');
+  assert.equal(result.listings[0].rawMetadata.discoveryMethod, 'embedded-url');
+});

@@ -33,6 +33,7 @@ export function createOfficialPageConnector(
       const listings = uniqueBy([
         ...parseJsonLdListings(page, config, connectorId),
         ...parseAnchorListings(page, config, connectorId),
+        ...parseEmbeddedListings(page, config, connectorId),
         ...(await discoverSitemapListings(fetcher, page, config, connectorId)),
       ], (listing) => listing.sourceExternalId).slice(0, MAX_LISTINGS);
 
@@ -125,6 +126,23 @@ function parseAnchorListings(html: string, config: OfficialPageConfig, connector
     if (!href || !title || GENERIC_LINK.test(title) || !JOB_URL.test(href)) continue;
     if (!INDIA.test(context) && !INDIA.test(href) && !/india/i.test(config.careerSearchUrl)) continue;
     const listing = toListing({ title, url: href, jobLocation: { address: { addressCountry: 'IN' } } }, config, connectorId, 'anchor');
+    if (listing) listings.push(listing);
+  }
+  return listings;
+}
+
+function parseEmbeddedListings(html: string, config: OfficialPageConfig, connectorId: string): InventoryListing[] {
+  const listings: InventoryListing[] = [];
+  const embeddedUrl = /(?:job(?:Url|URL|_url|Link|LinkUrl)|detail(?:Url|URL|_url)|posting(?:Url|URL|_url)|requisition(?:Url|URL|_url)|vacancy(?:Url|URL|_url))\s*["']?\s*[:=]\s*["']([^"']+)["']/gi;
+  for (const match of html.matchAll(embeddedUrl)) {
+    const url = absoluteUrl(decodeHtml(match[1]), config.careerSearchUrl);
+    if (!url || !JOB_URL.test(url) || isGenericCareerUrl(url)) continue;
+    const listing = toListing(
+      { title: titleFromUrl(url), url, jobLocation: { address: { addressCountry: 'IN' } } },
+      config,
+      connectorId,
+      'embedded-url',
+    );
     if (listing) listings.push(listing);
   }
   return listings;

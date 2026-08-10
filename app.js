@@ -81,10 +81,14 @@ const applicationKitEmpty = document.querySelector('#application-kit-empty');
 const applicationKitPanel = document.querySelector('#application-kit-panel');
 const applicationKitList = document.querySelector('#application-kit-list');
 const applicationKitMeta = document.querySelector('#application-kit-meta');
+const roleDialog = document.querySelector('#role-dialog');
+const roleDialogContent = document.querySelector('#role-dialog-content');
+const roleDialogClose = document.querySelector('#role-dialog-close');
 let companySearchTerm = '';
 let matchScoreCache = new Map();
 let matchScoreCacheProfile = '';
 let parsedProfileForScoring = null;
+let scoringProfileText = '';
 let cvMatchGeneration = 0;
 let pdfJsPromise = null;
 const API_BASE = window.JOB_MONITOR_API || '';
@@ -108,6 +112,7 @@ const JOB_STATUS_STORAGE_KEY = 'first-look-job-status-v1';
 const JOB_STATUS_TTL_MS = 30 * 60 * 1000;
 let autoCheckedTopRoles = false;
 let selectedApplicationKitId = null;
+let selectedRoleId = null;
 let feedRecencyDays = 0;
 let feedCompanyFilter = '';
 const SKILL_KEYWORDS = [
@@ -204,22 +209,90 @@ function normalizeInventoryRole(role) {
   };
 }
 
+function canonicalRoleUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    url.hash = '';
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(?:utm_|source|src|ref|referrer|tracking|trk)/i.test(key)) url.searchParams.delete(key);
+    }
+    return url.href.replace(/\/$/, '').toLowerCase();
+  } catch (_error) {
+    return '';
+  }
+}
+
 function feedJobKey(job) {
-  const sourceUrl = job?.officialDetailUrl || job?.officialApplyUrl || job?.sources?.[0]?.detailUrl || '';
+  if (job?.inventoryRole && job?.id) return `inventory:${job.id}`;
+  if (job?.id) return `job:${job.id}`;
+  const sourceUrl = canonicalRoleUrl(job?.officialDetailUrl || job?.officialApplyUrl || job?.sources?.[0]?.detailUrl || '');
   if (sourceUrl) return `url:${sourceUrl}`;
   return `role:${companyKey(job?.company)}|${String(job?.title || '').trim().toLowerCase()}|${String(job?.location || '').trim().toLowerCase()}`;
 }
 
 function mergeFeedJobs(jobs, inventoryRoles) {
-  const merged = [];
-  const seen = new Set();
-  for (const job of [...(Array.isArray(jobs) ? jobs : []), ...(Array.isArray(inventoryRoles) ? inventoryRoles.map(normalizeInventoryRole) : [])]) {
+  const inventory = (Array.isArray(inventoryRoles) ? inventoryRoles : []).map(normalizeInventoryRole);
+  const merged = [...inventory];
+  const inventoryByUrl = new Map();
+  inventory.forEach((role) => {
+    const url = canonicalRoleUrl(role.officialDetailUrl);
+    if (url && !inventoryByUrl.has(`${companyKey(role.company)}|${url}`)) {
+      inventoryByUrl.set(`${companyKey(role.company)}|${url}`, role);
+    }
+  });
+
+  // Inventory IDs are the source of truth. Hydrated jobs enrich those rows;
+  // they must not cause an inventory row to disappear just because the URL is shared.
+  const seenJobKeys = new Set();
+  for (const job of Array.isArray(jobs) ? jobs : []) {
+    const url = canonicalRoleUrl(job?.officialDetailUrl || job?.officialApplyUrl || job?.sources?.[0]?.detailUrl || '');
+    const inventoryMatch = url ? inventoryByUrl.get(`${companyKey(job.company)}|${url}`) : null;
+    if (inventoryMatch) {
+      Object.assign(inventoryMatch, {
+        ...job,
+        id: inventoryMatch.id,
+        inventoryRole: true,
+        officialDetailUrl: inventoryMatch.officialDetailUrl || job.officialDetailUrl,
+        sources: Array.isArray(job.sources) && job.sources.length ? job.sources : inventoryMatch.sources,
+      });
+      continue;
+    }
     const key = feedJobKey(job);
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (seenJobKeys.has(key)) continue;
+    seenJobKeys.add(key);
     merged.push(job);
   }
   return merged;
+}
+
+function profileScreeningScore(job) {
+  const profile = profileText();
+  if (!profile) return null;
+  if (profile !== scoringProfileText) {
+    scoringProfileText = profile;
+    matchScoreCacheProfile = simpleHash(profile);
+    matchScoreCache = new Map();
+    parsedProfileForScoring = (() => {
+      const engine = cvEngine();
+      if (!engine) return null;
+      try { return engine.parseProfile(profile); } catch (_error) { return null; }
+    })();
+  }
+  if (!parsedProfileForScoring) return null;
+  const jobId = jobIdentity(job);
+  if (!matchScoreCache.has(jobId)) matchScoreCache.set(jobId, fastProfileMatchScore(job, parsedProfileForScoring));
+  return matchScoreCache.get(jobId);
+}
+
+function scoreRing(score, size = 56) {
+  const value = Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null;
+  const radius = 22;
+  const circumference = 2 * Math.PI * radius;
+  const offset = value === null ? circumference : circumference - (value / 100) * circumference;
+  return `<div class="match-ring" style="--ring-size:${size}px" aria-label="${value === null ? 'Match score unavailable' : `${value}% match`}">
+    <svg viewBox="0 0 56 56" aria-hidden="true"><circle class="match-ring-track" cx="28" cy="28" r="${radius}"></circle><circle class="match-ring-value" cx="28" cy="28" r="${radius}" stroke-dasharray="${circumference.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"></circle></svg>
+    <strong>${value === null ? 'n/a' : `${value}%`}</strong>
+  </div>`;
 }
 
 function renderFeedFilter() {
@@ -240,7 +313,7 @@ function renderFeedFilter() {
   });
 }
 
-function renderJobs(jobs) {
+function renderJobsLegacy(jobs) {
   currentJobs = Array.isArray(jobs) ? jobs : [];
   renderFeedFilter();
   renderCompanyDirectory();
@@ -364,8 +437,119 @@ function renderJobs(jobs) {
 
 }
 
+function renderJobs(jobs) {
+  currentJobs = Array.isArray(jobs) ? jobs : [];
+  renderFeedFilter();
+  renderCompanyDirectory();
+  renderCvMatches();
+  renderApplicationWorkspace();
+  if (!currentJobs.length) {
+    showFeedState('No roles found', 'Try refreshing the feed.', '0 roles');
+    return;
+  }
+
+  const visible = visibleFeedJobs();
+  if (!visible.length) {
+    showFeedState(`No roles listed in the last ${feedRecencyDays} days`, 'Widen the recency filter to see older roles.', `${currentJobs.length} roles in snapshot · filter: last ${feedRecencyDays} days`);
+    return;
+  }
+
+  matchesEmpty.hidden = true;
+  jobList.hidden = false;
+  const filteredLabel = feedRecencyDays && visible.length !== currentJobs.length ? ` of ${currentJobs.length}` : '';
+  const inventoryCount = currentJobs.filter((job) => job.inventoryRole).length;
+  const rankMeta = profileText() ? '' : ' · upload resume to rank';
+  matchesMeta.textContent = `${visible.length}${filteredLabel} ${visible.length === 1 ? 'role' : 'roles'}${inventoryCount ? ` · ${inventoryCount} source roles` : ''}${rankMeta}${latestSnapshotAt ? ` · updated ${formatAge(latestSnapshotAt)}` : ''}`;
+
+  const ranked = [...visible].sort((left, right) => {
+    const scoreDifference = (profileScreeningScore(right) ?? -1) - (profileScreeningScore(left) ?? -1);
+    return scoreDifference || jobListedTimestamp(right) - jobListedTimestamp(left) || String(left.company || '').localeCompare(String(right.company || ''));
+  });
+
+  jobList.innerHTML = ranked.map((job) => {
+    const applyUrl = directApplyUrl(job);
+    const roleUrl = roleReviewUrl(job);
+    const listedAt = jobListedAt(job);
+    const listedDays = jobListedDays(job);
+    const matchScore = profileScreeningScore(job);
+    const newBadge = listedDays !== null && listedDays <= 7 ? '<span class="badge badge-new">New</span>' : '';
+    const extractedSkills = extractSkills(`${job.title} ${job.description || ''}`).slice(0, 4);
+    const skillsHtml = extractedSkills.length
+      ? `<div class="job-skills">${extractedSkills.map((skill) => `<span class="badge badge-skill">${escapeHtml(skill)}</span>`).join('')}</div>`
+      : '';
+    const sourceLabelText = job.inventoryRole ? 'Employer listing' : job.officialVerified ? 'Verified' : 'Unverified';
+    const jobId = jobIdentity(job);
+    return `
+      <article class="job-card" data-job-id="${escapeAttribute(jobId)}">
+        <div class="job-main">
+          <div class="job-card-head">
+            <div>
+              <p class="job-company">${escapeHtml(job.company || 'Employer not listed')}</p>
+              <h3>${escapeHtml(job.title)}</h3>
+              <p class="job-location">${escapeHtml(job.location || 'Location not listed')}</p>
+            </div>
+            ${scoreRing(matchScore)}
+          </div>
+          <div class="job-card-meta"><span>${escapeHtml(sourceLabelText)}</span>${newBadge}${listedAt ? `<span>${escapeHtml(formatListedAge(listedAt))}</span>` : ''}</div>
+          ${skillsHtml}
+        </div>
+        <div class="job-actions">
+          <button class="text-button role-details-open" type="button" data-role-id="${escapeAttribute(jobId)}">View details</button>
+          ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">Apply</a>` : roleUrl ? `<a class="button" href="${roleUrl}" target="_blank" rel="noreferrer">Open role</a>` : ''}
+          <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Kit</button>
+        </div>
+      </article>`;
+  }).join('');
+}
+
 function profileText() {
   return cvProfile?.value.trim() || '';
+}
+
+function openRoleDetails(roleId) {
+  const job = currentJobs.find((candidate) => jobIdentity(candidate) === String(roleId));
+  if (!job || !roleDialog || !roleDialogContent) return;
+  selectedRoleId = jobIdentity(job);
+  const score = profileScreeningScore(job);
+  const applyUrl = directApplyUrl(job);
+  const roleUrl = roleReviewUrl(job);
+  const sources = Array.isArray(job.sources) ? job.sources : [];
+  const skills = extractSkills(`${job.title} ${job.description || ''}`).slice(0, 8);
+  const description = String(job.description || '').trim();
+  const sourceLinks = sources.map((source) => {
+    const url = safeUrl(source.detailUrl || source.listingUrl || source.applyUrl);
+    return url ? `<a class="role-source-link" href="${url}" target="_blank" rel="noreferrer">${escapeHtml(source.name || sourceLabel(source.type))}</a>` : '';
+  }).filter(Boolean).join('');
+  roleDialogContent.innerHTML = `
+    <div class="role-dialog-heading">
+      <div>
+        <p class="eyebrow">${escapeHtml(job.company || 'Employer')}</p>
+        <h2 id="role-dialog-title">${escapeHtml(job.title)}</h2>
+        <p class="role-dialog-meta">${escapeHtml(job.location || 'Location not listed')} · ${escapeHtml(job.inventoryRole ? 'Employer listing' : job.officialVerified ? 'Verified source' : 'Unverified source')}</p>
+      </div>
+      ${scoreRing(score, 72)}
+    </div>
+    <div class="role-dialog-actions">
+      ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">Apply</a>` : ''}
+      ${roleUrl && roleUrl !== applyUrl ? `<a class="button" href="${roleUrl}" target="_blank" rel="noreferrer">Open posting</a>` : ''}
+      <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobIdentity(job))}">Prepare kit</button>
+    </div>
+    <div class="role-dialog-facts"><span>${escapeHtml(job.experienceYears ? formatExperienceRange(job.experienceYears) : 'Experience not listed')}</span><span>${escapeHtml(job.postedAt ? formatListedAge(job.postedAt) : 'Date not listed')}</span></div>
+    ${skills.length ? `<div class="job-skills role-dialog-skills">${skills.map((skill) => `<span class="badge badge-skill">${escapeHtml(skill)}</span>`).join('')}</div>` : ''}
+    <section class="role-dialog-section"><h3>Posting</h3>${description ? `<p>${escapeHtml(description).replace(/\n/g, '<br />')}</p>` : '<p class="role-dialog-muted">The employer listing is available. Open the posting for the full description and requirements.</p>'}</section>
+    ${job.eligibilityNote ? `<p class="role-dialog-note">${escapeHtml(job.eligibilityNote)}</p>` : ''}
+    ${sourceLinks ? `<section class="role-dialog-section"><h3>Source</h3><div class="role-source-links">${sourceLinks}</div></section>` : ''}
+  `;
+  roleDialog.hidden = false;
+  document.body.classList.add('role-dialog-open');
+  roleDialogClose?.focus();
+}
+
+function closeRoleDetails() {
+  if (!roleDialog) return;
+  roleDialog.hidden = true;
+  document.body.classList.remove('role-dialog-open');
+  selectedRoleId = null;
 }
 
 function cvEngine() {
@@ -1784,17 +1968,17 @@ function renderCoverage(payload) {
     healthDot.className = 'health-dot ' + (hasErrors ? 'error' : 'success');
   }
 
-  const companiesWithRoles = new Set(currentJobs.map((job) => companyKey(job.company))).size;
-  coverageMeta.textContent = `${sources.length} verified sources · ${companiesWithRoles} companies publishing roles`;
+  const inventoryCount = currentJobs.filter((job) => job.inventoryRole).length;
+  coverageMeta.textContent = `${sources.length} sources · ${inventoryCount || currentJobs.length} roles in inventory`;
   coverageList.innerHTML = sources.map((source) => {
     const status = source.latestStatus || 'unknown';
     const progress = source.reconcile || source.watch;
     const statusText = status === 'complete'
-      ? 'Current inventory'
+      ? 'Current'
       : status === 'partial' || status === 'anomalous'
-        ? 'Partial scan · prior roles retained'
+        ? 'Partial · roles retained'
         : status === 'failed'
-          ? 'Source unavailable - keeping prior listings'
+          ? 'Unavailable · roles retained'
           : 'Not checked';
     const counts = progress && Number.isFinite(progress.listingsDiscovered)
       ? `${progress.listingsDiscovered}${Number.isFinite(progress.reportedTotal) ? ` of ${progress.reportedTotal}` : ''} summaries`
@@ -2163,6 +2347,17 @@ document.addEventListener('click', async (event) => {
 
   const viewTrigger = event.target.closest('[data-view]');
   if (viewTrigger) navigate(viewTrigger.dataset.view);
+
+  const roleDetails = event.target.closest('.role-details-open');
+  if (roleDetails) {
+    openRoleDetails(roleDetails.dataset.roleId || '');
+    return;
+  }
+
+  if (event.target.closest('#role-dialog-close') || event.target === roleDialog) {
+    closeRoleDetails();
+    return;
+  }
 
   const feedRecency = event.target.closest('.feed-recency');
   if (feedRecency) {
@@ -2625,6 +2820,7 @@ companySearch?.addEventListener('input', (event) => {
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && drawer?.classList.contains('is-open')) closeDrawer();
+  if (event.key === 'Escape' && roleDialog && !roleDialog.hidden) closeRoleDetails();
 });
 
 document.addEventListener('submit', async (event) => {
