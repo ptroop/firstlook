@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { EY_GDS_YELLO_CONFIG, createYelloConnector } from './yello.ts';
+import { EY_GDS_YELLO_CONFIG, KEARNEY_YELLO_CONFIG, createYelloConnector } from './yello.ts';
 
 const searchHtml = `
 <li class="search-results__item">
@@ -90,4 +90,16 @@ test('throws when the detail page exposes no Apply URL', async () => {
     }, { runType: 'reconcile', now: '2026-08-07T00:00:00Z' }),
     /Missing required EY GDS Yello job fields/i,
   );
+});
+
+test('uses Kearney’s public Recsolu board without changing its connector identity', async () => {
+  const requested: string[] = [];
+  const connector = createYelloConnector(KEARNEY_YELLO_CONFIG, async (url) => {
+    requested.push(String(url));
+    return new Response(JSON.stringify({ html: searchHtml }), { status: 200 });
+  }, 'reconcile', 'rcv-firecrawl-wave-1-reconcile');
+  const result = await connector.enumerate({ runType: 'reconcile', now: new Date('2026-08-07T00:00:00Z'), detailBatchSize: 20 });
+  assert.equal(result.diagnostic.status, 'complete');
+  assert.equal(result.listings[0].connectorId, 'kearney-firecrawl-india');
+  assert.match(requested[0], /kearney\.recsolu\.com\/job_boards\/1\/search/);
 });

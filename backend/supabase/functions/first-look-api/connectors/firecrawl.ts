@@ -26,7 +26,7 @@ export const DELOITTE_CONFIG: FirecrawlConfig = {
 export const HSBC_CONFIG: FirecrawlConfig = {
   companyName: 'HSBC',
   connectorIdPrefix: 'hsbc',
-  careerSearchUrl: 'https://mycareer.hsbc.com/en_GB/external/searchResults?country=India',
+  careerSearchUrl: 'https://mycareer.hsbc.com/en_GB/external/SearchJobs/?country=India',
 };
 export const PIRAMAL_CONFIG: FirecrawlConfig = {
   companyName: 'Piramal Finance',
@@ -46,11 +46,11 @@ export const ICRA_CONFIG: FirecrawlConfig = {
 
 export const RCV_FIRECRAWL_CONFIGS: FirecrawlConfig[] = [
   { companyName: 'BCG', connectorIdPrefix: 'bcg', careerSearchUrl: 'https://careers.bcg.com/global/en/search-results?keywords=India' },
-  { companyName: 'BCG Expand', connectorIdPrefix: 'bcg-expand', careerSearchUrl: 'https://careers.bcg.com/global/en/teams/expand' },
+  { companyName: 'BCG Expand', connectorIdPrefix: 'bcg-expand', careerSearchUrl: 'https://careers.bcg.com/global/en/search-results?keywords=Expand%20India' },
   { companyName: 'McKinsey', connectorIdPrefix: 'mckinsey', careerSearchUrl: 'https://www.mckinsey.com/careers/search-jobs/en' },
   { companyName: 'Bain / Capability Network', connectorIdPrefix: 'bain-capability-network', careerSearchUrl: 'https://www.bain.com/careers/' },
   { companyName: 'Kearney', connectorIdPrefix: 'kearney', careerSearchUrl: 'https://www.kearney.com/careers' },
-  { companyName: 'Alvarez & Marsal', connectorIdPrefix: 'alvarez-marsal', careerSearchUrl: 'https://www.alvarezandmarsal.com/careers' },
+  { companyName: 'Alvarez & Marsal', connectorIdPrefix: 'alvarez-marsal', careerSearchUrl: 'https://careers.alvarezandmarsal.com/search/jobs/in/country/india' },
   { companyName: 'ZS', connectorIdPrefix: 'zs', careerSearchUrl: 'https://www.zs.com/careers' },
   { companyName: 'BNY', connectorIdPrefix: 'bny', careerSearchUrl: 'https://www.bny.com/corporate/global/en/careers.html' },
   { companyName: 'MSCI', connectorIdPrefix: 'msci', careerSearchUrl: 'https://careers.msci.com/job-search?production__mscicare2201__sort-rank%5BrefinementList%5D%5Btown_city_country%5D%5B0%5D=Mumbai%20%7C%20India' },

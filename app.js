@@ -423,7 +423,7 @@ function renderJobsLegacy(jobs) {
           <div class="job-actions">
             <span class="verified-time">${listedAt ? `Listed ${escapeHtml(formatListedAge(listedAt))} · ` : ''}Verified ${escapeHtml(formatAge(job.newestVerificationAt))}</span>
             <span class="job-status-area" data-status-job-id="${escapeAttribute(jobId)}">${statusBadgeHtml(jobId)}<button class="text-button job-status-check" type="button" data-status-job-id="${escapeAttribute(jobId)}">Check if open</button></span>
-            <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Prepare kit</button>
+            <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Prepare</button>
             ${primaryUrl ? `<a class="button button-accent" href="${primaryUrl}" target="_blank" rel="noreferrer">${primaryLabel}</a>` : ''}
             ${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}
           </div>
@@ -496,7 +496,7 @@ function renderJobs(jobs) {
         <div class="job-actions">
           <button class="text-button role-details-open" type="button" data-role-id="${escapeAttribute(jobId)}">View details</button>
           ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">Apply</a>` : roleUrl ? `<a class="button" href="${roleUrl}" target="_blank" rel="noreferrer">Open role</a>` : ''}
-          <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Kit</button>
+          <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Prepare</button>
         </div>
       </article>`;
   }).join('');
@@ -532,7 +532,7 @@ function openRoleDetails(roleId) {
     <div class="role-dialog-actions">
       ${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">Apply</a>` : ''}
       ${roleUrl && roleUrl !== applyUrl ? `<a class="button" href="${roleUrl}" target="_blank" rel="noreferrer">Open posting</a>` : ''}
-      <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobIdentity(job))}">Prepare kit</button>
+      <button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobIdentity(job))}">Prepare</button>
     </div>
     <div class="role-dialog-facts"><span>${escapeHtml(job.experienceYears ? formatExperienceRange(job.experienceYears) : 'Experience not listed')}</span><span>${escapeHtml(job.postedAt ? formatListedAge(job.postedAt) : 'Date not listed')}</span></div>
     ${skills.length ? `<div class="job-skills role-dialog-skills">${skills.map((skill) => `<span class="badge badge-skill">${escapeHtml(skill)}</span>`).join('')}</div>` : ''}
@@ -609,13 +609,76 @@ function prepareApplicationKit(jobId) {
   navigate('applications');
 }
 
+function applicationSurface(job) {
+  const candidate = job?.officialApplyUrl || (job?.officialVerified ? job?.applyUrl : '');
+  try {
+    const host = new URL(candidate).hostname.toLowerCase();
+    const platform = host.includes('myworkdayjobs.com') ? 'Workday'
+      : host.includes('greenhouse.io') ? 'Greenhouse'
+        : host.includes('lever.co') ? 'Lever'
+          : host.includes('oraclecloud.com') ? 'Oracle Recruiting'
+            : host.includes('smartrecruiters.com') ? 'SmartRecruiters'
+              : host.includes('avature.net') || host.includes('hsbc.com') ? 'Avature'
+                : host.includes('eightfold.ai') || host.includes('careers.microsoft.com') || host.includes('apply.careers.microsoft.com') ? 'Eightfold'
+                  : 'Employer site';
+    return { url: safeUrl(candidate), platform };
+  } catch (_error) {
+    return { url: '', platform: 'Employer site' };
+  }
+}
+
+function openApplicationInline() {
+  const trigger = document.querySelector('#application-open-inline');
+  const workbench = document.querySelector('#application-workbench');
+  const frame = document.querySelector('#application-iframe');
+  const fallback = document.querySelector('#application-frame-fallback');
+  if (!trigger || !workbench || !frame || !trigger.dataset.url) return;
+  frame.src = trigger.dataset.url;
+  workbench.hidden = false;
+  if (fallback) fallback.hidden = false;
+  frame.addEventListener('load', () => {
+    const status = document.querySelector('#application-frame-status');
+    if (status) status.textContent = 'If the employer blocks embedded pages, use Open in new tab.';
+  }, { once: true });
+  workbench.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeApplicationInline() {
+  const workbench = document.querySelector('#application-workbench');
+  const frame = document.querySelector('#application-iframe');
+  if (frame) frame.src = 'about:blank';
+  if (workbench) workbench.hidden = true;
+}
+
+async function copyApplicationFields() {
+  const job = applicationJob(selectedApplicationKitId);
+  if (!job) return;
+  const record = applicationKitStore()?.get(selectedApplicationKitId);
+  const contact = { ...profileContact(), ...(record?.contact || {}) };
+  const fields = [
+    ['Full name', contact.name],
+    ['Email', contact.email],
+    ['Phone', contact.phone],
+    ['LinkedIn', contact.linkedinUrl],
+    ['Role', job.title],
+    ['Company', job.company],
+  ].filter(([, value]) => String(value || '').trim()).map(([label, value]) => `${label}: ${value}`).join('\n');
+  if (!fields) { showToast('Add a saved resume first.'); return; }
+  try {
+    await navigator.clipboard.writeText(fields);
+    showToast('Application fields copied.');
+  } catch (_error) {
+    showToast('Copy was blocked. Use the resume and contact fields manually.');
+  }
+}
+
 function renderApplicationWorkspace() {
   if (!applicationKitPanel || !applicationKitList || !applicationKitEmpty || !applicationKitMeta) return;
   const store = applicationKitStore();
   if (!store) return;
   const records = store.all();
   const selected = selectedApplicationKitId ? store.get(selectedApplicationKitId) : null;
-  applicationKitMeta.textContent = `${records.length} saved ${records.length === 1 ? 'kit' : 'kits'} · private on this device`;
+  applicationKitMeta.textContent = `${records.length} saved ${records.length === 1 ? 'application' : 'applications'} · local`;
   applicationKitEmpty.hidden = Boolean(selected);
   applicationKitPanel.hidden = !selected;
 
@@ -623,6 +686,7 @@ function renderApplicationWorkspace() {
     const job = selected.job;
     const directUrl = safeUrl(job.officialApplyUrl || (job.officialVerified ? job.applyUrl : ''));
     const roleUrl = safeUrl(job.officialDetailUrl || job.applyUrl);
+    const application = applicationSurface(job);
     const contact = { ...profileContact(), ...(selected.contact || {}) };
     const reviewedEvidence = isCvEvidenceReviewed(selected.id);
     const reviewedCover = isDraftReviewed(selected.id);
@@ -690,6 +754,18 @@ function renderApplicationWorkspace() {
         <div><p class="eyebrow">Selected role</p><h3>${escapeHtml(job.title)}</h3><p>${escapeHtml(job.company)} · ${escapeHtml(job.location || 'India')}</p></div>
         <span class="badge ${job.officialVerified ? 'badge-match' : 'badge-warning'}">${job.officialVerified ? 'Official source' : 'Portal lead'}</span>
       </div>
+      ${application.url ? `<div class="application-launcher">
+        <div><strong>Apply</strong><span class="section-meta">${escapeHtml(application.platform)}</span></div>
+        <div class="application-launcher-actions"><button class="button button-dark" type="button" id="application-open-inline" data-url="${escapeAttribute(application.url)}">Open here</button><a class="text-button" href="${application.url}" target="_blank" rel="noreferrer">Open in new tab</a></div>
+        <p id="application-frame-status">If the form blocks embedding, use the new tab.</p>
+      </div>
+      <div class="application-workbench" id="application-workbench" hidden>
+        <div class="application-browser"><div class="application-browser-head"><strong>Employer application</strong><button class="text-button" type="button" id="application-close-inline">Close</button></div><iframe id="application-iframe" title="Employer application" loading="lazy" referrerpolicy="no-referrer"></iframe><div class="application-frame-fallback" id="application-frame-fallback" hidden><a class="button button-accent" href="${application.url}" target="_blank" rel="noreferrer">Continue in new tab</a></div></div>
+        <aside class="application-assist"><div class="application-kit-subheading"><h4>Fields</h4><span class="section-meta">Review first</span></div><button class="button" type="button" id="application-copy-fields">Copy fields</button></aside>
+      </div>` : ''}
+      <details class="application-details">
+        <summary>Application details</summary>
+        <div class="application-details-body">
       <div class="application-kit-grid">
         <label class="field-label">Stage<select id="application-kit-status">${applicationKitStore().statuses.map((status) => `<option value="${status}"${selected.status === status ? ' selected' : ''}>${escapeHtml(status.replace('_', ' '))}</option>`).join('')}</select></label>
         <div class="application-kit-checks"><span class="field-label">Review gates</span><span class="kit-check ${reviewedEvidence ? 'is-complete' : ''}">${reviewedEvidence ? '✓' : '○'} CV evidence</span><span class="kit-check ${reviewedCover ? 'is-complete' : ''}">${reviewedCover ? '✓' : '○'} Cover letter</span></div>
@@ -749,8 +825,10 @@ function renderApplicationWorkspace() {
         ${directUrl ? `<a class="button button-accent" href="${directUrl}" target="_blank" rel="noreferrer">Open application</a>` : ''}
         ${roleUrl && roleUrl !== directUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}
         <button class="button button-dark" type="button" id="application-kit-save">Save kit</button>
-        <button class="text-button" type="button" id="application-kit-export">Export for First Look Copilot</button>
-      </div>`;
+        <button class="text-button" type="button" id="application-kit-export">Download application kit</button>
+      </div>
+        </div>
+      </details>`;
   }
 
   applicationKitList.innerHTML = records.map((record) => {
@@ -758,7 +836,7 @@ function renderApplicationWorkspace() {
     return `
     <article class="application-kit-row">
       <div><h4>${escapeHtml(record.job.title)}</h4><p>${escapeHtml(record.job.company)} · ${escapeHtml(record.status.replace('_', ' '))}${followUpLabel ? ` · <span class="badge badge-warning">${escapeHtml(followUpLabel)}</span>` : ''}${record.outreachResult ? ` · <span class="badge">${escapeHtml(record.outreachResult)}</span>` : ''}</p><small>Updated ${escapeHtml(formatAge(record.updatedAt))}</small></div>
-      <button class="text-button application-kit-select" type="button" data-application-job-id="${escapeAttribute(record.id)}">Open kit</button>
+      <button class="text-button application-kit-select" type="button" data-application-job-id="${escapeAttribute(record.id)}">Open</button>
     </article>`;
   }).join('');
 }
@@ -1314,7 +1392,7 @@ function exportApplicationKit() {
   if (!payload) return;
   downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), 'first-look-application-kit.json');
   renderApplicationWorkspace();
-  showToast('Application kit exported for the First Look Copilot extension.');
+  showToast('Application kit downloaded.');
 }
 
 function loadCoverLetterDrafts() {
@@ -1792,7 +1870,7 @@ async function renderCvMatches() {
     const coverButton = canDraftCoverLetter && draft ? `<button class="text-button cover-letter-toggle" type="button" data-cover-job-id="${escapeAttribute(jobId)}">Review cover letter (${escapeHtml(result.coverLetter.label)})</button>` : '';
     const score = result.score === null ? 'Not scoreable' : `${result.score}/100 evidence match`;
     return `<article class="cv-result">
-      <div class="cv-result-top"><div><h4>${escapeHtml(job.title)}</h4><p class="cv-result-company">${escapeHtml(job.company || '')}</p><p class="cv-result-location">${escapeHtml(job.location || 'Location not listed')}</p></div><span class="cv-score">${escapeHtml(score)}</span></div>
+      <div class="cv-result-top"><div><h4>${escapeHtml(job.title)}</h4><p class="cv-result-company">${escapeHtml(job.company || '')}</p><p class="cv-result-location">${escapeHtml(job.location || 'Location not listed')}</p></div>${scoreRing(result.score, 56)}</div>
       <div class="cv-result-tags">${result.evidence.slice(0, 5).map(({ term }) => `<span class="badge">Supported: ${escapeHtml(term)}</span>`).join('')}${result.missing.slice(0, 5).map((term) => `<span class="badge badge-missing">Gap: ${escapeHtml(term)}</span>`).join('')}<span class="badge">Cover: ${escapeHtml(result.coverLetter.label)}</span></div>
       <div class="cv-result-actions">${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${job.officialApplyUrl ? 'Apply direct' : 'Open role'}</a>` : ''}${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}<button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Prepare application kit</button><button class="text-button cv-brief-toggle" type="button" data-cv-job-id="${escapeAttribute(jobId)}">Show evidence brief</button><label class="review-gate"><input class="cv-evidence-review" type="checkbox" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? ' checked' : ''} /> I reviewed the evidence brief</label><button class="text-button cv-tailored-export" type="button" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? '' : ' disabled'} title="${evidenceReviewed ? '' : 'Review the evidence brief first.'}">Export tailored CV</button>${coverButton}</div>
       <div class="cv-brief" id="cv-brief-${escapeAttribute(jobId)}" hidden>${buildCvBrief(job, result)}</div>
@@ -2078,8 +2156,10 @@ function sameCompany(left, right) {
 }
 
 function showFeedState(title, message, meta) {
-  matchesEmpty.querySelector('h3').textContent = title;
-  matchesEmpty.querySelector('p').textContent = message;
+  const heading = matchesEmpty.querySelector('h3');
+  const detail = matchesEmpty.querySelector('p');
+  if (heading) heading.textContent = title;
+  if (detail) detail.textContent = message;
   matchesMeta.textContent = meta;
   matchesEmpty.hidden = false;
   jobList.hidden = true;
@@ -2394,6 +2474,21 @@ document.addEventListener('click', async (event) => {
 
   if (event.target.closest('#application-kit-export')) {
     exportApplicationKit();
+    return;
+  }
+
+  if (event.target.closest('#application-open-inline')) {
+    openApplicationInline();
+    return;
+  }
+
+  if (event.target.closest('#application-close-inline')) {
+    closeApplicationInline();
+    return;
+  }
+
+  if (event.target.closest('#application-copy-fields')) {
+    copyApplicationFields();
     return;
   }
 

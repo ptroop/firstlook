@@ -474,6 +474,12 @@ h2 { margin-bottom: 8px; font-family: var(--serif); font-size: 32px; font-weight
 .application-kit-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
 .application-kit-heading h3 { margin: 0 0 6px; font-family: var(--serif); font-size: 26px; font-weight: 500; }
 .application-kit-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+.application-details { margin-top: 16px; border-top: 1px solid var(--line); }
+.application-details > summary, .secondary-panel > summary { cursor: pointer; list-style: none; padding: 13px 0; color: var(--ink); font-size: 12px; font-weight: 600; }
+.application-details > summary::-webkit-details-marker, .secondary-panel > summary::-webkit-details-marker { display: none; }
+.application-details > summary::after, .secondary-panel > summary::after { content: '+'; float: right; color: var(--muted); font-family: var(--mono); }
+.application-details[open] > summary::after, .secondary-panel[open] > summary::after { content: '−'; }
+.application-details-body { padding-top: 4px; }
 .application-kit-grid, .application-kit-contact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
 .application-kit-grid { margin-bottom: 18px; }
 .application-kit-grid select, .application-kit-contact-grid input, .application-kit-contact-grid select { width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color: var(--ink); font: inherit; }
@@ -488,6 +494,18 @@ h2 { margin-bottom: 8px; font-family: var(--serif); font-size: 32px; font-weight
 .application-kit-subheading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .application-kit-subheading h4 { margin: 0; font-family: var(--serif); font-size: 19px; font-weight: 500; }
 .application-kit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 20px; }
+.application-launcher { display: grid; grid-template-columns: 1fr auto; gap: 8px 18px; align-items: center; margin: -4px 0 20px; padding: 14px 16px; border: 1px solid var(--line); background: var(--surface); }
+.application-launcher strong { display: block; margin-bottom: 4px; font-size: 13px; }
+.application-launcher .section-meta { display: block; }
+.application-launcher p { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 11px; }
+.application-launcher-actions { display: flex; align-items: center; gap: 12px; }
+.application-workbench { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, .7fr); gap: 16px; margin: -4px 0 22px; }
+.application-browser { min-width: 0; border: 1px solid var(--line-strong); background: #fff; }
+.application-browser-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.application-browser iframe { display: block; width: 100%; min-height: 620px; border: 0; background: #f7f6f2; }
+.application-frame-fallback { padding: 12px; border-top: 1px solid var(--line); }
+.application-assist { align-self: start; padding: 16px; border: 1px solid var(--line); background: var(--surface); }
+.application-assist p { margin: 0 0 14px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .application-kit-list { display: grid; gap: 0; margin-top: 22px; border-top: 1px solid var(--line); }
 .application-kit-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .application-kit-row h4 { margin: 0 0 4px; font-family: var(--serif); font-size: 18px; font-weight: 500; }
@@ -678,6 +696,9 @@ h2 { margin-bottom: 8px; font-family: var(--serif); font-size: 32px; font-weight
   .portal-intake { align-items: flex-start; flex-direction: column; }
   .application-kit-grid, .application-kit-contact-grid { grid-template-columns: 1fr; }
   .application-kit-panel { padding: 18px; }
+  .application-launcher, .application-workbench { grid-template-columns: 1fr; }
+  .application-launcher-actions { flex-wrap: wrap; }
+  .application-browser iframe { min-height: 520px; }
   .application-kit-heading, .application-kit-subheading { display: block; }
   .application-kit-heading .badge, .application-kit-subheading .section-meta { display: inline-block; margin-top: 10px; }
   .application-kit-row { align-items: flex-start; }
@@ -711,6 +732,11 @@ h2 { margin-bottom: 8px; font-family: var(--serif); font-size: 32px; font-weight
 
 /* Gated hiring signals (manual, unverified) */
 .hiring-signals { margin-top: 44px; padding: 22px 24px; border: 1px dashed var(--line-strong); background: var(--surface); }
+.secondary-panel { margin-top: 12px; padding: 0 16px; border: 1px solid var(--line); background: var(--surface); }
+.secondary-panel[open] { padding-bottom: 16px; }
+.secondary-panel > summary { padding: 11px 0; }
+.portal-intake.secondary-panel, .role-link-intake.secondary-panel { display: block; }
+.portal-intake.secondary-panel > div, .role-link-intake.secondary-panel > div { margin-top: 4px; }
 .hiring-signals .application-kit-subheading > div { display: flex; align-items: center; gap: 10px; }
 .hiring-signals .badge { margin: 0; }
 .hiring-signal-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; margin-top: 16px; }

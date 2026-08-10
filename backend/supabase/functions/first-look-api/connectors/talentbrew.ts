@@ -144,11 +144,11 @@ export function parseTalentBrewResults(html: string, config: TalentBrewConfig): 
 }
 
 export function parseTalentBrewDetail(html: string, detailUrl: string, config: TalentBrewConfig) {
-  const title = firstText(html, ['section4__job-title', 'job-details--title', 'job-title']) || metaContent(html, 'og:title') || firstHeading(html);
-  const location = firstText(html, ['section4__job-location', 'job-details--location', 'job-location']) || jsonLdLocation(html);
-  const description = htmlToText(classHtml(html, 'ats-description') || classHtml(html, 'job-description') || jsonLdDescription(html) || classHtml(html, 'job-details--description'));
+  const title = firstText(html, ['section4__job-title', 'job-details--title', 'job-title', 'section4__title']) || metaContent(html, 'og:title') || jsonLdTitle(html) || firstHeading(html);
+  const location = firstText(html, ['section4__job-location', 'job-details--location', 'job-location', 'section4__location']) || metaContent(html, 'job-location') || jsonLdLocation(html);
+  const description = htmlToText(classHtml(html, 'ats-description') || classHtml(html, 'job-description') || jsonLdDescription(html) || classHtml(html, 'job-details--description') || classHtml(html, 'section4__job-description') || classHtml(html, 'job-details__description') || metaContent(html, 'description'));
   const applyUrl = attribute(html, 'data-apply-url') || metaContent(html, 'job-apply-url') || findApplyHref(html);
-  const employerJobId = attribute(html, 'data-job-id') || detailUrl.match(/\/(\d+)\/?$/)?.[1] || '';
+  const employerJobId = attribute(html, 'data-job-id') || metaContent(html, 'job-id') || jsonLdIdentifier(html) || detailUrl.match(/\/(\d+)\/?$/)?.[1] || '';
   const jobCategory = firstText(html, ['section4__job-category', 'job-details--category']);
   const experienceText = description.match(/[^.]*\b(?:\d+\s*(?:-|to)\s*\d+\s+years?|\d+\+?\s+years?|freshers?|no prior experience)[^.]*\.?/i)?.[0]?.trim() || '';
   if (!employerJobId || !title || !location || !description || !/^https?:\/\//i.test(applyUrl)) throw new Error(`Missing required ${config.company} job fields`);
@@ -203,6 +203,31 @@ function jsonLdDescription(html: string): string {
   return '';
 }
 
+function jsonLdTitle(html: string): string {
+  for (const block of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const parsed = JSON.parse(block[1]);
+      const candidates = Array.isArray(parsed) ? parsed : [parsed];
+      const value = candidates.find((item) => item && typeof item.name === 'string')?.name;
+      if (value) return value;
+    } catch { /* malformed JSON-LD is not fatal */ }
+  }
+  return '';
+}
+
+function jsonLdIdentifier(html: string): string {
+  for (const block of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const parsed = JSON.parse(block[1]);
+      const candidates = Array.isArray(parsed) ? parsed : [parsed];
+      const value = candidates.find((item) => item?.identifier)?.identifier;
+      if (typeof value === 'string' || typeof value === 'number') return String(value);
+      if (value && typeof value.value === 'string') return value.value;
+    } catch { /* malformed JSON-LD is not fatal */ }
+  }
+  return '';
+}
+
 function jsonLdLocation(html: string): string {
   for (const block of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
     try {
@@ -228,9 +253,12 @@ function attribute(html: string, name: string): string {
 }
 
 function findApplyHref(html: string): string {
-  return [...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)]
-    .map((match) => decodeHtml(match[1]))
-    .find((href) => /\/apply(?:[/?#]|$)/i.test(href) && /^https?:\/\//i.test(href)) || '';
+  for (const match of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = decodeHtml(match[1]);
+    const label = htmlToText(match[2]);
+    if ((/\/apply(?:[/?#]|$)/i.test(href) || /\bapply(?: now)?\b/i.test(label)) && /^https?:\/\//i.test(href)) return href;
+  }
+  return '';
 }
 
 async function fetchText(fetcher: JobFetch, url: string): Promise<string> {

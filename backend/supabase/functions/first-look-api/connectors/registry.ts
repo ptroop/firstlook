@@ -20,11 +20,13 @@ import { createDeloitteConnector } from './deloitte.ts';
 import { createAmazonConnector } from './amazon.ts';
 import { createSiemensConnector } from './siemens.ts';
 import { PAYTM_LEVER_CONFIG, CRED_LEVER_CONFIG, createLeverConnector } from './lever.ts';
-import { EY_GDS_YELLO_CONFIG, createYelloConnector } from './yello.ts';
+import { EY_GDS_YELLO_CONFIG, KEARNEY_YELLO_CONFIG, createYelloConnector } from './yello.ts';
 import {
   MICROSOFT_CONFIG, HSBC_CONFIG,
   PIRAMAL_CONFIG, PINE_LABS_CONFIG, ICRA_CONFIG, RCV_FIRECRAWL_WAVES, createFirecrawlConnector
 } from './firecrawl.ts';
+import { HSBC_AVATURE_CONFIG, ICRA_NATIVE_CONFIG, MICROSOFT_NATIVE_CONFIG, createAvatureConnector, createIcraConnector, createMicrosoftConnector } from './public-ats.ts';
+import { PINE_LABS_TURBOHIRE_CONFIG, createTurboHireConnector } from './turbohire.ts';
 import { createOfficialPageConnector } from './official-page.ts';
 import { AXIS_BANK_RIPPLEHIRE_CONFIG, HDFC_BANK_RIPPLEHIRE_CONFIG, createRippleHireConnector } from './ripplehire.ts';
 
@@ -112,20 +114,30 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
       createWorkdayConnector(config, fetch, 'watch'),
       createWorkdayConnector(config, fetch, 'reconcile')
     ]),
-    ...[
-      MICROSOFT_CONFIG,
-      HSBC_CONFIG,
-      PIRAMAL_CONFIG,
-      PINE_LABS_CONFIG,
-      ICRA_CONFIG
-    ].flatMap(config => [
-      createFirecrawlConnector(config, FIRECRAWL_API_KEY, 'watch'),
-      createFirecrawlConnector(config, FIRECRAWL_API_KEY, 'reconcile')
-    ]),
-    ...RCV_FIRECRAWL_WAVES.flatMap((wave, waveIndex) => wave.flatMap(config => [
-      createFirecrawlConnector(config, FIRECRAWL_API_KEY, 'watch', fetch, `rcv-firecrawl-wave-${waveIndex + 1}-watch`),
-      createFirecrawlConnector(config, FIRECRAWL_API_KEY, 'reconcile', fetch, `rcv-firecrawl-wave-${waveIndex + 1}-reconcile`),
-    ])),
+    createMicrosoftConnector(MICROSOFT_NATIVE_CONFIG, fetch, 'microsoft-firecrawl-india-watch'),
+    createMicrosoftConnector(MICROSOFT_NATIVE_CONFIG, fetch, 'microsoft-firecrawl-india-reconcile'),
+    createAvatureConnector(HSBC_AVATURE_CONFIG, fetch, 'hsbc-firecrawl-india-watch'),
+    createAvatureConnector(HSBC_AVATURE_CONFIG, fetch, 'hsbc-firecrawl-india-reconcile'),
+    createFirecrawlConnector(PIRAMAL_CONFIG, FIRECRAWL_API_KEY, 'watch'),
+    createFirecrawlConnector(PIRAMAL_CONFIG, FIRECRAWL_API_KEY, 'reconcile'),
+    createTurboHireConnector(PINE_LABS_TURBOHIRE_CONFIG, fetch, 'watch', 'pine-labs-firecrawl-india-watch'),
+    createTurboHireConnector(PINE_LABS_TURBOHIRE_CONFIG, fetch, 'reconcile', 'pine-labs-firecrawl-india-reconcile'),
+    createIcraConnector(ICRA_NATIVE_CONFIG, fetch, 'icra-firecrawl-india-watch'),
+    createIcraConnector(ICRA_NATIVE_CONFIG, fetch, 'icra-firecrawl-india-reconcile'),
+    ...RCV_FIRECRAWL_WAVES.flatMap((wave, waveIndex) => wave.flatMap(config => {
+      const watchGroup = `rcv-firecrawl-wave-${waveIndex + 1}-watch`;
+      const reconcileGroup = `rcv-firecrawl-wave-${waveIndex + 1}-reconcile`;
+      if (config.connectorIdPrefix === 'kearney') {
+        return [
+          createYelloConnector(KEARNEY_YELLO_CONFIG, fetch, 'watch', watchGroup),
+          createYelloConnector(KEARNEY_YELLO_CONFIG, fetch, 'reconcile', reconcileGroup),
+        ];
+      }
+      return [
+        createFirecrawlConnector(config, FIRECRAWL_API_KEY, 'watch', fetch, watchGroup),
+        createFirecrawlConnector(config, FIRECRAWL_API_KEY, 'reconcile', fetch, reconcileGroup),
+      ];
+    })),
     ...RCV_FIRECRAWL_WAVES.flatMap((wave, waveIndex) => wave.flatMap(config => [
       createOfficialPageConnector(config, fetch, 'watch', `rcv-official-page-wave-${waveIndex + 1}-watch`),
       createOfficialPageConnector(config, fetch, 'reconcile', `rcv-official-page-wave-${waveIndex + 1}-reconcile`),

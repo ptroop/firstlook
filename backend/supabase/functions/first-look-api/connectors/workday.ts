@@ -43,7 +43,8 @@ export const FACTSET_CONFIG: WorkdayConfig = { companyName: 'FactSet', baseUrl: 
 export const BLOOMBERG_CONFIG: WorkdayConfig = { companyName: 'Bloomberg', baseUrl: 'https://bloomberg.wd1.myworkdayjobs.com/en-US/Bloombergindustrygroup_External_Career_Site', tenant: 'bloomberg', siteName: 'Bloombergindustrygroup_External_Career_Site', connectorIdPrefix: 'bloomberg' };
 
 const INDIA_LOCATIONS = /\b(?:india|bengaluru|bangalore|gurgaon|gurugram|mumbai|pune|hyderabad|delhi|noida|chennai|kolkata|coimbatore|ahmedabad|jaipur|thiruvananthapuram|kochi|chandigarh)\b/i;
-const REQUEST_TIMEOUT_MS = 20_000;
+const REQUEST_TIMEOUT_MS = 35_000;
+const MAX_REQUEST_ATTEMPTS = 3;
 const PAGE_SIZE = 20;
 const MAX_PAGES = 500;
 
@@ -186,14 +187,23 @@ function publicJobUrl(config: WorkdayConfig, externalPath: string): string {
 }
 
 async function fetchJson(fetcher: JobFetch, url: string, init: RequestInit = {}): Promise<Record<string, any>> {
-  const response = await fetcher(url, { ...init, signal: init.signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { 'User-Agent': 'first-look-job-monitor/1.0 (+personal use)', ...(init.headers || {}) } });
-  const text = await response.text();
-  if (!response.ok) {
-    if (/maintenance-page|maintenance|temporarily unavailable/i.test(text)) throw new Error(`Workday maintenance page (${response.status})`);
-    throw new Error(`Workday fetch failed: ${response.status} ${response.statusText}`);
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < MAX_REQUEST_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetcher(url, { ...init, signal: init.signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { 'User-Agent': 'first-look-job-monitor/1.0 (+personal use)', ...(init.headers || {}) } });
+      const text = await response.text();
+      if (!response.ok) {
+        if (/maintenance-page|maintenance|temporarily unavailable/i.test(text)) throw new Error(`Workday maintenance page (${response.status})`);
+        throw new Error(`Workday fetch failed: ${response.status} ${response.statusText}`);
+      }
+      if (/^\s*</.test(text) || /maintenance-page|temporarily unavailable/i.test(text)) throw new Error('Workday returned a maintenance page instead of JSON');
+      try { return JSON.parse(text) as Record<string, any>; } catch { throw new Error('Workday returned invalid JSON'); }
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_REQUEST_ATTEMPTS - 1) await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+    }
   }
-  if (/^\s*</.test(text) || /maintenance-page|temporarily unavailable/i.test(text)) throw new Error('Workday returned a maintenance page instead of JSON');
-  try { return JSON.parse(text) as Record<string, any>; } catch { throw new Error('Workday returned invalid JSON'); }
+  throw lastError instanceof Error ? lastError : new Error('Workday request failed');
 }
 
 function extractExperience(description: string): string {

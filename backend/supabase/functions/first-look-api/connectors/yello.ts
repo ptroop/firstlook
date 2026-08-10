@@ -5,6 +5,8 @@ export interface YelloConfig {
   companyName: string;
   connectorIdPrefix: string;
   boardId: string;
+  boardHost?: string;
+  connectorId?: string;
 }
 
 // Verified live 2026-08-07: EY's careers site (careers.ey.com and
@@ -19,6 +21,14 @@ export const EY_GDS_YELLO_CONFIG: YelloConfig = {
   boardId: 'c1riT--B2O-KySgYWsZO1Q',
 };
 
+export const KEARNEY_YELLO_CONFIG: YelloConfig = {
+  companyName: 'Kearney',
+  connectorIdPrefix: 'kearney',
+  boardId: '1',
+  boardHost: 'kearney.recsolu.com',
+  connectorId: 'kearney-firecrawl-india',
+};
+
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_BODY_BYTES = 8_000_000;
 const MAX_PAGES = 20;
@@ -30,7 +40,7 @@ export function createYelloConnector(
   runType: 'watch' | 'reconcile',
   scanGroup = `${config.connectorIdPrefix}-${runType}`,
 ): OfficialJobConnector {
-  const connectorId = `${config.connectorIdPrefix}-official-india`;
+  const connectorId = config.connectorId || `${config.connectorIdPrefix}-official-india`;
   return {
     connectorId,
     connectorVersion: 'yello-v1',
@@ -121,7 +131,7 @@ export function createYelloConnector(
 }
 
 function boardUrl(config: YelloConfig): string {
-  return `https://eyglobal.yello.co/job_boards/${config.boardId}`;
+  return `https://${config.boardHost || 'eyglobal.yello.co'}/job_boards/${config.boardId}`;
 }
 
 function parseSearchHtml(html: string, config: YelloConfig, connectorId: string): InventoryListing[] {

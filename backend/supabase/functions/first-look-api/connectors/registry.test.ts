@@ -173,6 +173,12 @@ test('registers Firecrawl connectors for 5 companies', () => {
   }
 });
 
+test('registers Pine Labs through its native TurboHire feed without changing its source identity', () => {
+  const connectors = createOfficialConnectorRegistry().filter((connector) => connector.connectorId === 'pine-labs-firecrawl-india');
+  assert.deepEqual(connectors.map((connector) => connector.connectorVersion), ['turbohire-v1', 'turbohire-v1']);
+  assert.deepEqual(connectors.map((connector) => connector.scanGroup), ['pine-labs-firecrawl-india-watch', 'pine-labs-firecrawl-india-reconcile']);
+});
+
 test('registers quota-free official-page discovery for every Firecrawl fallback company', () => {
   const connectors = createOfficialConnectorRegistry();
   const pageConnectors = connectors.filter((connector) => connector.connectorId.endsWith('-official-page-india'));
