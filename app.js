@@ -1542,10 +1542,11 @@ async function renderCvMatches() {
     return;
   }
   const parsedProfile = typeof engine.parseProfile === 'function' ? engine.parseProfile(profile) : profile;
-  const profileTerms = [...new Set((parsedProfile.skills || [])
+  const fallbackTerms = String(parsedProfile.text || '').toLowerCase().match(/[a-z][a-z0-9+#.&/-]{3,}/g) || [];
+  const profileTerms = [...new Set([...(parsedProfile.skills || []), ...fallbackTerms]
     .map((term) => String(term).toLowerCase())
-    .filter(Boolean))].slice(0, 40);
-  const candidateJobs = pool.length > 300
+    .filter((term) => term && !/^(about|after|before|from|have|into|over|that|their|these|this|those|using|with|your)$/.test(term)))].slice(0, 40);
+  const candidateJobs = pool.length > 60
     ? pool.map((job) => {
       const title = String(job.title || '').toLowerCase();
       const haystack = `${title} ${String(job.description || '').toLowerCase()}`;
@@ -1554,7 +1555,7 @@ async function renderCvMatches() {
       return { job, score };
     })
       .sort((left, right) => right.score - left.score || jobListedTimestamp(right.job) - jobListedTimestamp(left.job))
-      .slice(0, 300)
+      .slice(0, 60)
       .map(({ job }) => job)
     : pool;
   cvResultsMeta.textContent = 'Matching';
