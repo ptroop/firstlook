@@ -81,7 +81,7 @@ function corsHeaders(origin: string | null) {
   const isAllowed = origin && (allowedOrigins.includes(origin) || isLocalhost);
   return {
     'Access-Control-Allow-Origin': isAllowed ? origin : (allowedOrigins[0] || '*'),
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-resume-inbox-token',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Expose-Headers': 'Content-Disposition',
     'Content-Type': 'application/json',
@@ -122,15 +122,23 @@ async function authenticateResumeUser(request: Request, headers: Record<string, 
   return { user: { id: user.id, email: user.email.trim().toLowerCase() } };
 }
 
-async function authenticateResumeAdmin(request: Request, headers: Record<string, string>): Promise<ResumeAuth> {
-  const auth = await authenticateResumeUser(request, headers);
-  if ('response' in auth) return auth;
-  const admins = (Deno.env.get('RESUME_ADMIN_EMAILS') || '')
-    .split(',')
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-  if (!admins.includes(auth.user.email)) return { response: json({ error: 'Forbidden' }, headers, 403) };
-  return auth;
+function requireResumeInboxToken(request: Request, headers: Record<string, string>): Response | null {
+  const expected = Deno.env.get('RESUME_INBOX_TOKEN') || '';
+  if (!expected) return json({ error: 'Resume inbox is not configured' }, headers, 503);
+  const supplied = request.headers.get('X-Resume-Inbox-Token') || '';
+  if (!constantTimeSecretEqual(supplied, expected)) return json({ error: 'Invalid inbox token' }, headers, 401);
+  return null;
+}
+
+function constantTimeSecretEqual(left: string, right: string): boolean {
+  const leftBytes = new TextEncoder().encode(left);
+  const rightBytes = new TextEncoder().encode(right);
+  const length = Math.max(leftBytes.length, rightBytes.length);
+  let difference = leftBytes.length ^ rightBytes.length;
+  for (let index = 0; index < length; index += 1) {
+    difference |= (leftBytes[index] || 0) ^ (rightBytes[index] || 0);
+  }
+  return difference === 0;
 }
 
 function storagePath(path: string): string | null {
@@ -203,8 +211,8 @@ async function saveResumeCopy(request: Request, headers: Record<string, string>)
 }
 
 async function listResumeCopies(request: Request, headers: Record<string, string>) {
-  const auth = await authenticateResumeAdmin(request, headers);
-  if ('response' in auth) return auth.response;
+  const denied = requireResumeInboxToken(request, headers);
+  if (denied) return denied;
   const response = await storageApiRequest(`object/list/${RESUME_BUCKET}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -228,8 +236,8 @@ async function listResumeCopies(request: Request, headers: Record<string, string
 }
 
 async function downloadResumeCopy(request: Request, url: URL, headers: Record<string, string>) {
-  const auth = await authenticateResumeAdmin(request, headers);
-  if ('response' in auth) return auth.response;
+  const denied = requireResumeInboxToken(request, headers);
+  if (denied) return denied;
   const path = storagePath(url.searchParams.get('path') || '');
   if (!path) return json({ error: 'Invalid resume path' }, headers, 400);
   const response = await storageRequest(path);

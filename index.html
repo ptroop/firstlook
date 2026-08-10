@@ -62,7 +62,7 @@
                 <input id="cv-file" type="file" accept=".pdf,.txt,.md,.html,application/pdf,text/plain,text/html" hidden />
                 <button class="button button-dark" id="save-profile">Save profile</button>
                 <button class="text-button" id="download-resume" type="button" hidden>Download resume</button>
-                <button class="text-button" id="save-resume-copy" type="button" hidden>Save copy</button>
+                <button class="text-button" id="save-resume-copy" type="button" hidden>Upload</button>
                 <button class="text-button" id="clear-profile" type="button">Clear</button>
               </div>
               <div class="cv-version-row">
@@ -71,9 +71,13 @@
                 <button class="text-button" id="cv-export-profile" type="button">Export .docx</button>
               </div>
               <div class="cv-versions" id="cv-versions" aria-live="polite"></div>
-              <p class="privacy-note">Local until you choose Save copy.</p>
+              <p class="privacy-note">Local by default.</p>
               <div class="resume-inbox-tools">
-                <button class="text-button" id="resume-inbox-toggle" type="button">Resume inbox</button>
+                <button class="text-button" id="resume-inbox-toggle" type="button">Inbox</button>
+                <form class="resume-inbox-gate" id="resume-inbox-gate" hidden>
+                  <label class="field-label" for="resume-inbox-token">Inbox token<input id="resume-inbox-token" type="password" autocomplete="off" required /></label>
+                  <button class="text-button" id="resume-inbox-unlock" type="submit">Unlock</button>
+                </form>
                 <div class="resume-inbox" id="resume-inbox" hidden aria-live="polite"></div>
               </div>
               <aside class="cv-quality-panel" aria-live="polite">
@@ -225,6 +229,6 @@
     <script src="./hiring-signal.js?v=1"></script>
     <script src="./auth.js?v=1"></script>
     <script src="./outreach-corpus.js?v=1"></script>
-    <script src="./app.js?v=23"></script>
+    <script src="./app.js?v=24"></script>
   </body>
 </html>

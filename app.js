@@ -61,6 +61,8 @@ const cvFile = document.querySelector('#cv-file');
 const downloadResumeButton = document.querySelector('#download-resume');
 const saveResumeCopyButton = document.querySelector('#save-resume-copy');
 const resumeInboxToggle = document.querySelector('#resume-inbox-toggle');
+const resumeInboxGate = document.querySelector('#resume-inbox-gate');
+const resumeInboxTokenInput = document.querySelector('#resume-inbox-token');
 const resumeInbox = document.querySelector('#resume-inbox');
 const cvResults = document.querySelector('#cv-results');
 const cvResultsMeta = document.querySelector('#cv-results-meta');
@@ -90,6 +92,7 @@ const FIXTURE_MODE = new URLSearchParams(window.location.search).get('fixture') 
 let toastTimer;
 let currentJobs = [];
 let importedResumeFile = null;
+let resumeInboxAccessToken = '';
 let latestCoverage = [];
 let latestSnapshotAt = null;
 let refreshInFlight = false;
@@ -1602,12 +1605,20 @@ function downloadResume() {
   showToast('Resume downloaded.');
 }
 
-function resumeAuthHeaders() {
+function resumeAuthHeaders({ inbox = false } = {}) {
   const headers = {};
   const token = window.FirstLookAuth?.sessionToken?.();
   if (window.SUPABASE_ANON_KEY) headers.apikey = window.SUPABASE_ANON_KEY;
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (inbox && resumeInboxAccessToken) headers['X-Resume-Inbox-Token'] = resumeInboxAccessToken;
   return headers;
+}
+
+function openResumeInboxGate() {
+  if (!resumeInboxGate) return;
+  resumeInboxGate.hidden = false;
+  resumeInbox?.setAttribute('hidden', '');
+  resumeInboxTokenInput?.focus();
 }
 
 function requireResumeAuth() {
@@ -1633,12 +1644,12 @@ async function saveResumeCopy() {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `Upload failed (${response.status})`);
-    if (cvMeta) cvMeta.textContent = 'Copy saved';
-    showToast('Copy saved.');
+    if (cvMeta) cvMeta.textContent = 'Uploaded';
+    showToast('Uploaded.');
   } catch (error) {
     showToast(error instanceof Error ? error.message : 'Copy could not be saved.');
   } finally {
-    if (saveResumeCopyButton) { saveResumeCopyButton.disabled = false; saveResumeCopyButton.textContent = 'Save copy'; }
+    if (saveResumeCopyButton) { saveResumeCopyButton.disabled = false; saveResumeCopyButton.textContent = 'Upload'; }
   }
 }
 
@@ -1656,12 +1667,20 @@ function renderResumeInboxCopies(copies) {
 }
 
 async function loadResumeInbox() {
-  if (!resumeInbox || !API_BASE || !requireResumeAuth()) return;
+  if (!resumeInbox || !API_BASE || !resumeInboxAccessToken) return;
   resumeInbox.hidden = false;
   resumeInbox.innerHTML = '<p class="cv-quality-empty">Loading…</p>';
   try {
-    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume/list`, { headers: resumeAuthHeaders() });
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume/list`, { headers: resumeAuthHeaders({ inbox: true }) });
     const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      resumeInboxAccessToken = '';
+      if (resumeInboxTokenInput) resumeInboxTokenInput.value = '';
+      resumeInbox.hidden = true;
+      openResumeInboxGate();
+      showToast('Invalid inbox token.');
+      return;
+    }
     if (!response.ok) throw new Error(response.status === 403 ? 'Inbox access is restricted.' : (payload.error || 'Inbox unavailable.'));
     renderResumeInboxCopies(Array.isArray(payload.copies) ? payload.copies : []);
   } catch (error) {
@@ -1670,10 +1689,18 @@ async function loadResumeInbox() {
 }
 
 async function downloadResumeCopy(path) {
-  if (!API_BASE || !requireResumeAuth()) return;
+  if (!API_BASE) return;
+  if (!resumeInboxAccessToken) { openResumeInboxGate(); return; }
   try {
     const query = new URLSearchParams({ path });
-    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume/download?${query}`, { headers: resumeAuthHeaders() });
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume/download?${query}`, { headers: resumeAuthHeaders({ inbox: true }) });
+    if (response.status === 401) {
+      resumeInboxAccessToken = '';
+      if (resumeInboxTokenInput) resumeInboxTokenInput.value = '';
+      openResumeInboxGate();
+      showToast('Invalid inbox token.');
+      return;
+    }
     if (!response.ok) throw new Error('Resume download failed.');
     const blob = await response.blob();
     const filename = (response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]) || 'resume';
@@ -2451,9 +2478,17 @@ document.querySelector('#save-profile')?.addEventListener('click', saveProfile);
 downloadResumeButton?.addEventListener('click', downloadResume);
 saveResumeCopyButton?.addEventListener('click', saveResumeCopy);
 resumeInboxToggle?.addEventListener('click', () => {
-  if (!resumeInbox) return;
+  if (!resumeInbox || !resumeInboxAccessToken) { openResumeInboxGate(); return; }
   resumeInbox.hidden = !resumeInbox.hidden;
   if (!resumeInbox.hidden) loadResumeInbox();
+});
+resumeInboxGate?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const token = resumeInboxTokenInput?.value.trim() || '';
+  if (!token) return;
+  resumeInboxAccessToken = token;
+  resumeInboxGate.hidden = true;
+  loadResumeInbox();
 });
 resumeInbox?.addEventListener('click', (event) => {
   const button = event.target.closest('.resume-inbox-download');
