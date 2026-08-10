@@ -26,6 +26,7 @@ import {
   PIRAMAL_CONFIG, PINE_LABS_CONFIG, ICRA_CONFIG, RCV_FIRECRAWL_WAVES, createFirecrawlConnector
 } from './firecrawl.ts';
 import { createOfficialPageConnector } from './official-page.ts';
+import { AXIS_BANK_RIPPLEHIRE_CONFIG, HDFC_BANK_RIPPLEHIRE_CONFIG, createRippleHireConnector } from './ripplehire.ts';
 
 
 const UNSUPPORTED_COMPANIES: string[] = [];
@@ -78,6 +79,10 @@ export function createOfficialConnectorRegistry(): OfficialJobConnector[] {
     createAmazonConnector(fetch, 'reconcile'),
     createSiemensConnector(fetch, 'watch'),
     createSiemensConnector(fetch, 'reconcile'),
+    createRippleHireConnector(HDFC_BANK_RIPPLEHIRE_CONFIG, fetch, 'watch'),
+    createRippleHireConnector(HDFC_BANK_RIPPLEHIRE_CONFIG, fetch, 'reconcile'),
+    createRippleHireConnector(AXIS_BANK_RIPPLEHIRE_CONFIG, fetch, 'watch'),
+    createRippleHireConnector(AXIS_BANK_RIPPLEHIRE_CONFIG, fetch, 'reconcile'),
     ...[
       ACCENTURE_CONFIG,
       PWC_CONFIG,

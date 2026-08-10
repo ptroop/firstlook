@@ -9,7 +9,7 @@ export interface OfficialPageConfig {
 
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_BODY_BYTES = 8_000_000;
-const MAX_LISTINGS = 250;
+const MAX_LISTINGS = 1_000;
 const MAX_SITEMAP_URLS = 500;
 const MAX_SITEMAPS = 3;
 const INDIA = /\b(?:india|bengaluru|bangalore|gurugram|gurgaon|mumbai|pune|hyderabad|delhi|noida|chennai|kolkata|ahmedabad|jaipur|kochi|thiruvananthapuram)\b/i;
@@ -30,22 +30,26 @@ export function createOfficialPageConnector(
     scanGroup,
     async enumerate() {
       const page = await fetchText(fetcher, config.careerSearchUrl);
-      const listings = uniqueBy([
+      const discovered = uniqueBy([
         ...parseJsonLdListings(page, config, connectorId),
         ...parseAnchorListings(page, config, connectorId),
         ...parseEmbeddedListings(page, config, connectorId),
         ...(await discoverSitemapListings(fetcher, page, config, connectorId)),
-      ], (listing) => listing.sourceExternalId).slice(0, MAX_LISTINGS);
+      ], (listing) => listing.sourceExternalId);
+      const listings = discovered.slice(0, MAX_LISTINGS);
+      const truncated = discovered.length > MAX_LISTINGS;
 
       return {
         listings,
         diagnostic: {
-          status: listings.length > 0 ? 'complete' : 'anomalous',
-          reportedTotal: listings.length,
+          status: listings.length > 0 ? (truncated ? 'partial' : 'complete') : 'anomalous',
+          reportedTotal: discovered.length,
           pagesExpected: 1,
           pagesFetched: 1,
-          errorSummaries: listings.length > 0
-            ? []
+          errorSummaries: truncated
+            ? [`${config.companyName}: official page exposed more than ${MAX_LISTINGS} role links; inventory was bounded`]
+            : listings.length > 0
+              ? []
             : [`${config.companyName}: official page exposed no parseable job detail links`],
         },
       } satisfies InventoryResult;

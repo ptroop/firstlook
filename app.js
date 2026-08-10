@@ -1995,6 +1995,16 @@ function renderCoverage(payload) {
   }).join('');
 }
 
+function bestCoverageForCompany(companyName) {
+  const statusRank = { complete: 0, partial: 1, anomalous: 2, failed: 3 };
+  const hydrationRank = { complete: 0, backlog: 1, degraded: 2 };
+  return latestCoverage
+    .filter((source) => sameCompany(source.company, companyName))
+    .sort((left, right) => (statusRank[left.latestStatus] ?? 4) - (statusRank[right.latestStatus] ?? 4)
+      || (hydrationRank[left.latestHydrationStatus] ?? 3) - (hydrationRank[right.latestHydrationStatus] ?? 3)
+      || String(left.connectorId || '').localeCompare(String(right.connectorId || '')))[0] || null;
+}
+
 function renderCompanyDirectory() {
   if (!companyDirectory || !companiesMeta) return;
   const catalog = Array.isArray(window.COMPANY_CATALOG) ? window.COMPANY_CATALOG : [];
@@ -2019,7 +2029,7 @@ function renderCompanyDirectory() {
       <div class="company-directory-grid">
         ${companies.map((company) => {
           const url = safeUrl(company.url);
-          const source = latestCoverage.find((candidate) => sameCompany(candidate.company, company.name));
+          const source = bestCoverageForCompany(company.name);
           const roles = currentJobs.filter((job) => sameCompany(job.company, company.name)).length;
           const sourceStatus = source?.latestStatus || '';
           const sourceLabel = sourceStatus === 'complete'

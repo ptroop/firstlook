@@ -140,7 +140,13 @@ export function createSourceAwareStore(client: RestClient): SourceAwareStore {
     async upsertInventory(runId, rows, seenAt) {
       if (rows.length === 0) return;
       const connectorId = rows[0].listing.connectorId;
-      const existingRows = await client.request(`/rest/v1/source_inventory?connector_id=eq.${encodeURIComponent(connectorId)}&select=source_external_id,candidate_status,last_hydrated_at,hydrated_metadata_hash&limit=5000`);
+      const existingRows: Array<Record<string, unknown>> = [];
+      const pageSize = 1000;
+      for (let offset = 0; ; offset += pageSize) {
+        const page = await client.request(`/rest/v1/source_inventory?connector_id=eq.${encodeURIComponent(connectorId)}&select=source_external_id,candidate_status,last_hydrated_at,hydrated_metadata_hash&order=source_external_id.asc&limit=${pageSize}&offset=${offset}`);
+        existingRows.push(...(Array.isArray(page) ? page : []));
+        if (!Array.isArray(page) || page.length < pageSize) break;
+      }
       const existingById = new Map((existingRows ?? []).map((row: Record<string, unknown>) => [String(row.source_external_id), row]));
       const payload = rows.map(({ listing, decision }) => {
         const existing = existingById.get(listing.sourceExternalId);

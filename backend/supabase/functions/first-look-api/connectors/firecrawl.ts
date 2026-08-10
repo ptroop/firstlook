@@ -45,7 +45,7 @@ export const ICRA_CONFIG: FirecrawlConfig = {
 };
 
 export const RCV_FIRECRAWL_CONFIGS: FirecrawlConfig[] = [
-  { companyName: 'BCG', connectorIdPrefix: 'bcg', careerSearchUrl: 'https://careers.bcg.com/global/en/locations/india/000000000000000' },
+  { companyName: 'BCG', connectorIdPrefix: 'bcg', careerSearchUrl: 'https://careers.bcg.com/global/en/search-results?keywords=India' },
   { companyName: 'BCG Expand', connectorIdPrefix: 'bcg-expand', careerSearchUrl: 'https://careers.bcg.com/global/en/teams/expand' },
   { companyName: 'McKinsey', connectorIdPrefix: 'mckinsey', careerSearchUrl: 'https://www.mckinsey.com/careers/search-jobs/en' },
   { companyName: 'Bain / Capability Network', connectorIdPrefix: 'bain-capability-network', careerSearchUrl: 'https://www.bain.com/careers/' },

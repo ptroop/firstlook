@@ -70,6 +70,10 @@ const privateResumeIntake = readFileSync(
   new URL('../../migrations/20260808000000_add_private_resume_intake.sql', import.meta.url),
   'utf8',
 );
+const rippleHireSchedule = readFileSync(
+  new URL('../../migrations/20260810000000_add_ripplehire_schedules.sql', import.meta.url),
+  'utf8',
+);
 
 test('rotates hydration by never-checked then oldest-checked inventory', () => {
   assert.match(migration, /add column if not exists last_hydrated_at timestamptz/);
@@ -258,4 +262,16 @@ test('keeps resume intake private and bounded to supported document types', () =
   for (const type of ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'text/markdown', 'text/html']) {
     assert.match(privateResumeIntake, new RegExp(type.replace(/[.+]/g, '\\$&')));
   }
+});
+
+test('schedules HDFC Bank and Axis Bank RippleHire feeds behind the private scan helper', () => {
+  for (const group of [
+    'hdfc-bank-ripplehire-india-watch',
+    'hdfc-bank-ripplehire-india-reconcile',
+    'axis-bank-ripplehire-india-watch',
+    'axis-bank-ripplehire-india-reconcile',
+  ]) assert.match(rippleHireSchedule, new RegExp(`'${group}'`));
+  assert.match(rippleHireSchedule, /invoke_first_look_ripplehire_scan/);
+  assert.match(rippleHireSchedule, /cron\.unschedule\(j\)/);
+  assert.doesNotMatch(rippleHireSchedule, /OPENROUTER_API_KEY\s*=|sk-or-/i);
 });

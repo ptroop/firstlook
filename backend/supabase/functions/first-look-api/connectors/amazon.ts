@@ -4,7 +4,8 @@ import type { OfficialJobConnector, InventoryResult } from './contract.ts';
 const AMAZON_API_BASE = 'https://www.amazon.jobs/en/search.json?loc_query=India';
 const AMAZON_PUBLIC_BASE = 'https://www.amazon.jobs';
 const PAGE_SIZE = 100;
-const MAX_PAGES = 50;
+const MAX_RECONCILE_PAGES = 100;
+const PAGE_CONCURRENCY = 6;
 
 export function createAmazonConnector(fetcher: JobFetch = fetch, runType: 'watch' | 'reconcile'): OfficialJobConnector {
   const connectorId = 'amazon-official-india';
@@ -59,23 +60,22 @@ async function enumerateAmazon(
   const errors: string[] = [];
   const seen = new Set<string>();
   let total: number | null = null;
-  const maxPages = runType === 'watch' ? 5 : MAX_PAGES;
+  const maxPages = runType === 'watch' ? 5 : MAX_RECONCILE_PAGES;
+  let pagesFetched = 0;
+  let reachedEnd = false;
 
-  for (let page = 0; page < maxPages; page += 1) {
-    const offset = page * PAGE_SIZE;
-    const url = `${AMAZON_API_BASE}&result_limit=${PAGE_SIZE}&offset=${offset}`;
-    try {
-      const response = await fetcher(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      });
-      if (!response.ok) throw new Error(`Amazon API returned ${response.status}`);
-      const data = await response.json();
-      const jobs = Array.isArray(data?.jobs) ? data.jobs : [];
-      if (data?.hits && typeof data.hits === 'number') total = data.hits;
-
-      if (jobs.length === 0) break;
-
-      for (const job of jobs) {
+  for (let batchStart = 0; batchStart < maxPages && !reachedEnd && errors.length === 0; batchStart += PAGE_CONCURRENCY) {
+    const batchEnd = Math.min(maxPages, batchStart + PAGE_CONCURRENCY);
+    const pages = await Promise.all(Array.from({ length: batchEnd - batchStart }, (_, index) => fetchAmazonPage(fetcher, batchStart + index)));
+    for (const page of pages) {
+      if (page.error) {
+        errors.push(page.error);
+        continue;
+      }
+      pagesFetched += 1;
+      if (page.total !== null && (total === null || page.total > 0)) total = page.total;
+      if (page.jobs.length === 0 || page.jobs.length < PAGE_SIZE) reachedEnd = true;
+      for (const job of page.jobs) {
         const path = stringValue(job.job_path) || stringValue(job.id);
         const title = stringValue(job.title);
         const location = stringValue(job.normalized_location) || stringValue(job.location) || 'India';
@@ -97,12 +97,15 @@ async function enumerateAmazon(
           rawMetadata: job,
         });
       }
-
-      if (jobs.length < PAGE_SIZE) break;
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : 'Amazon fetch failed');
-      break;
     }
+    if (total !== null && listings.length >= total) reachedEnd = true;
+  }
+
+  const pagesExpected = total === null ? null : Math.ceil(total / PAGE_SIZE);
+  if (pagesExpected !== null && pagesFetched < pagesExpected && errors.length === 0) {
+    errors.push(`Fetched ${pagesFetched} of ${pagesExpected} advertised Amazon pages`);
+  } else if (pagesExpected === null && !reachedEnd && errors.length === 0) {
+    errors.push(`Amazon pagination reached the ${maxPages}-page scan budget`);
   }
 
   return {
@@ -110,11 +113,37 @@ async function enumerateAmazon(
     diagnostic: {
       status: errors.length > 0 ? (listings.length > 0 ? 'partial' : 'failed') : 'complete',
       reportedTotal: total ?? listings.length,
-      pagesExpected: total ? Math.ceil(total / PAGE_SIZE) : 1,
-      pagesFetched: Math.ceil(listings.length / PAGE_SIZE),
+      pagesExpected: pagesExpected,
+      pagesFetched,
       errorSummaries: errors,
     },
   };
+}
+
+interface AmazonPage {
+  jobs: Array<Record<string, unknown>>;
+  total: number | null;
+  error: string | null;
+}
+
+async function fetchAmazonPage(fetcher: JobFetch, page: number): Promise<AmazonPage> {
+  const offset = page * PAGE_SIZE;
+  const url = `${AMAZON_API_BASE}&result_limit=${PAGE_SIZE}&offset=${offset}`;
+  try {
+    const response = await fetcher(url, {
+      signal: AbortSignal.timeout(20_000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error(`Amazon API returned ${response.status}`);
+    const data = await response.json();
+    return {
+      jobs: Array.isArray(data?.jobs) ? data.jobs.filter((job: unknown): job is Record<string, unknown> => Boolean(job) && typeof job === 'object') : [],
+      total: typeof data?.hits === 'number' && Number.isFinite(data.hits) ? data.hits : null,
+      error: null,
+    };
+  } catch (error) {
+    return { jobs: [], total: null, error: error instanceof Error ? error.message : 'Amazon fetch failed' };
+  }
 }
 
 function cleanDescription(html: string): string {

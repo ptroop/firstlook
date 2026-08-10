@@ -72,6 +72,8 @@ test('reports coverage only for implemented official connectors', () => {
     'deloitte-firecrawl-india',
     'amazon-official-india',
     'siemens-official-india',
+    'hdfc-bank-ripplehire-india',
+    'axis-bank-ripplehire-india',
     'accenture-official-india',
     'pwc-official-india',
     'wells-fargo-official-india',
@@ -152,6 +154,14 @@ test('registers JPMorgan through the Oracle Recruiting Cloud adapter', () => {
 test('registers Paytm through the public Lever postings feed', () => {
   const connectors = createOfficialConnectorRegistry().filter((c) => c.connectorId === 'paytm-official-india');
   assert.deepEqual(connectors.map((c) => c.scanGroup), ['paytm-watch', 'paytm-reconcile']);
+});
+
+test('registers HDFC Bank and Axis Bank through their public RippleHire feeds', () => {
+  const connectors = createOfficialConnectorRegistry();
+  for (const prefix of ['hdfc-bank-ripplehire', 'axis-bank-ripplehire']) {
+    const subset = connectors.filter((connector) => connector.connectorId === `${prefix}-india`);
+    assert.deepEqual(subset.map((connector) => connector.scanGroup), [`${prefix}-india-watch`, `${prefix}-india-reconcile`]);
+  }
 });
 
 test('registers Firecrawl connectors for 5 companies', () => {
