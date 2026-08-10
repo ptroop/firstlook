@@ -1542,17 +1542,32 @@ async function renderCvMatches() {
     return;
   }
   const parsedProfile = typeof engine.parseProfile === 'function' ? engine.parseProfile(profile) : profile;
+  const profileTerms = [...new Set((parsedProfile.skills || [])
+    .map((term) => String(term).toLowerCase())
+    .filter(Boolean))].slice(0, 40);
+  const candidateJobs = pool.length > 300
+    ? pool.map((job) => {
+      const title = String(job.title || '').toLowerCase();
+      const haystack = `${title} ${String(job.description || '').toLowerCase()}`;
+      const score = profileTerms.reduce((total, term) => total + (haystack.includes(term) ? 1 : 0), 0)
+        + profileTerms.reduce((total, term) => total + (title.includes(term) ? 2 : 0), 0);
+      return { job, score };
+    })
+      .sort((left, right) => right.score - left.score || jobListedTimestamp(right.job) - jobListedTimestamp(left.job))
+      .slice(0, 300)
+      .map(({ job }) => job)
+    : pool;
   cvResultsMeta.textContent = 'Matching';
   const ranked = [];
   const chunkSize = 200;
-  for (let offset = 0; offset < pool.length; offset += chunkSize) {
-    const end = Math.min(offset + chunkSize, pool.length);
+  for (let offset = 0; offset < candidateJobs.length; offset += chunkSize) {
+    const end = Math.min(offset + chunkSize, candidateJobs.length);
     for (let index = offset; index < end; index += 1) {
-      const job = pool[index];
+      const job = candidateJobs[index];
       ranked.push({ job, result: engine.matchJob(job, parsedProfile) });
     }
     if (generation !== cvMatchGeneration) return;
-    if (end < pool.length) await new Promise((resolve) => setTimeout(resolve, 0));
+    if (end < candidateJobs.length) await new Promise((resolve) => setTimeout(resolve, 0));
   }
   if (generation !== cvMatchGeneration) return;
   ranked.sort((left, right) => (right.result.score ?? -1) - (left.result.score ?? -1));
