@@ -1546,7 +1546,7 @@ async function renderCvMatches() {
   const profileTerms = [...new Set([...(parsedProfile.skills || []), ...fallbackTerms]
     .map((term) => String(term).toLowerCase())
     .filter((term) => term && !/^(about|after|before|from|have|into|over|that|their|these|this|those|using|with|your)$/.test(term)))].slice(0, 40);
-  const candidateJobs = pool.length > 60
+  const candidateJobs = pool.length > 20
     ? pool.map((job) => {
       const title = String(job.title || '').toLowerCase();
       const haystack = `${title} ${String(job.description || '').toLowerCase()}`;
@@ -1555,7 +1555,7 @@ async function renderCvMatches() {
       return { job, score };
     })
       .sort((left, right) => right.score - left.score || jobListedTimestamp(right.job) - jobListedTimestamp(left.job))
-      .slice(0, 60)
+      .slice(0, 20)
       .map(({ job }) => job)
     : pool;
   cvResultsMeta.textContent = 'Matching';
