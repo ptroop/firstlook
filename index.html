@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>First Look - finance roles</title>
-    <link rel="stylesheet" href="./styles.css?v=15" />
+    <link rel="stylesheet" href="./styles.css?v=21" />
 
   </head>
   <body>
@@ -17,7 +17,7 @@
         <a class="wordmark" href="#overview" aria-label="First Look home">first look<span>.</span></a>
         <nav class="topnav" aria-label="Primary navigation">
           <button class="nav-link" data-view="overview">Overview</button>
-            <button class="nav-link is-active" data-view="cv">My matches</button>
+            <button class="nav-link is-active" data-view="cv">Resume check</button>
             <button class="nav-link" data-view="matches">All roles</button>
           <button class="nav-link" data-view="applications">Applications</button>
           <button class="nav-link" data-drawer="companies" aria-controls="companies-drawer" aria-expanded="false">Companies</button>
@@ -43,9 +43,9 @@
 
         <section class="content-section cv-section" id="cv" data-section="cv">
           <div class="section-heading">
-            <h2>My matches</h2>
-          <span class="section-meta" id="cv-meta">Resume</span>
-        </div>
+            <h2>Resume check</h2>
+            <span class="section-meta" id="cv-meta">Upload to begin</span>
+          </div>
           <div class="cv-workspace">
             <div class="cv-editor">
               <div class="resume-dropzone" id="resume-dropzone">
@@ -55,6 +55,10 @@
                 <p><strong>Upload resume</strong></p>
                 <p class="dropzone-help">PDF or text · <label class="text-button" for="cv-file">Browse</label></p>
               </div>
+              <p class="resume-flow-note">First Look checks text readiness locally, then takes you to roles ranked against your profile.</p>
+              <details class="cv-edit-details">
+                <summary>Edit resume text or manage versions</summary>
+                <div class="cv-edit-body">
               <label class="field-label" for="cv-profile">Resume text</label>
               <textarea id="cv-profile" class="cv-textarea" rows="16" placeholder="Example:&#10;MBA, Finance — 2026&#10;&#10;Experience&#10;• Built a financial model...&#10;&#10;Skills&#10;Excel, SQL, Power BI"></textarea>
               <div class="cv-controls">
@@ -79,48 +83,77 @@
                 </form>
                 <div class="resume-inbox" id="resume-inbox" hidden aria-live="polite"></div>
               </div>
+                </div>
+              </details>
               <aside class="cv-quality-panel" aria-live="polite">
-                <div class="cv-quality-heading"><h3>Resume readiness</h3><span id="cv-quality-meta">No resume</span></div>
+                <div class="cv-quality-heading"><h3>Text readiness</h3><span id="cv-quality-meta">No resume</span></div>
                 <div id="cv-quality-list"><p class="cv-quality-empty">Readability</p></div>
               </aside>
+              <section class="resume-interview-panel" id="resume-interview-panel" aria-labelledby="resume-interview-title" hidden>
+                <div class="cv-quality-heading">
+                  <div>
+                    <h3 id="resume-interview-title">Resume interview</h3>
+                    <p class="resume-interview-intro">Answer the questions that make your evidence understandable. Nothing is added to the resume automatically.</p>
+                  </div>
+                  <span id="resume-interview-meta">Not started</span>
+                </div>
+                <div class="resume-interview-audit" id="resume-interview-audit" aria-live="polite"></div>
+                <form id="resume-interview-form"></form>
+                <div class="cv-controls resume-interview-actions">
+                  <button class="button button-dark" id="resume-interview-save" type="submit" form="resume-interview-form">Save answers</button>
+                  <button class="text-button" id="resume-interview-clear" type="button">Clear interview</button>
+                </div>
+                <p class="privacy-note">Saved on this device only. Do not enter passwords, Aadhaar/PAN, salary history, customer data, or confidential employer material.</p>
+              </section>
             </div>
+            <details class="cv-evidence-tools">
+              <summary>Optional role evidence tools</summary>
             <div class="cv-results-panel">
               <div class="cv-results-heading">
-                <h3>Top matches</h3>
+                <h3>Role evidence</h3>
                 <span class="section-meta" id="cv-results-meta">Add resume</span>
               </div>
               <div id="cv-results" class="cv-results" aria-live="polite">
                 <div class="cv-empty"><h3>Add your resume.</h3></div>
               </div>
             </div>
+            </details>
           </div>
         </section>
 
         <section class="content-section application-section" id="applications" data-section="applications">
           <div class="section-heading">
             <h2>Apply</h2>
-            <span class="section-meta" id="application-kit-meta">Local</span>
+            <span class="section-meta" id="application-kit-meta" aria-live="polite"></span>
           </div>
           <div class="application-auth-bar" id="application-auth-bar" aria-live="polite"></div>
           <div id="application-kit-empty" class="application-empty">
-            <h3>Select a role.</h3>
+            <h3>No saved roles</h3>
+            <button class="text-button" type="button" data-view="matches">Browse roles</button>
           </div>
           <div id="application-kit-panel" class="application-kit-panel" hidden></div>
           <div id="application-kit-list" class="application-kit-list" aria-live="polite"></div>
-          <details class="hiring-signals secondary-panel">
-            <summary>Hiring signals</summary>
+          <details class="hiring-signals linkedin-radar secondary-panel">
+            <summary>LinkedIn radar</summary>
+            <div class="linkedin-radar-head">
+              <div><strong>Fresh finance roles</strong><span class="section-meta">India</span></div>
+              <a class="button button-dark" id="linkedin-radar-open" href="https://www.linkedin.com/jobs/search/" target="_blank" rel="noreferrer">Open LinkedIn</a>
+            </div>
+            <div class="linkedin-radar-windows" role="group" aria-label="LinkedIn job age">
+              <button class="linkedin-radar-window is-active" type="button" data-window-seconds="3600">1h</button>
+              <button class="linkedin-radar-window" type="button" data-window-seconds="10800">3h</button>
+              <button class="linkedin-radar-window" type="button" data-window-seconds="21600">6h</button>
+              <button class="linkedin-radar-window" type="button" data-window-seconds="43200">12h</button>
+              <button class="linkedin-radar-window" type="button" data-window-seconds="86400">24h</button>
+            </div>
+            <p class="linkedin-radar-status" id="linkedin-radar-status">Last hour search · finance roles in India</p>
             <div class="application-kit-subheading">
               <div><h4>Hiring signals from posts</h4><span class="badge badge-warning">Unverified</span></div>
               <span class="section-meta" id="hiring-signal-meta"></span>
             </div>
             <p class="privacy-note">Unverified. Confirm the role first.</p>
             <form class="hiring-signal-form" id="hiring-signal-form">
-              <label class="field-label">Source<select id="hiring-signal-source">
-                <option value="linkedin">LinkedIn</option>
-                <option value="x">X / Twitter</option>
-                <option value="website">Website / newsletter</option>
-                <option value="other">Other</option>
-              </select></label>
+              <input id="hiring-signal-source" type="hidden" value="linkedin" />
               <label class="field-label">Post URL<input id="hiring-signal-url" type="url" required maxlength="500" placeholder="https://www.linkedin.com/posts/…" /></label>
               <label class="field-label">Company<input id="hiring-signal-company" required maxlength="120" placeholder="Employer named in the post" /></label>
               <label class="field-label">Role mentioned (optional)<input id="hiring-signal-title" maxlength="180" placeholder="Analyst, associate…" /></label>
@@ -135,7 +168,7 @@
         <section class="content-section" id="matches" data-section="matches">
           <div class="section-heading">
             <h2>All roles</h2>
-            <div class="section-heading-actions"><span class="section-meta" id="matches-meta">Loading</span><div class="feed-filter" id="feed-filter" role="group" aria-label="Listing recency filter"><button type="button" class="feed-recency is-active" data-days="0">Any age</button><button type="button" class="feed-recency" data-days="7">Last 7 days</button><button type="button" class="feed-recency" data-days="30">Last 30 days</button></div><label class="feed-company-label" for="feed-company-filter">Company<select id="feed-company-filter"><option value="">All companies</option></select></label><button class="text-button" id="refresh-feed" type="button">Refresh</button></div>
+            <div class="section-heading-actions"><span class="section-meta" id="matches-meta"></span><div class="feed-filter" id="feed-filter" role="group" aria-label="Listing recency filter"><button type="button" class="feed-recency is-active" data-days="0">Any age</button><button type="button" class="feed-recency" data-days="7">Last 7 days</button><button type="button" class="feed-recency" data-days="30">Last 30 days</button></div><label class="feed-company-label" for="feed-company-filter">Company<select id="feed-company-filter"><option value="">All companies</option></select></label><button class="text-button" id="refresh-feed" type="button">Refresh</button></div>
           </div>
           <details class="portal-intake secondary-panel">
             <summary>More sources</summary>
@@ -230,6 +263,7 @@
     <script src="./hiring-signal.js?v=1"></script>
     <script src="./auth.js?v=1"></script>
     <script src="./outreach-corpus.js?v=1"></script>
-    <script src="./app.js?v=27"></script>
+    <script src="./resume-interview.js?v=1"></script>
+    <script src="./app.js?v=36"></script>
   </body>
 </html>
