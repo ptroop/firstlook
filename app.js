@@ -69,6 +69,9 @@ const cvResultsMeta = document.querySelector('#cv-results-meta');
 const cvMeta = document.querySelector('#cv-meta');
 const cvQualityMeta = document.querySelector('#cv-quality-meta');
 const cvQualityList = document.querySelector('#cv-quality-list');
+const cvTailoringRole = document.querySelector('#cv-tailoring-role');
+const cvTailoringStart = document.querySelector('#cv-tailoring-start');
+const cvTailoringReview = document.querySelector('#cv-tailoring-review');
 const resumeInterviewPanel = document.querySelector('#resume-interview-panel');
 const resumeInterviewForm = document.querySelector('#resume-interview-form');
 const resumeInterviewMeta = document.querySelector('#resume-interview-meta');
@@ -124,6 +127,7 @@ let selectedRoleId = null;
 let feedRecencyDays = 0;
 let feedCompanyFilter = '';
 let linkedinRadarWindowSeconds = 3600;
+let selectedTailoringJobId = '';
 const SKILL_KEYWORDS = [
   'Python', 'SQL', 'Excel', 'AWS', 'Financial Modeling', 'Tableau', 
   'Power BI', 'Machine Learning', 'C++', 'Java', 'Bloomberg', 'R', 
@@ -689,6 +693,8 @@ function saveResumeInterview() {
   try {
     interview.save(readResumeInterviewAnswers());
     renderResumeInterview();
+    renderTailoringPicker();
+    if (cvTailoringReview && !cvTailoringReview.hidden && selectedTailoringJobId) renderTailoringReview(selectedTailoringJobId, false);
     showToast('Resume interview saved on this device. No resume claims were added.');
   } catch (_error) {
     showToast('This browser blocked local interview storage.');
@@ -724,6 +730,74 @@ function renderCvQuality() {
     ${gaps}
     <p class="cv-quality-note">${escapeHtml(result.note)}</p>`;
   return;
+}
+
+function tailoringLineKey(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function renderTailoringPicker() {
+  if (!cvTailoringRole || !cvTailoringStart) return;
+  const roles = visibleFeedJobs().filter((job) => job?.title).slice(0, 30);
+  const selected = selectedTailoringJobId || cvTailoringRole.value;
+  cvTailoringRole.innerHTML = `<option value="">${roles.length ? 'Select a role' : 'No roles available'}</option>${roles.map((job) => `<option value="${escapeAttribute(jobIdentity(job))}">${escapeHtml(job.title)} - ${escapeHtml(job.company || 'Employer')}${job.location ? ` (${escapeHtml(job.location)})` : ''}</option>`).join('')}`;
+  if (selected && roles.some((job) => jobIdentity(job) === selected)) {
+    cvTailoringRole.value = selected;
+  }
+  cvTailoringStart.disabled = !profileText() || !cvTailoringRole.value;
+}
+
+function renderTailoringReview(jobId = cvTailoringRole?.value || '', shouldScroll = true) {
+  if (!cvTailoringReview) return;
+  const job = currentJobs.find((candidate) => jobIdentity(candidate) === String(jobId));
+  const engine = cvEngine();
+  const profile = profileText();
+  if (!job || !engine || !profile) {
+    cvTailoringReview.hidden = false;
+    cvTailoringReview.innerHTML = '<p class="cv-tailoring-empty">Add a resume and choose a role before reviewing a tailored version.</p>';
+    return;
+  }
+
+  selectedTailoringJobId = jobIdentity(job);
+  const parsed = engine.parseProfile(profile);
+  const analysis = engine.matchJob(job, parsed);
+  const tailored = engine.buildTailoredProfile(job, analysis, parsed);
+  const includedLines = new Set(tailored.text.split(/\r?\n/).slice(1).map(tailoringLineKey).filter(Boolean));
+  const keptLines = parsed.lines.filter((line) => includedLines.has(tailoringLineKey(line))).slice(0, 12);
+  const notCarried = parsed.bullets.filter((bullet) => bullet.isEvidence && !includedLines.has(tailoringLineKey(bullet.text))).slice(0, 8);
+  const interview = resumeInterviewEngine();
+  const interviewState = interview?.load();
+  const answerValues = Object.values(interviewState?.answers || {});
+  const contextCount = answerValues.filter((value) => Array.isArray(value) ? value.length : String(value || '').trim()).length;
+  const requirementRows = (analysis.requirements || []).slice(0, 10).map((item) => {
+    const label = item.status === 'supported' ? 'Supported' : item.status === 'context' ? 'Context' : 'Gap';
+    return `<li class="tailoring-requirement is-${escapeAttribute(item.status)}"><strong>${label}</strong><span>${escapeHtml(item.label)}</span></li>`;
+  }).join('');
+  const gaps = (analysis.hardGaps || []).slice(0, 6);
+  const context = contextCount
+    ? `<p class="cv-tailoring-context"><strong>${contextCount} interview answer${contextCount === 1 ? '' : 's'} saved privately.</strong> These answers can help you decide what to add, but they are not inserted into the draft automatically. <button class="text-button" id="cv-tailoring-context" type="button">Open interview</button></p>`
+    : '<p class="cv-tailoring-context"><strong>No interview context saved.</strong> Add evidence answers when the resume does not explain scope or outcomes clearly.</p>';
+  cvTailoringReview.innerHTML = `
+    <div class="cv-tailoring-review-head">
+      <div><p class="resume-score-kicker">Role-specific draft</p><h4>${escapeHtml(job.title)}</h4><p>${escapeHtml(job.company || 'Employer')}${job.location ? ` - ${escapeHtml(job.location)}` : ''}</p></div>
+      ${scoreRing(analysis.score, 64, 'evidence match')}
+    </div>
+    <p class="cv-tailoring-review-note">First Look selected and ordered original profile lines for this posting. It did not rewrite a claim, create a metric, or fill a gap.</p>
+    <div class="cv-tailoring-review-grid">
+      <section><h5>Kept in this draft</h5>${keptLines.length ? `<ul class="tailoring-line-list">${keptLines.map((line) => `<li><span class="tailoring-line-status is-kept">Keep</span><span>${escapeHtml(line)}</span></li>`).join('')}</ul>` : '<p class="cv-tailoring-empty">No profile lines were selected yet.</p>'}</section>
+      <section><h5>Not carried into this draft</h5>${notCarried.length ? `<ul class="tailoring-line-list">${notCarried.map((bullet) => `<li><span class="tailoring-line-status is-not-carried">Review</span><span>${escapeHtml(bullet.text)}</span></li>`).join('')}</ul>` : '<p class="cv-tailoring-empty">No evidence lines were left out.</p>'}</section>
+    </div>
+    <div class="cv-tailoring-review-grid">
+      <section><h5>Posting requirements</h5>${requirementRows ? `<ul class="tailoring-requirement-list">${requirementRows}</ul>` : '<p class="cv-tailoring-empty">The posting has no structured requirements to compare.</p>'}</section>
+      <section><h5>Unresolved before export</h5>${gaps.length ? `<ul class="tailoring-gap-list">${gaps.map((gap) => `<li>${escapeHtml(gap.label)}<span>Do not add unless you can support it.</span></li>`).join('')}</ul>` : '<p class="cv-tailoring-empty">No required gaps detected by the local evaluator.</p>'}</section>
+    </div>
+    ${context}
+    <div class="cv-tailoring-approval">
+      <label class="review-gate"><input id="cv-tailoring-approval" type="checkbox" /> I reviewed the original lines and unresolved requirements before exporting.</label>
+      <div class="cv-controls"><button class="button button-dark" id="cv-tailoring-export" type="button" disabled>Export reviewed draft</button><button class="text-button" id="cv-tailoring-close" type="button">Close review</button></div>
+    </div>`;
+  cvTailoringReview.hidden = false;
+  if (shouldScroll) cvTailoringReview.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function completeResumeImport(message = 'Resume imported.') {
@@ -1959,6 +2033,7 @@ async function renderCvMatches() {
   if (!cvResults || !cvResultsMeta) return;
   const profile = profileText();
   renderCvQuality();
+  renderTailoringPicker();
   if (!profile) {
     cvResultsMeta.textContent = 'Add resume';
     cvResults.innerHTML = '<div class="cv-empty"><h3>Add your resume.</h3></div>';
@@ -2034,7 +2109,7 @@ async function renderCvMatches() {
     return `<article class="cv-result">
       <div class="cv-result-top"><div><h4>${escapeHtml(job.title)}</h4><p class="cv-result-company">${escapeHtml(job.company || '')}</p><p class="cv-result-location">${escapeHtml(job.location || 'Location not listed')}</p></div>${scoreRing(result.score, 56)}</div>
       <div class="cv-result-tags">${result.evidence.slice(0, 5).map(({ term }) => `<span class="badge">Supported: ${escapeHtml(term)}</span>`).join('')}${result.missing.slice(0, 5).map((term) => `<span class="badge badge-missing">Gap: ${escapeHtml(term)}</span>`).join('')}<span class="badge">Cover: ${escapeHtml(result.coverLetter.label)}</span></div>
-      <div class="cv-result-actions">${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${job.officialApplyUrl ? 'Apply direct' : 'Open role'}</a>` : ''}${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}<button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Prepare application kit</button><button class="text-button cv-brief-toggle" type="button" data-cv-job-id="${escapeAttribute(jobId)}">Show evidence brief</button><label class="review-gate"><input class="cv-evidence-review" type="checkbox" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? ' checked' : ''} /> I reviewed the evidence brief</label><button class="text-button cv-tailored-export" type="button" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? '' : ' disabled'} title="${evidenceReviewed ? '' : 'Review the evidence brief first.'}">Export tailored CV</button>${coverButton}</div>
+      <div class="cv-result-actions">${applyUrl ? `<a class="button button-accent" href="${applyUrl}" target="_blank" rel="noreferrer">${job.officialApplyUrl ? 'Apply direct' : 'Open role'}</a>` : ''}${roleUrl && roleUrl !== applyUrl ? `<a class="text-button" href="${roleUrl}" target="_blank" rel="noreferrer">Review role</a>` : ''}<button class="text-button application-kit-open" type="button" data-application-job-id="${escapeAttribute(jobId)}">Prepare application kit</button><button class="text-button cv-brief-toggle" type="button" data-cv-job-id="${escapeAttribute(jobId)}">Show evidence brief</button><label class="review-gate"><input class="cv-evidence-review" type="checkbox" data-cv-job-id="${escapeAttribute(jobId)}"${evidenceReviewed ? ' checked' : ''} /> I reviewed the evidence brief</label><button class="text-button cv-tailored-export" type="button" data-cv-job-id="${escapeAttribute(jobId)}">Review tailoring</button>${coverButton}</div>
       <div class="cv-brief" id="cv-brief-${escapeAttribute(jobId)}" hidden>${buildCvBrief(job, result)}</div>
       ${coverLetterPanel}
     </article>`;
@@ -2807,31 +2882,50 @@ document.addEventListener('click', async (event) => {
     const jobId = evidenceReview.dataset.cvJobId || '';
     setCvEvidenceReviewed(jobId, evidenceReview.checked);
     renderApplicationWorkspace();
-    const exportButton = evidenceReview.closest('.cv-result-actions')?.querySelector('.cv-tailored-export');
-    if (exportButton) {
-      exportButton.disabled = !evidenceReview.checked;
-      exportButton.title = evidenceReview.checked ? '' : 'Review the evidence brief first.';
-    }
     showToast(evidenceReview.checked ? 'Evidence review recorded on this device.' : 'Evidence review gate cleared.');
+    return;
+  }
+
+  if (event.target.closest('#cv-tailoring-start')) {
+    const tools = document.querySelector('.cv-evidence-tools');
+    if (tools) tools.open = true;
+    renderTailoringReview(cvTailoringRole?.value || '');
+    return;
+  }
+
+  if (event.target.closest('#cv-tailoring-close')) {
+    if (cvTailoringReview) cvTailoringReview.hidden = true;
+    return;
+  }
+
+  if (event.target.closest('#cv-tailoring-context')) {
+    renderResumeInterview();
+    resumeInterviewPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
   }
 
   const tailoredExport = event.target.closest('.cv-tailored-export');
   if (tailoredExport) {
-    if (tailoredExport.disabled) return;
+    const jobId = tailoredExport.dataset.cvJobId || '';
+    const tools = document.querySelector('.cv-evidence-tools');
+    if (tools) tools.open = true;
+    renderTailoringReview(jobId);
+    return;
+  }
+
+  if (event.target.closest('#cv-tailoring-export')) {
     const engine = cvEngine();
     const profile = profileText();
-    const jobId = tailoredExport.dataset.cvJobId || '';
-    const job = currentJobs.find((candidate) => jobIdentity(candidate) === jobId);
+    const job = currentJobs.find((candidate) => jobIdentity(candidate) === selectedTailoringJobId);
     if (!engine || !profile || !job) return;
     try {
       const analysis = engine.matchJob(job, profile);
       const tailored = engine.buildTailoredProfile(job, analysis, profile);
       const doc = engine.buildDocx({ profile: tailored.text, job, filename: 'first-look-tailored-cv' });
       downloadBlob(doc.blob, doc.filename);
-      showToast('Exported a tailored ATS-readable CV using original profile lines only.');
+      showToast('Exported the reviewed draft using original profile lines only.');
     } catch (_error) {
-      showToast('The tailored CV export failed on this browser.');
+      showToast('The reviewed draft export failed on this browser.');
     }
     return;
   }
@@ -3066,6 +3160,16 @@ document.addEventListener('change', (event) => {
   if (event.target.closest('#feed-company-filter')) {
     feedCompanyFilter = event.target.value || '';
     renderJobs(currentJobs);
+    return;
+  }
+  if (event.target.closest('#cv-tailoring-role')) {
+    selectedTailoringJobId = event.target.value || '';
+    renderTailoringPicker();
+    return;
+  }
+  if (event.target.closest('#cv-tailoring-approval')) {
+    const exportButton = document.querySelector('#cv-tailoring-export');
+    if (exportButton) exportButton.disabled = !event.target.checked;
   }
 });
 document.querySelector('#clear-profile')?.addEventListener('click', () => {

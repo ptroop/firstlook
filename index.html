@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>First Look - finance roles</title>
-    <link rel="stylesheet" href="./styles.css?v=21" />
+    <link rel="stylesheet" href="./styles.css?v=22" />
 
   </head>
   <body>
@@ -107,7 +107,14 @@
               </section>
             </div>
             <details class="cv-evidence-tools">
-              <summary>Optional role evidence tools</summary>
+              <summary>Role evidence and tailoring</summary>
+              <div class="cv-tailoring-tools">
+                <div class="cv-tailoring-picker">
+                  <label class="field-label" for="cv-tailoring-role">Choose a role to tailor against<select id="cv-tailoring-role"><option value="">Add a resume first</option></select></label>
+                  <button class="button button-dark" id="cv-tailoring-start" type="button" disabled>Review tailoring</button>
+                </div>
+                <div class="cv-tailoring-review" id="cv-tailoring-review" aria-live="polite" hidden></div>
+              </div>
             <div class="cv-results-panel">
               <div class="cv-results-heading">
                 <h3>Role evidence</h3>
@@ -264,6 +271,6 @@
     <script src="./auth.js?v=1"></script>
     <script src="./outreach-corpus.js?v=1"></script>
     <script src="./resume-interview.js?v=1"></script>
-    <script src="./app.js?v=36"></script>
+    <script src="./app.js?v=37"></script>
   </body>
 </html>
