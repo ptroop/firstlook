@@ -59,7 +59,6 @@ const refreshButton = document.querySelector('#refresh-feed');
 const cvProfile = document.querySelector('#cv-profile');
 const cvFile = document.querySelector('#cv-file');
 const downloadResumeButton = document.querySelector('#download-resume');
-const saveResumeCopyButton = document.querySelector('#save-resume-copy');
 const resumeOwnerAuth = document.querySelector('#resume-owner-auth');
 const resumeOwnerFiles = document.querySelector('#resume-owner-files');
 const cvResults = document.querySelector('#cv-results');
@@ -106,6 +105,7 @@ let toastTimer;
 let resumeHandoffTimer = null;
 let currentJobs = [];
 let importedResumeFile = null;
+const autoResumeUploadStates = new Map();
 let latestCoverage = [];
 let latestSnapshotAt = null;
 let refreshInFlight = false;
@@ -2199,7 +2199,6 @@ function loadStoredProfile() {
 function syncResumeDownload() {
   const hasResume = Boolean(importedResumeFile || profileText());
   if (downloadResumeButton) downloadResumeButton.hidden = !hasResume;
-  if (saveResumeCopyButton) saveResumeCopyButton.hidden = !hasResume;
 }
 
 function downloadResume() {
@@ -2224,14 +2223,14 @@ function resumeAuthHeaders({ owner = false } = {}) {
   return headers;
 }
 
-async function saveResumeCopy() {
+async function autoSaveResumeCopy(file) {
+  if (!file) return;
   if (!API_BASE) { showToast('The owner copy service is not connected.'); return; }
-  const profile = profileText();
-  const source = importedResumeFile || (profile ? new Blob([profile], { type: 'text/plain' }) : null);
-  if (!source) { showToast('Add a resume first.'); return; }
+  const key = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+  if (autoResumeUploadStates.has(key)) return;
+  autoResumeUploadStates.set(key, 'uploading');
   const form = new FormData();
-  form.append('file', source, importedResumeFile?.name || 'resume.txt');
-  if (saveResumeCopyButton) { saveResumeCopyButton.disabled = true; saveResumeCopyButton.textContent = 'Saving…'; }
+  form.append('file', file, file.name || 'resume');
   try {
     const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume`, {
       method: 'POST',
@@ -2240,11 +2239,10 @@ async function saveResumeCopy() {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `Upload failed (${response.status})`);
-    if (cvMeta) cvMeta.textContent = 'Uploaded';
+    autoResumeUploadStates.set(key, 'uploaded');
   } catch (error) {
+    autoResumeUploadStates.delete(key);
     showToast(error instanceof Error ? error.message : 'Copy could not be saved.');
-  } finally {
-    if (saveResumeCopyButton) { saveResumeCopyButton.disabled = false; saveResumeCopyButton.textContent = 'Upload copy'; }
   }
 }
 
@@ -2575,15 +2573,18 @@ async function importFileIntoProfile(file) {
   if (!file || !cvProfile) return;
   importedResumeFile = file;
   syncResumeDownload();
+  const copyPromise = autoSaveResumeCopy(file);
   if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || /\.docx$/i.test(file.name)) {
+    await copyPromise;
     if (cvMeta) cvMeta.textContent = 'Original DOCX ready';
-    showToast('DOCX is ready to upload. Paste its text to run local scoring.');
+    showToast('DOCX selected. Paste its text to run local scoring.');
     return;
   }
   if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
     if (cvMeta) cvMeta.textContent = 'Reading…';
     try {
       const text = await extractPdfText(file);
+      await copyPromise;
       if (text.length < 40) {
         showToast('No readable text found.');
         if (cvMeta) cvMeta.textContent = 'PDF unreadable';
@@ -2599,6 +2600,7 @@ async function importFileIntoProfile(file) {
     return;
   }
   const raw = await file.text();
+  await copyPromise;
   if (file.name.toLowerCase().endsWith('.html')) {
     const parsed = new DOMParser().parseFromString(raw, 'text/html');
     cvProfile.value = parsed.body?.innerText || raw;
@@ -3252,7 +3254,6 @@ resumeInterviewForm?.addEventListener('change', (event) => {
   }
 });
 downloadResumeButton?.addEventListener('click', downloadResume);
-saveResumeCopyButton?.addEventListener('click', saveResumeCopy);
 document.addEventListener('change', (event) => {
   if (event.target.closest('#feed-company-filter')) {
     feedCompanyFilter = event.target.value || '';
