@@ -2241,7 +2241,6 @@ async function saveResumeCopy() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `Upload failed (${response.status})`);
     if (cvMeta) cvMeta.textContent = 'Uploaded';
-    showToast('Uploaded to the owner inbox.');
   } catch (error) {
     showToast(error instanceof Error ? error.message : 'Copy could not be saved.');
   } finally {
