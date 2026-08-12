@@ -8,7 +8,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>First Look - finance roles</title>
-    <link rel="stylesheet" href="./styles.css?v=22" />
+    <link rel="stylesheet" href="./styles.css?v=23" />
 
   </head>
   <body>
@@ -53,7 +53,7 @@
                   <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><polyline points="12 11 12 17"></polyline><polyline points="9 14 12 17 15 14"></polyline></svg>
                 </div>
                 <p><strong>Upload resume</strong></p>
-                <p class="dropzone-help">PDF or text · <label class="text-button" for="cv-file">Browse</label></p>
+                <p class="dropzone-help">PDF, DOCX or text · <label class="text-button" for="cv-file">Browse</label></p>
               </div>
               <p class="resume-flow-note">First Look checks text readiness locally, then takes you to roles ranked against your profile.</p>
               <details class="cv-edit-details">
@@ -63,10 +63,10 @@
               <textarea id="cv-profile" class="cv-textarea" rows="16" placeholder="Example:&#10;MBA, Finance — 2026&#10;&#10;Experience&#10;• Built a financial model...&#10;&#10;Skills&#10;Excel, SQL, Power BI"></textarea>
               <div class="cv-controls">
                 <label class="button" for="cv-file">Import</label>
-                <input id="cv-file" type="file" accept=".pdf,.txt,.md,.html,application/pdf,text/plain,text/html" hidden />
+                <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.html,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,text/html" hidden />
                 <button class="button button-dark" id="save-profile">Save profile</button>
                 <button class="text-button" id="download-resume" type="button" hidden>Download resume</button>
-                <button class="text-button" id="save-resume-copy" type="button" hidden>Upload</button>
+                <button class="text-button" id="save-resume-copy" type="button" hidden>Upload copy</button>
                 <button class="text-button" id="clear-profile" type="button">Clear</button>
               </div>
               <div class="cv-version-row">
@@ -75,14 +75,11 @@
                 <button class="text-button" id="cv-export-profile" type="button">Export .docx</button>
               </div>
               <div class="cv-versions" id="cv-versions" aria-live="polite"></div>
-              <div class="resume-inbox-tools" hidden>
-                <button class="text-button" id="resume-inbox-toggle" type="button">Inbox</button>
-                <form class="resume-inbox-gate" id="resume-inbox-gate" hidden>
-                  <label class="field-label" for="resume-inbox-token">Inbox token<input id="resume-inbox-token" type="password" autocomplete="off" required /></label>
-                  <button class="text-button" id="resume-inbox-unlock" type="submit">Unlock</button>
-                </form>
-                <div class="resume-inbox" id="resume-inbox" hidden aria-live="polite"></div>
-              </div>
+              <details class="resume-owner-inbox" id="resume-owner-inbox">
+                <summary>Owner inbox</summary>
+                <div id="resume-owner-auth" aria-live="polite"></div>
+                <div id="resume-owner-files" aria-live="polite"></div>
+              </details>
                 </div>
               </details>
               <aside class="cv-quality-panel" aria-live="polite">
@@ -271,6 +268,6 @@
     <script src="./auth.js?v=1"></script>
     <script src="./outreach-corpus.js?v=1"></script>
     <script src="./resume-interview.js?v=1"></script>
-    <script src="./app.js?v=37"></script>
+    <script src="./app.js?v=38"></script>
   </body>
 </html>

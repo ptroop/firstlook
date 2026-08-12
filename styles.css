@@ -369,15 +369,21 @@ h2 { margin-bottom: 8px; font-family: var(--serif); font-size: 32px; font-weight
 .cv-textarea { width: 100%; resize: vertical; min-height: 300px; padding: 14px 16px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #fff; color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.55; }
 .cv-textarea:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
 .cv-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
-.resume-inbox-tools { margin-top: 16px; }
-.resume-inbox-gate { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 8px; }
-.resume-inbox-gate .field-label { margin: 0; min-width: min(280px, 100%); }
-.resume-inbox-gate input { width: 100%; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #fff; color: var(--ink); }
-.resume-inbox { margin-top: 8px; border-top: 1px solid var(--line); }
-.resume-inbox-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.resume-inbox-row strong, .resume-inbox-row small { display: block; }
-.resume-inbox-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.resume-inbox-row small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.resume-owner-inbox { margin-top: 18px; border-top: 1px solid var(--line); }
+.resume-owner-inbox > summary { padding: 12px 0; cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 600; }
+#resume-owner-auth { min-width: 0; }
+.resume-owner-state { margin: 0 0 10px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.resume-owner-state.is-warning { color: var(--warning); }
+.resume-owner-signed-in { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: var(--surface); color: var(--muted); font-size: 12px; }
+.resume-owner-signed-in strong { color: var(--ink); font-weight: 600; }
+.resume-owner-files { margin-top: 12px; }
+.resume-owner-file-list { border-top: 1px solid var(--line); }
+.resume-owner-file { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.resume-owner-file strong, .resume-owner-file small { display: block; }
+.resume-owner-file strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.resume-owner-file small { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.resume-owner-file-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 4px; }
+.resume-owner-file-actions .text-button:last-child { color: var(--warning); }
 .cv-quality-panel { margin-top: 22px; padding: 16px; border: 1px solid var(--line); background: var(--surface); }
 .cv-quality-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .cv-quality-heading h3 { margin: 0; font-family: var(--serif); font-size: 18px; font-weight: 500; }
@@ -963,6 +969,8 @@ body.role-dialog-open { overflow: hidden; }
   .resume-interview-options { grid-template-columns: 1fr; }
   .cv-tailoring-picker, .cv-tailoring-review-grid { grid-template-columns: 1fr; }
   .cv-tailoring-review { padding: 18px; }
+  .resume-owner-file { align-items: flex-start; flex-direction: column; }
+  .resume-owner-file-actions { width: 100%; }
   .job-card { grid-template-columns: 1fr; gap: 12px; }
   .job-actions { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
   .role-dialog { padding: 12px; }

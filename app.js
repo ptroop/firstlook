@@ -60,10 +60,8 @@ const cvProfile = document.querySelector('#cv-profile');
 const cvFile = document.querySelector('#cv-file');
 const downloadResumeButton = document.querySelector('#download-resume');
 const saveResumeCopyButton = document.querySelector('#save-resume-copy');
-const resumeInboxToggle = document.querySelector('#resume-inbox-toggle');
-const resumeInboxGate = document.querySelector('#resume-inbox-gate');
-const resumeInboxTokenInput = document.querySelector('#resume-inbox-token');
-const resumeInbox = document.querySelector('#resume-inbox');
+const resumeOwnerAuth = document.querySelector('#resume-owner-auth');
+const resumeOwnerFiles = document.querySelector('#resume-owner-files');
 const cvResults = document.querySelector('#cv-results');
 const cvResultsMeta = document.querySelector('#cv-results-meta');
 const cvMeta = document.querySelector('#cv-meta');
@@ -108,7 +106,6 @@ let toastTimer;
 let resumeHandoffTimer = null;
 let currentJobs = [];
 let importedResumeFile = null;
-let resumeInboxAccessToken = '';
 let latestCoverage = [];
 let latestSnapshotAt = null;
 let refreshInFlight = false;
@@ -1476,6 +1473,81 @@ async function signOutFlow() {
   showToast('Signed out. Recruiter lookup is locked again.');
 }
 
+let pendingResumeOwnerAuthEmail = '';
+
+function renderResumeOwnerAuthForm() {
+  if (!resumeOwnerAuth) return;
+  resumeOwnerAuth.innerHTML = `<form class="auth-form" id="resume-owner-auth-form">
+    <p class="auth-status">This inbox is private to the site owner.</p>
+    <label class="field-label" for="resume-owner-email">Owner email<input id="resume-owner-email" type="email" required maxlength="200" placeholder="you@example.com" /></label>
+    <div class="cv-controls"><button class="button button-dark" type="submit">Send sign-in link</button><button class="text-button" type="button" id="resume-owner-auth-cancel">Cancel</button></div>
+  </form>`;
+  document.querySelector('#resume-owner-email')?.focus();
+}
+
+function renderResumeOwnerCodeForm(email) {
+  pendingResumeOwnerAuthEmail = email;
+  if (!resumeOwnerAuth) return;
+  resumeOwnerAuth.innerHTML = `<form class="auth-form" id="resume-owner-code-form">
+    <span class="auth-status">Check <strong>${escapeHtml(email)}</strong>. Open the link in this browser, or paste the 6-digit code from the email.</span>
+    <label class="field-label" for="resume-owner-code">Code<input id="resume-owner-code" required maxlength="8" inputmode="numeric" placeholder="123456" /></label>
+    <div class="cv-controls"><button class="button button-dark" type="submit">Verify owner sign-in</button><button class="text-button" type="button" id="resume-owner-auth-cancel">Cancel</button></div>
+  </form>`;
+  document.querySelector('#resume-owner-code')?.focus();
+}
+
+async function sendResumeOwnerAuthLink() {
+  const email = document.querySelector('#resume-owner-email')?.value.trim() || '';
+  const button = document.querySelector('#resume-owner-auth-form button[type="submit"]');
+  if (button) { button.disabled = true; button.textContent = 'Sending…'; }
+  try {
+    await window.FirstLookAuth.sendMagicLink(email);
+    renderResumeOwnerCodeForm(email);
+    showToast('Owner sign-in link sent. Check your inbox.');
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Could not send the owner sign-in link.');
+    renderResumeOwnerPanel();
+  }
+}
+
+async function verifyResumeOwnerAuthCode() {
+  const code = document.querySelector('#resume-owner-code')?.value.trim() || '';
+  if (!pendingResumeOwnerAuthEmail || !code) { showToast('Enter the owner code from the email.'); return; }
+  try {
+    const user = await window.FirstLookAuth.verifyOtpCode(pendingResumeOwnerAuthEmail, code);
+    pendingResumeOwnerAuthEmail = '';
+    renderResumeOwnerPanel();
+    showToast(`Signed in as ${user?.email || ''}. Checking owner access.`);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'That owner code could not be verified.');
+  }
+}
+
+async function signOutResumeOwner() {
+  await window.FirstLookAuth.signOut();
+  pendingResumeOwnerAuthEmail = '';
+  renderResumeOwnerPanel();
+  showToast('Signed out of the owner inbox.');
+}
+
+function renderResumeOwnerPanel() {
+  if (!resumeOwnerAuth || !resumeOwnerFiles) return;
+  const auth = window.FirstLookAuth;
+  if (!auth || !auth.isConfigured()) {
+    resumeOwnerAuth.innerHTML = '<p class="resume-owner-state is-warning">Owner sign-in is not configured yet. The site owner must add the public Supabase anon key to the frontend.</p>';
+    resumeOwnerFiles.innerHTML = '';
+    return;
+  }
+  const user = auth.currentUser();
+  if (!user?.email) {
+    resumeOwnerAuth.innerHTML = '<p class="resume-owner-state">Private owner inbox. Candidates do not need an account or token.</p><button class="text-button" id="resume-owner-show-form" type="button">Owner sign in</button>';
+    resumeOwnerFiles.innerHTML = '';
+    return;
+  }
+  resumeOwnerAuth.innerHTML = `<div class="resume-owner-signed-in"><span>Signed in as <strong>${escapeHtml(user.email)}</strong></span><button class="text-button" id="resume-owner-sign-out" type="button">Sign out</button></div>`;
+  loadResumeInbox();
+}
+
 function renderHiringSignals() {
   const list = document.querySelector('#hiring-signal-list');
   const meta = document.querySelector('#hiring-signal-meta');
@@ -2144,31 +2216,16 @@ function downloadResume() {
   showToast('Resume downloaded.');
 }
 
-function resumeAuthHeaders({ inbox = false } = {}) {
+function resumeAuthHeaders({ owner = false } = {}) {
   const headers = {};
-  const token = window.FirstLookAuth?.sessionToken?.();
   if (window.SUPABASE_ANON_KEY) headers.apikey = window.SUPABASE_ANON_KEY;
+  const token = owner ? window.FirstLookAuth?.sessionToken?.() : '';
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (inbox && resumeInboxAccessToken) headers['X-Resume-Inbox-Token'] = resumeInboxAccessToken;
   return headers;
 }
 
-function openResumeInboxGate() {
-  if (!resumeInboxGate) return;
-  resumeInboxGate.hidden = false;
-  resumeInbox?.setAttribute('hidden', '');
-  resumeInboxTokenInput?.focus();
-}
-
-function requireResumeAuth() {
-  if (window.FirstLookAuth?.currentUser?.()) return true;
-  showToast('Sign in first.');
-  document.querySelector('#application-auth-bar')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  return false;
-}
-
 async function saveResumeCopy() {
-  if (!API_BASE || !requireResumeAuth()) return;
+  if (!API_BASE) { showToast('The owner copy service is not connected.'); return; }
   const profile = profileText();
   const source = importedResumeFile || (profile ? new Blob([profile], { type: 'text/plain' }) : null);
   if (!source) { showToast('Add a resume first.'); return; }
@@ -2184,66 +2241,72 @@ async function saveResumeCopy() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `Upload failed (${response.status})`);
     if (cvMeta) cvMeta.textContent = 'Uploaded';
-    showToast('Uploaded.');
+    showToast('Uploaded to the owner inbox.');
   } catch (error) {
     showToast(error instanceof Error ? error.message : 'Copy could not be saved.');
   } finally {
-    if (saveResumeCopyButton) { saveResumeCopyButton.disabled = false; saveResumeCopyButton.textContent = 'Upload'; }
+    if (saveResumeCopyButton) { saveResumeCopyButton.disabled = false; saveResumeCopyButton.textContent = 'Upload copy'; }
   }
+}
+
+function formatResumeSize(size) {
+  const bytes = Number(size);
+  if (!Number.isFinite(bytes) || bytes < 0) return 'Size unavailable';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function resumeOwnerErrorMessage(status, fallback = 'Owner inbox unavailable.') {
+  if (status === 401) return 'Owner session expired. Sign in again.';
+  if (status === 403) return 'This signed-in account is not the configured owner.';
+  if (status === 503) return 'Owner inbox is not configured on the backend yet.';
+  return fallback;
 }
 
 function renderResumeInboxCopies(copies) {
-  if (!resumeInbox) return;
+  if (!resumeOwnerFiles) return;
   if (!copies.length) {
-    resumeInbox.innerHTML = '<p class="cv-quality-empty">No copies yet.</p>';
+    resumeOwnerFiles.innerHTML = '<p class="cv-quality-empty">No uploaded resumes yet.</p>';
     return;
   }
-  resumeInbox.innerHTML = copies.map((copy) => `
-    <div class="resume-inbox-row">
-      <div><strong>${escapeHtml(copy.name)}</strong><small>${escapeHtml(copy.createdAt ? formatAge(copy.createdAt) : 'Date unavailable')}</small></div>
-      <button class="text-button resume-inbox-download" type="button" data-resume-path="${escapeAttribute(copy.path)}">Download</button>
-    </div>`).join('');
+  resumeOwnerFiles.innerHTML = `<div class="resume-owner-file-list">${copies.map((copy) => {
+    const inlineType = String(copy.contentType || '').startsWith('text/') || copy.contentType === 'application/pdf';
+    return `<article class="resume-owner-file">
+      <div><strong>${escapeHtml(copy.name)}</strong><small>${escapeHtml(copy.contentType || 'Document')} · ${escapeHtml(formatResumeSize(copy.size))} · ${escapeHtml(copy.createdAt ? formatAge(copy.createdAt) : 'Date unavailable')}</small></div>
+      <div class="resume-owner-file-actions">${inlineType ? `<button class="text-button resume-owner-view" type="button" data-resume-path="${escapeAttribute(copy.path)}">View</button>` : ''}<button class="text-button resume-owner-download" type="button" data-resume-path="${escapeAttribute(copy.path)}">Download</button><button class="text-button resume-owner-delete" type="button" data-resume-path="${escapeAttribute(copy.path)}">Delete</button></div>
+    </article>`;
+  }).join('')}</div>`;
 }
 
 async function loadResumeInbox() {
-  if (!resumeInbox || !API_BASE || !resumeInboxAccessToken) return;
-  resumeInbox.hidden = false;
-  resumeInbox.innerHTML = '<p class="cv-quality-empty">Loading…</p>';
+  if (!resumeOwnerFiles || !API_BASE || !window.FirstLookAuth?.currentUser?.()) return;
+  resumeOwnerFiles.innerHTML = '<p class="cv-quality-empty">Loading owner inbox…</p>';
   try {
-    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume/list`, { headers: resumeAuthHeaders({ inbox: true }) });
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume/list`, { headers: resumeAuthHeaders({ owner: true }) });
     const payload = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      resumeInboxAccessToken = '';
-      if (resumeInboxTokenInput) resumeInboxTokenInput.value = '';
-      resumeInbox.hidden = true;
-      openResumeInboxGate();
-      showToast('Invalid inbox token.');
-      return;
-    }
-    if (!response.ok) throw new Error(response.status === 403 ? 'Inbox access is restricted.' : (payload.error || 'Inbox unavailable.'));
+    if (!response.ok) throw new Error(resumeOwnerErrorMessage(response.status, payload.error || 'Inbox unavailable.'));
     renderResumeInboxCopies(Array.isArray(payload.copies) ? payload.copies : []);
   } catch (error) {
-    resumeInbox.innerHTML = `<p class="cv-quality-empty">${escapeHtml(error instanceof Error ? error.message : 'Inbox unavailable.')}</p>`;
+    resumeOwnerFiles.innerHTML = `<p class="cv-quality-empty">${escapeHtml(error instanceof Error ? error.message : 'Inbox unavailable.')}</p>`;
   }
 }
 
-async function downloadResumeCopy(path) {
-  if (!API_BASE) return;
-  if (!resumeInboxAccessToken) { openResumeInboxGate(); return; }
+async function openResumeCopy(path, disposition = 'inline') {
+  if (!API_BASE || !window.FirstLookAuth?.currentUser?.()) return;
+  const preview = disposition === 'inline' ? window.open('about:blank', '_blank', 'noopener,noreferrer') : null;
   try {
-    const query = new URLSearchParams({ path });
-    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume/download?${query}`, { headers: resumeAuthHeaders({ inbox: true }) });
-    if (response.status === 401) {
-      resumeInboxAccessToken = '';
-      if (resumeInboxTokenInput) resumeInboxTokenInput.value = '';
-      openResumeInboxGate();
-      showToast('Invalid inbox token.');
-      return;
-    }
-    if (!response.ok) throw new Error('Resume download failed.');
+    const query = new URLSearchParams({ path, disposition });
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume/download?${query}`, { headers: resumeAuthHeaders({ owner: true }) });
+    if (!response.ok) throw new Error(resumeOwnerErrorMessage(response.status, 'Resume download failed.'));
     const blob = await response.blob();
     const filename = (response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]) || 'resume';
     const url = URL.createObjectURL(blob);
+    if (preview) {
+      preview.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return;
+    }
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
@@ -2252,7 +2315,20 @@ async function downloadResumeCopy(path) {
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (error) {
+    if (preview) preview.close();
     showToast(error instanceof Error ? error.message : 'Resume download failed.');
+  }
+}
+
+async function deleteResumeCopy(path) {
+  if (!API_BASE || !window.FirstLookAuth?.currentUser?.() || !window.confirm('Delete this uploaded resume?')) return;
+  try {
+    const response = await fetch(`${API_BASE.replace(/\/$/, '')}/resume?path=${encodeURIComponent(path)}`, { method: 'DELETE', headers: resumeAuthHeaders({ owner: true }) });
+    if (!response.ok) throw new Error(resumeOwnerErrorMessage(response.status, 'Resume could not be deleted.'));
+    showToast('Resume deleted from the owner inbox.');
+    loadResumeInbox();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : 'Resume could not be deleted.');
   }
 }
 
@@ -2500,6 +2576,11 @@ async function importFileIntoProfile(file) {
   if (!file || !cvProfile) return;
   importedResumeFile = file;
   syncResumeDownload();
+  if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || /\.docx$/i.test(file.name)) {
+    if (cvMeta) cvMeta.textContent = 'Original DOCX ready';
+    showToast('DOCX is ready to upload. Paste its text to run local scoring.');
+    return;
+  }
   if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
     if (cvMeta) cvMeta.textContent = 'Reading…';
     try {
@@ -2855,6 +2936,40 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
+  if (event.target.closest('#resume-owner-show-form')) {
+    renderResumeOwnerAuthForm();
+    return;
+  }
+
+  if (event.target.closest('#resume-owner-auth-cancel')) {
+    pendingResumeOwnerAuthEmail = '';
+    renderResumeOwnerPanel();
+    return;
+  }
+
+  if (event.target.closest('#resume-owner-sign-out')) {
+    signOutResumeOwner();
+    return;
+  }
+
+  const ownerView = event.target.closest('.resume-owner-view');
+  if (ownerView) {
+    openResumeCopy(ownerView.dataset.resumePath || '', 'inline');
+    return;
+  }
+
+  const ownerDownload = event.target.closest('.resume-owner-download');
+  if (ownerDownload) {
+    openResumeCopy(ownerDownload.dataset.resumePath || '', 'attachment');
+    return;
+  }
+
+  const ownerDelete = event.target.closest('.resume-owner-delete');
+  if (ownerDelete) {
+    deleteResumeCopy(ownerDelete.dataset.resumePath || '');
+    return;
+  }
+
   const signalRemove = event.target.closest('.hiring-signal-remove');
   if (signalRemove) {
     removeHiringSignal(signalRemove.dataset.signalId || '');
@@ -3139,23 +3254,6 @@ resumeInterviewForm?.addEventListener('change', (event) => {
 });
 downloadResumeButton?.addEventListener('click', downloadResume);
 saveResumeCopyButton?.addEventListener('click', saveResumeCopy);
-resumeInboxToggle?.addEventListener('click', () => {
-  if (!resumeInbox || !resumeInboxAccessToken) { openResumeInboxGate(); return; }
-  resumeInbox.hidden = !resumeInbox.hidden;
-  if (!resumeInbox.hidden) loadResumeInbox();
-});
-resumeInboxGate?.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const token = resumeInboxTokenInput?.value.trim() || '';
-  if (!token) return;
-  resumeInboxAccessToken = token;
-  resumeInboxGate.hidden = true;
-  loadResumeInbox();
-});
-resumeInbox?.addEventListener('click', (event) => {
-  const button = event.target.closest('.resume-inbox-download');
-  if (button) downloadResumeCopy(button.dataset.resumePath || '');
-});
 document.addEventListener('change', (event) => {
   if (event.target.closest('#feed-company-filter')) {
     feedCompanyFilter = event.target.value || '';
@@ -3240,10 +3338,10 @@ if (resumeDropzone) {
   }));
   resumeDropzone.addEventListener('drop', (event) => {
     const file = event.dataTransfer?.files?.[0];
-    if (file && /\.(pdf|txt|md|html)$/i.test(file.name)) {
+    if (file && /\.(pdf|docx|txt|md|html)$/i.test(file.name)) {
       importFileIntoProfile(file);
     } else {
-      showToast('Drop a .pdf, .txt, .md or .html resume file.');
+      showToast('Drop a .pdf, .docx, .txt, .md or .html resume file.');
     }
   });
 }
@@ -3274,6 +3372,18 @@ document.addEventListener('submit', async (event) => {
     await verifyAuthCode();
     return;
   }
+  const resumeOwnerAuthForm = event.target.closest('#resume-owner-auth-form');
+  if (resumeOwnerAuthForm) {
+    event.preventDefault();
+    await sendResumeOwnerAuthLink();
+    return;
+  }
+  const resumeOwnerCodeForm = event.target.closest('#resume-owner-code-form');
+  if (resumeOwnerCodeForm) {
+    event.preventDefault();
+    await verifyResumeOwnerAuthCode();
+    return;
+  }
   const signalForm = event.target.closest('#hiring-signal-form');
   if (signalForm) {
     event.preventDefault();
@@ -3283,12 +3393,13 @@ document.addEventListener('submit', async (event) => {
 
 window.FirstLookUI = { renderJobs, renderCoverage, safeUrl };
 renderAuthBar();
+renderResumeOwnerPanel();
 renderLinkedInRadar();
 renderHiringSignals();
 window.FirstLookAuth?.onAuthChange(() => {
   renderAuthBar();
   renderApplicationWorkspace();
-  if (!window.FirstLookAuth.currentUser() && resumeInbox) resumeInbox.hidden = true;
+  renderResumeOwnerPanel();
 });
 renderCompanyDirectory();
 renderProfileVersions();

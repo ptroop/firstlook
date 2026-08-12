@@ -17,8 +17,17 @@ import { runSourceAwareScan } from './scan.ts';
 import { isStrictZeroToTwoExperience, parseExperience } from './classification/experience.ts';
 import { classifyFinance, classifyLocation, isNoiseTitle } from './classification/taxonomy.ts';
 import { extractJobLink } from './job-link.ts';
+import {
+  isOwnerEmail,
+  RESUME_BUCKET,
+  RESUME_MAX_BYTES,
+  resumeFileType,
+  resumeMetadata,
+  resumeSafeName,
+  resumeStoragePath,
+} from './resume-access.ts';
 
-Deno.serve(async (request) => {
+export async function handleRequest(request: Request) {
   const origin = request.headers.get('Origin');
   const headers = corsHeaders(origin);
   if (request.method === 'OPTIONS') return new Response(null, { headers });
@@ -33,6 +42,7 @@ Deno.serve(async (request) => {
     if (route.endsWith('/resume') && request.method === 'POST') return saveResumeCopy(request, headers);
     if (route.endsWith('/resume/list') && request.method === 'GET') return listResumeCopies(request, headers);
     if (route.endsWith('/resume/download') && request.method === 'GET') return downloadResumeCopy(request, url, headers);
+    if (route.endsWith('/resume') && request.method === 'DELETE') return deleteResumeCopy(request, url, headers);
     if (route.endsWith('/candidates') && request.method === 'GET') return getCandidates(headers);
     if (route.endsWith('/job-status') && request.method === 'GET') return getJobStatus(url, headers);
     if (route.endsWith('/job-link') && request.method === 'GET') return getJobLink(url, headers);
@@ -70,7 +80,9 @@ Deno.serve(async (request) => {
     console.error(error instanceof Error ? error.message.slice(0, 500) : 'Unhandled request error');
     return json(safePublicError(error), headers, 500);
   }
-});
+}
+
+Deno.serve(handleRequest);
 
 function corsHeaders(origin: string | null) {
   const allowedOrigins = [
@@ -81,35 +93,28 @@ function corsHeaders(origin: string | null) {
   const isAllowed = origin && (allowedOrigins.includes(origin) || isLocalhost);
   return {
     'Access-Control-Allow-Origin': isAllowed ? origin : (allowedOrigins[0] || '*'),
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-resume-inbox-token',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'DELETE, GET, POST, OPTIONS',
     'Access-Control-Expose-Headers': 'Content-Disposition',
     'Content-Type': 'application/json',
   };
 }
-
-const RESUME_BUCKET = 'resume-intake';
-const RESUME_MAX_BYTES = 10 * 1024 * 1024;
-const RESUME_TYPES: Record<string, string> = {
-  pdf: 'application/pdf',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  txt: 'text/plain',
-  md: 'text/markdown',
-  html: 'text/html',
-};
 
 interface ResumeUser {
   id: string;
   email: string;
 }
 
-type ResumeAuth = { user: ResumeUser } | { response: Response };
+type ResumeOwnerAuth = { user: ResumeUser } | { response: Response };
 
-async function authenticateResumeUser(request: Request, headers: Record<string, string>): Promise<ResumeAuth> {
+async function authenticateResumeOwner(request: Request, headers: Record<string, string>): Promise<ResumeOwnerAuth> {
+  const configuredOwnerEmail = Deno.env.get('RESUME_OWNER_EMAIL')?.trim() || '';
+  if (!configuredOwnerEmail) return { response: json({ error: 'Resume owner access is not configured' }, headers, 503) };
   const token = request.headers.get('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   const baseUrl = Deno.env.get('SUPABASE_URL')?.replace(/\/+$/, '');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!token || !baseUrl || !serviceKey) return { response: json({ error: 'Unauthorized' }, headers, 401) };
+  if (!baseUrl || !serviceKey) return { response: json({ error: 'Resume owner access is not configured' }, headers, 503) };
+  if (!token) return { response: json({ error: 'Unauthorized' }, headers, 401) };
 
   const response = await fetch(`${baseUrl}/auth/v1/user`, {
     headers: { apikey: serviceKey, Authorization: `Bearer ${token}` },
@@ -119,32 +124,8 @@ async function authenticateResumeUser(request: Request, headers: Record<string, 
   if (typeof user.id !== 'string' || typeof user.email !== 'string' || !user.email.trim()) {
     return { response: json({ error: 'Unauthorized' }, headers, 401) };
   }
+  if (!isOwnerEmail(user.email, configuredOwnerEmail)) return { response: json({ error: 'Resume owner access denied' }, headers, 403) };
   return { user: { id: user.id, email: user.email.trim().toLowerCase() } };
-}
-
-function requireResumeInboxToken(request: Request, headers: Record<string, string>): Response | null {
-  const expected = Deno.env.get('RESUME_INBOX_TOKEN') || '';
-  if (!expected) return json({ error: 'Resume inbox is not configured' }, headers, 503);
-  const supplied = request.headers.get('X-Resume-Inbox-Token') || '';
-  if (!constantTimeSecretEqual(supplied, expected)) return json({ error: 'Invalid inbox token' }, headers, 401);
-  return null;
-}
-
-function constantTimeSecretEqual(left: string, right: string): boolean {
-  const leftBytes = new TextEncoder().encode(left);
-  const rightBytes = new TextEncoder().encode(right);
-  const length = Math.max(leftBytes.length, rightBytes.length);
-  let difference = leftBytes.length ^ rightBytes.length;
-  for (let index = 0; index < length; index += 1) {
-    difference |= (leftBytes[index] || 0) ^ (rightBytes[index] || 0);
-  }
-  return difference === 0;
-}
-
-function storagePath(path: string): string | null {
-  const value = String(path || '').trim();
-  if (!/^resume-intake\/[a-zA-Z0-9._-]+$/.test(value) || value.includes('..')) return null;
-  return value;
 }
 
 async function storageApiRequest(path: string, options: RequestInit = {}): Promise<Response> {
@@ -168,14 +149,7 @@ async function storageRequest(path: string, options: RequestInit = {}): Promise<
     .join('/')}`, options);
 }
 
-function resumeFilename(path: string): string {
-  const raw = path.split('/').pop() || 'resume';
-  return raw.replace(/^\d+-[0-9a-f-]{36}-/i, '').replace(/[^a-zA-Z0-9._ -]/g, '_').slice(0, 120) || 'resume';
-}
-
 async function saveResumeCopy(request: Request, headers: Record<string, string>) {
-  const auth = await authenticateResumeUser(request, headers);
-  if ('response' in auth) return auth.response;
   const contentLength = Number(request.headers.get('content-length') || 0);
   if (contentLength > RESUME_MAX_BYTES + 64_000) return json({ error: 'Resume is too large' }, headers, 413);
 
@@ -190,7 +164,7 @@ async function saveResumeCopy(request: Request, headers: Record<string, string>)
   if (file.size <= 0 || file.size > RESUME_MAX_BYTES) return json({ error: 'Resume must be between 1 byte and 10 MB' }, headers, 413);
 
   const extension = file.name.toLowerCase().split('.').pop() || '';
-  const contentType = RESUME_TYPES[extension];
+  const contentType = resumeFileType(file.name);
   if (!contentType) return json({ error: 'Use PDF, DOCX, TXT, MD or HTML' }, headers, 415);
   const safeStem = file.name
     .replace(/\.[^.]+$/, '')
@@ -204,15 +178,15 @@ async function saveResumeCopy(request: Request, headers: Record<string, string>)
     body: await file.arrayBuffer(),
   });
   if (!response.ok) {
-    console.error(`Resume storage upload failed with HTTP ${response.status} for ${auth.user.id}`);
+    console.error(`Resume storage upload failed with HTTP ${response.status}`);
     return json({ error: 'Resume could not be saved' }, headers, 502);
   }
-  return json({ saved: true, name: resumeFilename(path) }, headers, 201);
+  return json({ saved: true, name: resumeSafeName(path) }, headers, 201);
 }
 
 async function listResumeCopies(request: Request, headers: Record<string, string>) {
-  const denied = requireResumeInboxToken(request, headers);
-  if (denied) return denied;
+  const auth = await authenticateResumeOwner(request, headers);
+  if ('response' in auth) return auth.response;
   const response = await storageApiRequest(`object/list/${RESUME_BUCKET}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -221,31 +195,35 @@ async function listResumeCopies(request: Request, headers: Record<string, string
   if (!response.ok) return json({ error: 'Resume inbox is unavailable' }, headers, 502);
   const objects = await response.json() as Array<{ name?: unknown; created_at?: unknown; updated_at?: unknown; metadata?: unknown }>;
   const copies = (Array.isArray(objects) ? objects : [])
-    .filter((item) => typeof item.name === 'string')
-    .map((item) => {
-      const name = String(item.name).replace(/^resume-intake\//, '');
-      const path = storagePath(`resume-intake/${name}`);
-      return path ? {
-        path,
-        name: resumeFilename(path),
-        createdAt: typeof item.created_at === 'string' ? item.created_at : (typeof item.updated_at === 'string' ? item.updated_at : null),
-      } : null;
-    })
-    .filter((item): item is { path: string; name: string; createdAt: string | null } => Boolean(item));
+    .map((item) => resumeMetadata(item))
+    .filter((item): item is NonNullable<ReturnType<typeof resumeMetadata>> => Boolean(item));
   return json({ copies }, headers);
 }
 
 async function downloadResumeCopy(request: Request, url: URL, headers: Record<string, string>) {
-  const denied = requireResumeInboxToken(request, headers);
-  if (denied) return denied;
-  const path = storagePath(url.searchParams.get('path') || '');
+  const auth = await authenticateResumeOwner(request, headers);
+  if ('response' in auth) return auth.response;
+  const path = resumeStoragePath(url.searchParams.get('path') || '');
   if (!path) return json({ error: 'Invalid resume path' }, headers, 400);
   const response = await storageRequest(path);
   if (!response.ok || !response.body) return json({ error: 'Resume not found' }, headers, response.status === 404 ? 404 : 502);
   const downloadHeaders = new Headers(headers);
-  downloadHeaders.set('Content-Type', response.headers.get('Content-Type') || 'application/octet-stream');
-  downloadHeaders.set('Content-Disposition', `attachment; filename="${resumeFilename(path).replace(/"/g, '')}"`);
+  const contentType = response.headers.get('Content-Type') || 'application/octet-stream';
+  const inline = url.searchParams.get('disposition') === 'inline'
+    && (contentType === 'application/pdf' || contentType.startsWith('text/'));
+  downloadHeaders.set('Content-Type', contentType);
+  downloadHeaders.set('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${resumeSafeName(path).replace(/"/g, '')}"`);
   return new Response(response.body, { status: 200, headers: downloadHeaders });
+}
+
+async function deleteResumeCopy(request: Request, url: URL, headers: Record<string, string>) {
+  const auth = await authenticateResumeOwner(request, headers);
+  if ('response' in auth) return auth.response;
+  const path = resumeStoragePath(url.searchParams.get('path') || '');
+  if (!path) return json({ error: 'Invalid resume path' }, headers, 400);
+  const response = await storageRequest(path, { method: 'DELETE' });
+  if (!response.ok) return json({ error: 'Resume could not be deleted' }, headers, response.status === 404 ? 404 : 502);
+  return json({ deleted: true }, headers);
 }
 
 function isSeniorOrNonFinanceTitle(title: string): boolean {
